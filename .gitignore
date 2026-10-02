@@ -1,1 +1,7 @@
 .env
+n8n_data/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.log
+*.py

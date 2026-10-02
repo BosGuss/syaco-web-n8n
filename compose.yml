@@ -102,6 +102,7 @@
       - N8N_SANDBOX_SERVICE_URL=http://sandbox-api:8080
       - N8N_SANDBOX_SERVICE_API_KEY=${N8N_SANDBOX_SERVICE_API_KEY}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
