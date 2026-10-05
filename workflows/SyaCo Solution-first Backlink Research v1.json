@@ -1,0 +1,516 @@
+{
+  "name": "SyaCo Solution-first Backlink Research v1",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 24
+            }
+          ]
+        }
+      },
+      "id": "e6dfc171-6b2b-4149-b1f7-7c754be376e7",
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -2192,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://www.syaco.co.th/api/solutions",
+        "options": {}
+      },
+      "id": "8fef691b-d03b-4e76-8ef4-431f4770023c",
+      "name": "Get SyaCo Solutions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1968,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const rawList = Array.isArray(item.json) \n    ? item.json \n    : (Array.isArray(item.json.data) ? item.json.data : [item.json]);\n\n  for (const sol of rawList) {\n    if (!sol || typeof sol !== 'object') continue;\n    results.push({\n      json: {\n        id: sol.id || '',\n        titleEn: sol.titleEn || '',\n        titleTh: sol.titleTh || '',\n        descEn: sol.content.en.hero.description || sol.descEn  || '',\n        descTh: sol.content.th.hero.description || sol.descTh  || '',\n        url: sol.url || (sol.link  ? `https://www.syaco.co.th${sol.link }` : '')\n      }\n    });\n  }\n}\n\nreturn results;"
+      },
+      "id": "6eac9a60-0b09-43b3-8101-828659d356ea",
+      "name": "Split Solutions",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1744,
+        64
+      ],
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-goog-api-key",
+              "value": "={{ $env.GEMINI_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n  JSON.stringify({\n    contents: [\n      {\n        parts: [\n          {\n            text: \"You are a search query generator for SyaCo.\\n\\nYour task is to generate search queries that help find real questions, problems, discussions, and needs related to the following SyaCo solution.\\n\\nSolution:\\nTitle: \" + ($json.titleEn || $json.titleTh || $json.title || 'Solution') + \"\\n\\nDescription:\\n\" + ($json.descEn || $json.descTh || $json.description || '') + \"\\n\\nGenerate 5 different search queries.\\n\\nThe queries should:\\n- Focus on real problems or questions people may have.\\n- Reflect different ways users may describe the problem.\\n- Avoid simply repeating the solution name.\\n- Avoid promotional or commercial queries.\\n- Be specific enough to find relevant discussions.\\n- Prefer natural language that users may actually search.\\n\\nReturn JSON only.\"\n          }\n        ]\n      }\n    ],\n    generationConfig: {\n      responseMimeType: \"application/json\",\n      responseSchema: {\n        type: \"OBJECT\",\n        properties: {\n          queries: {\n            type: \"ARRAY\",\n            items: {\n              type: \"STRING\"\n            }\n          }\n        },\n        required: [\"queries\"]\n      }\n    }\n  })\n}}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 3500
+            }
+          }
+        }
+      },
+      "id": "eb25c838-e254-4409-8619-9ce328000edd",
+      "name": "AI Generate Search Queries",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1456,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const text = $json.candidates?.[0]?.content?.parts?.[0]?.text;\n\nif (!text) {\n  throw new Error('Gemini returned no text content');\n}\n\nlet result;\ntry {\n  result = JSON.parse(text);\n} catch (error) {\n  throw new Error(`Invalid JSON from Gemini: ${text}`);\n}\n\nif (!result || !Array.isArray(result.queries)) {\n  throw new Error(`Missing or invalid queries array in Gemini response: ${text}`);\n}\n\nif (result.queries.length === 0) {\n  throw new Error('Queries array returned by Gemini is empty');\n}\n\nconst source = $('Limit 1 Solution').item.json;\n\nreturn [{\n  json: {\n    solutionId: source.id || source._id || '',\n    solutionTitle: source.titleEn || source.titleTh || '',\n    solutionUrl: source.url || source.link || '',\n    solution: source,\n    queries: result.queries\n  }\n}];"
+      },
+      "id": "e4a854de-c15f-4c44-8605-19c173581e82",
+      "name": "Parse Queries",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1312,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://searxng:8080/search",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "={{ $json.query }}"
+            },
+            {
+              "name": "format",
+              "value": "json"
+            },
+            {
+              "name": "language",
+              "value": "en"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "3ec43c22-bc64-4a3b-9d7a-db92689c9973",
+      "name": "SearXNG Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -2192,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.all();\nconst out = [];\nconst seen = new Set();\n\nfor (let i = 0; i < input.length; i++) {\n  const results = input[i].json.results || [];\n  const source = $('Split Out Queries').all()[i]?.json || {};\n  for (const r of results) {\n    if (!r.url) continue;\n    const key = r.url.split('#')[0].replace(/\\/$/, '');\n    if (seen.has(key)) continue;\n    seen.add(key);\n    out.push({\n      json: {\n        solution: source.solution,\n        searchQuery: source.query,\n        title: r.title || '',\n        url: r.url,\n        content: r.content || '',\n        engine: r.engine || ''\n      }\n    });\n  }\n}\nreturn out;"
+      },
+      "id": "301625fc-ed60-48c2-8a3c-e32c945c3811",
+      "name": "Deduplicate Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1984,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-goog-api-key",
+              "value": "={{ $env.GEMINI_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n  JSON.stringify({\n    contents: [\n      {\n        parts: [\n          {\n            text: \"You are a relevance classifier for SyaCo's content discovery system.\\n\\nYour task is to determine whether an external web post/question is genuinely relevant to a SyaCo solution.\\n\\nIMPORTANT:\\n- Judge based on the actual problem or question in the post.\\n- Do NOT consider keyword overlap alone as sufficient.\\n- The post should have a problem, question, or need that the SyaCo solution could reasonably help address.\\n- Do not mark something relevant just because it mentions the same industry or keywords.\\n- Do not generate an answer.\\n- Do not promote SyaCo.\\n- Return JSON only.\\n\\nSyaCo Solution:\\nTitle EN: \" + ($json.solution?.titleEn || $json.solution?.title || '') + \"\\nTitle TH: \" + ($json.solution?.titleTh || '') + \"\\nDescription EN: \" + ($json.solution?.descEn || $json.solution?.description || '') + \"\\nDescription TH: \" + ($json.solution?.descTh || '') + \"\\n\\nExternal Post:\\nTitle: \" + ($json.title || '') + \"\\nContent: \" + ($json.content || '') + \"\\nURL: \" + ($json.url || '') + \"\\nSimilarity Score: \" + ($json.similarityScore || 0) + \"\\n\\nClassify the relevance using these criteria:\\n\\nHIGH:\\nThe post directly discusses a problem, question, or need that the SyaCo solution can reasonably solve.\\n\\nMEDIUM:\\nThe post is related to the same problem/domain, but the connection is indirect or only partially relevant.\\n\\nLOW:\\nThe post only shares keywords, industry terms, or a general topic without a meaningful connection to the solution.\\n\\nReturn JSON matching this required schema:\\n{\\n  \\\"relevant\\\": true,\\n  \\\"score\\\": 0.0,\\n  \\\"level\\\": \\\"high\\\",\\n  \\\"reason\\\": \\\"Brief explanation of why the post is or is not relevant\\\",\\n  \\\"matchedProblem\\\": \\\"The specific problem or need found in the post\\\",\\n  \\\"canAnswer\\\": true\\n}\\n\\nRules:\\n- score must be between 0 and 1.\\n- high = 0.80-1.00\\n- medium = 0.50-0.79\\n- low = 0.00-0.49\\n- relevant = true only when score >= 0.80\\n- canAnswer = true only when the post contains a genuine question/problem that can be addressed with useful information.\"\n          }\n        ]\n      }\n    ],\n    generationConfig: {\n      responseMimeType: \"application/json\",\n      responseSchema: {\n        type: \"OBJECT\",\n        properties: {\n          relevant: { type: \"BOOLEAN\" },\n          score: { type: \"NUMBER\" },\n          level: { type: \"STRING\", enum: [\"high\", \"medium\", \"low\"] },\n          reason: { type: \"STRING\" },\n          matchedProblem: { type: \"STRING\" },\n          canAnswer: { type: \"BOOLEAN\" }\n        },\n        required: [\"relevant\", \"score\", \"level\", \"reason\", \"matchedProblem\", \"canAnswer\"]\n      }\n    }\n  })\n}}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 3500
+            }
+          }
+        }
+      },
+      "id": "5c1f36e6-c8d0-4981-b155-89bf9aec6f41",
+      "name": "AI Check Relevance",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1520,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const text = $json.candidates?.[0]?.content?.parts?.[0]?.text || '';\nlet verdict;\n\ntry {\n  verdict = JSON.parse(text);\n} catch (e) {\n  verdict = {\n    relevant: false,\n    score: 0,\n    level: 'low',\n    reason: 'Invalid JSON response from AI',\n    matchedProblem: '',\n    canAnswer: false\n  };\n}\n\nconst source = $('Top Candidates Filter').item.json;\nconst score = Number(verdict.score || 0);\nconst isRelevant = verdict.relevant === true && score >= 0.80;\n\nreturn [{\n  json: {\n    ...source,\n    relevant: isRelevant,\n    matchScore: score,\n    relevanceLevel: verdict.level || (score >= 0.80 ? 'high' : score >= 0.50 ? 'medium' : 'low'),\n    reason: verdict.reason || '',\n    matchedProblem: verdict.matchedProblem || '',\n    canAnswer: verdict.canAnswer === true\n  }\n}];"
+      },
+      "id": "6534a61f-5aa3-4bac-9eeb-3ede670c7bfd",
+      "name": "Parse Relevance",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1312,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.relevant }}",
+              "operator": {
+                "operation": "true",
+                "type": "boolean"
+              },
+              "rightValue": true
+            },
+            {
+              "leftValue": "={{ $json.matchScore }}",
+              "operator": {
+                "operation": "gte",
+                "type": "number"
+              },
+              "rightValue": 0.8
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "73be5154-4aee-45d6-bccf-ea8587f3742a",
+      "name": "Relevant >= 0.75",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -2192,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const text = $json.candidates?.[0]?.content?.parts?.[0]?.text || '';\n\nlet draft = {\n  answer: '',\n  linkIncluded: false,\n  linkReason: '',\n  suggestedAnchor: ''\n};\n\ntry {\n  const parsed = JSON.parse(text);\n\n  if (parsed && typeof parsed === 'object') {\n    draft = {\n      answer: parsed.answer || '',\n      linkIncluded: parsed.linkIncluded === true,\n      linkReason: parsed.linkReason || '',\n      suggestedAnchor: parsed.suggestedAnchor || ''\n    };\n  }\n} catch (e) {\n  draft = {\n    answer: text,\n    linkIncluded: false,\n    linkReason: 'Failed to parse AI response',\n    suggestedAnchor: ''\n  };\n}\n\n\n// Get source from relevance node\nlet source = {};\n\ntry {\n  source = $('Relevant >= 0.80').item.json;\n} catch (e) {\n  try {\n    source = $('Relevant >= 0.75').item.json;\n  } catch (e) {\n    source = {};\n  }\n}\n\n\n// Extract platform\nlet platform = '';\n\ntry {\n  platform = new URL(\n    source.url || 'https://example.com'\n  ).hostname;\n} catch (e) {\n  platform = source.url || '';\n}\n\n\nreturn [\n  {\n    json: {\n      solutionId:\n        source.solution?.id ||\n        source.solution?._id ||\n        '',\n\n      solutionTitle:\n        source.solution?.titleEn ||\n        source.solution?.titleTh ||\n        source.solution?.title ||\n        '',\n\n      solutionUrl:\n        source.solution?.url ||\n        source.solution?.link ||\n        '',\n\n      platform,\n\n      postTitle:\n        source.title || '',\n\n      postUrl:\n        source.url || '',\n\n      searchQuery:\n        source.searchQuery || '',\n\n      matchedProblem:\n        source.matchedProblem || '',\n\n      matchScore:\n        source.matchScore || 0,\n\n      relevanceReason:\n        source.reason || '',\n\n      answer:\n        draft.answer,\n\n      linkIncluded:\n        draft.linkIncluded,\n\n      linkReason:\n        draft.linkReason,\n\n      suggestedAnchor:\n        draft.suggestedAnchor,\n\n      status: 'pending_review'\n    }\n  }\n];"
+      },
+      "id": "7ffb4cdf-47db-4365-9dee-1fffcfe8015e",
+      "name": "Create Review Candidate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1648,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nif (items.length === 0) return [];\n\nconst groupedBySolution = {};\n\nfor (const item of items) {\n  const sol = item.json.solution || {};\n  const solKey = sol.id || sol.titleEn || sol.titleTh || 'default';\n  \n  if (!groupedBySolution[solKey]) {\n    groupedBySolution[solKey] = [];\n  }\n  \n  const solText = `${sol.titleEn || ''} ${sol.titleTh || ''} ${sol.descEn || ''} ${sol.descTh || ''}`.toLowerCase();\n  const resText = `${item.json.title || ''} ${item.json.content || ''}`.toLowerCase();\n  \n  const tokenize = (text) => text.replace(/[^\\w\\s]/gi, ' ').split(/\\s+/).filter(w => w.length > 2);\n  const solTokens = new Set(tokenize(solText));\n  const resTokens = tokenize(resText);\n  \n  if (solTokens.size === 0 || resTokens.length === 0) {\n    item.json.similarityScore = 0;\n    groupedBySolution[solKey].push(item);\n    continue;\n  }\n  \n  let matches = 0;\n  const titleText = (item.json.title || '').toLowerCase();\n  \n  for (const token of resTokens) {\n    if (solTokens.has(token)) {\n      matches++;\n    }\n  }\n  \n  let titleBonus = 0;\n  for (const token of solTokens) {\n    if (titleText.includes(token)) {\n      titleBonus += 0.15;\n    }\n  }\n  \n  const overlapScore = matches / Math.sqrt(solTokens.size * resTokens.length);\n  const similarityScore = Math.min(1.0, overlapScore + titleBonus);\n  \n  item.json.similarityScore = parseFloat(similarityScore.toFixed(3));\n  groupedBySolution[solKey].push(item);\n}\n\nconst topCandidates = [];\nfor (const solKey in groupedBySolution) {\n  const solGroup = groupedBySolution[solKey];\n  solGroup.sort((a, b) => b.json.similarityScore - a.json.similarityScore);\n  \n  const top5 = solGroup.slice(0, 5);\n  topCandidates.push(...top5);\n}\n\nreturn topCandidates;"
+      },
+      "id": "5a66f775-9a6a-4fbe-ab16-575a2e829772",
+      "name": "Top Candidates Filter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1744,
+        304
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "24cb5bd4-e1a6-4a4e-90c3-83c1a753b656",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -2208,
+        -64
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "ed25e179-34b1-4fc0-9f4a-e3907ba5e9f1",
+      "name": "Limit 1 Solution",
+      "type": "n8n-nodes-base.limit",
+      "typeVersion": 1,
+      "position": [
+        -1600,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst out = [];\n\nfor (const item of items) {\n  const queries = item.json.queries || [];\n  const sol = item.json.solution || {};\n  \n  for (const q of queries) {\n    if (!q || typeof q !== 'string') continue;\n    out.push({\n      json: {\n        solution: sol,\n        query: q\n      }\n    });\n  }\n}\n\nreturn out;"
+      },
+      "id": "aeeec69b-0789-4ee7-8638-d9d90c949a86",
+      "name": "Split Out Queries",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -960,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-goog-api-key",
+              "value": "={{ $env.GEMINI_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\n  \"contents\": [\n    {\n      \"parts\": [\n        {\n          \"text\": `You are an expert content writer helping SyaCo respond to relevant discussions and articles found on external websites.\n\nYour task is to create a helpful, natural, and non-promotional response based on the external content and the relevant SyaCo solution.\n\nIMPORTANT RULES:\n1. Answer the actual problem or topic first.\n2. Provide useful information even if the SyaCo link is removed.\n3. Do not sound like an advertisement.\n4. Do not claim that SyaCo can solve something unless it is supported by the provided solution information.\n5. Do not invent statistics, features, customer results, case studies, or technical details.\n6. Do not mention that you are an AI.\n7. Do not mention this workflow, relevance scoring, similarity scoring, or internal processing.\n8. Do not copy sentences from the source content. Write an original response.\n9. Keep the response concise and natural.\n10. Only include the SyaCo link when it is genuinely useful to the reader.\n11. Never force the link into the response.\n12. If the source is an article rather than a question, write a useful contextual response rather than pretending to answer a question that was not asked.\n13. Do not use exaggerated marketing language such as 'best', 'ultimate', 'revolutionary', or 'guaranteed'.\n14. Do not include multiple SyaCo links.\n15. Return JSON only.\n\nSyaCo Solution:\nTitle: ${$json.solution?.titleEn || $json.solution?.title || ''}\nDescription: ${$json.solution?.descEn || $json.solution?.description || ''}\nURL: ${$json.solution?.url || $json.solution?.link || ''}\n\nSearch Query:\n${$json.searchQuery || ''}\n\nExternal Content:\nTitle: ${$json.title || ''}\nURL: ${$json.url || ''}\nContent:\n${$json.content || ''}\n\nRelevance Analysis:\nRelevance Level: ${$json.relevanceLevel || ''}\nMatch Score: ${$json.matchScore || 0}\nReason: ${$json.reason || ''}\nMatched Problem: ${$json.matchedProblem || ''}\n\nCreate a response that:\n- Directly addresses the matched problem.\n- Gives 2 to 4 practical points or a concise explanation where appropriate.\n- Connects naturally to the SyaCo solution only when relevant.\n- Includes the SyaCo URL only if it adds genuine value.\n\nReturn JSON matching this required schema:\n{\n  \"answer\": \"The complete response text\",\n  \"linkIncluded\": true,\n  \"linkReason\": \"Brief explanation of why the SyaCo link is useful\",\n  \"suggestedAnchor\": \"Natural anchor text for the SyaCo link\"\n}\n\nIf the link should not be included, return:\n{\n  \"answer\": \"The complete response text without the SyaCo link\",\n  \"linkIncluded\": false,\n  \"linkReason\": \"Brief explanation why link is excluded\",\n  \"suggestedAnchor\": \"\"\n}`\n        }\n      ]\n    }\n  ],\n  \"generationConfig\": {\n    \"responseMimeType\": \"application/json\",\n    \"responseSchema\": {\n      \"type\": \"OBJECT\",\n      \"properties\": {\n        \"answer\": { \"type\": \"STRING\" },\n        \"linkIncluded\": { \"type\": \"BOOLEAN\" },\n        \"linkReason\": { \"type\": \"STRING\" },\n        \"suggestedAnchor\": { \"type\": \"STRING\" }\n      },\n      \"required\": [\n        \"answer\",\n        \"linkIncluded\",\n        \"linkReason\",\n        \"suggestedAnchor\"\n      ]\n    }\n  }\n} }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 3500
+            }
+          }
+        }
+      },
+      "id": "5b74748c-7e3c-4d3e-b3e0-133cb4ddad95",
+      "name": "AI Generate Answer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1888,
+        512
+      ]
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get SyaCo Solutions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get SyaCo Solutions": {
+      "main": [
+        [
+          {
+            "node": "Split Solutions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Generate Search Queries": {
+      "main": [
+        [
+          {
+            "node": "Parse Queries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SearXNG Search": {
+      "main": [
+        [
+          {
+            "node": "Deduplicate Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Check Relevance": {
+      "main": [
+        [
+          {
+            "node": "Parse Relevance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Relevance": {
+      "main": [
+        [
+          {
+            "node": "Relevant >= 0.75",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Relevant >= 0.75": {
+      "main": [
+        [
+          {
+            "node": "AI Generate Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Deduplicate Results": {
+      "main": [
+        [
+          {
+            "node": "Top Candidates Filter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Top Candidates Filter": {
+      "main": [
+        [
+          {
+            "node": "AI Check Relevance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get SyaCo Solutions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Solutions": {
+      "main": [
+        [
+          {
+            "node": "Limit 1 Solution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limit 1 Solution": {
+      "main": [
+        [
+          {
+            "node": "AI Generate Search Queries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Queries": {
+      "main": [
+        [
+          {
+            "node": "Split Out Queries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out Queries": {
+      "main": [
+        [
+          {
+            "node": "SearXNG Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Generate Answer": {
+      "main": [
+        [
+          {
+            "node": "Create Review Candidate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "availableInMCP": true,
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "staticData": null,
+  "pinData": {},
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp"
+  }
+}
