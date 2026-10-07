@@ -1,4 +1,4 @@
-﻿services:
+services:
 
   searxng:
     image: searxng/searxng:latest
@@ -9,6 +9,24 @@
     ports:
       - "127.0.0.1:8081:8080"
     restart: unless-stopped
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: backlinks
+      POSTGRES_USER: backlinks
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./pgdata:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    ports:
+      - "127.0.0.1:5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U backlinks -d backlinks"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   sandbox-certs:
     image: n8nio/n8n-sandbox-service-api:${N8N_SANDBOX_VERSION}
@@ -94,7 +112,12 @@
       - N8N_PORT=5678
       - N8N_PROTOCOL=http
       - NODE_ENV=production
-      - WEBHOOK_URL=http://localhost:5678/
+      - WEBHOOK_URL=${WEBHOOK_URL:-http://localhost:5678/}
+      - REVIEW_BASE_URL=${REVIEW_BASE_URL:-http://localhost:5678}
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
+      - BLUESKY_HANDLE=${BLUESKY_HANDLE}
+      - BLUESKY_APP_PASSWORD=${BLUESKY_APP_PASSWORD}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.5-flash-lite}
       - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true
       - N8N_AI_ASSISTANT_ENABLED=true
       - N8N_AI_ASSISTANT_SANDBOX_URL=http://sandbox-api:8080
@@ -110,8 +133,10 @@
     depends_on:
       sandbox-api:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
 
 volumes:
   sandbox-tls:
   n8n_data:
-
+  pgdata:
