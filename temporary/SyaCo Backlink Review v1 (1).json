@@ -1,0 +1,958 @@
+{
+  "name": "SyaCo Backlink Review v1",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "backlink-review",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "528eff9e-3ca5-4464-8721-68dd3a9f6437",
+      "name": "Review Page (GET)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "fbefca7b-3e57-4ff9-a5ed-f80beddd7dd8"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM backlink_candidates WHERE id::text = $1 AND review_token = $2 LIMIT 1;",
+        "options": {
+          "queryReplacement": "={{ [ String($json.query?.id ?? ''), String($json.query?.token ?? '') ] }}"
+        }
+      },
+      "id": "4fae9108-fdf7-402c-9d41-70aea2ede963",
+      "name": "Load Candidate",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        240,
+        0
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;').replace(/'/g, '&#39;');\nconst safeUrl = (u) => (/^https?:\\/\\//i.test(String(u || '')) ? String(u) : '#');\nconst page = (title, body) => `<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>${esc(title)}</title><style>\nbody{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:720px;margin:24px auto;padding:0 16px;color:#1b1b1f;line-height:1.5}\nh1{font-size:1.35rem;margin:0 0 4px}\n.meta{color:#5c5f66;font-size:.9rem;margin:2px 0}\n.card{border:1px solid #d8dae0;border-radius:10px;padding:14px 16px;margin:16px 0;background:#fafbfc}\ntextarea{width:100%;box-sizing:border-box;font:inherit;padding:10px;border:1px solid #b9bcc4;border-radius:8px}\nbutton{font:inherit;padding:10px 18px;border:0;border-radius:8px;cursor:pointer;margin-right:8px}\n.ok{background:#1f7a3f;color:#fff}.no{background:#b3261e;color:#fff}.neutral{background:#e4e6eb}\n.warn{background:#fff6dd;border:1px solid #f0d27a;border-radius:8px;padding:10px 12px;font-size:.9rem}\n.err{background:#fde8e6;border:1px solid #f1aaa4;border-radius:8px;padding:10px 12px}\na{color:#2457d6}\n</style></head><body>${body}</body></html>`;\n\nconst row = $input.first().json;\nif (!row || !row.id) {\n  return [{ json: { html: page('Invalid link', '<h1>Invalid link</h1><p>This review link is not valid.</p>') } }];\n}\nif (row.status !== 'pending_review') {\n  return [{ json: { html: page('Already handled', `<h1>Already handled</h1><p>This candidate is <b>${esc(row.status)}</b>.</p><p><a href=\"${esc(safeUrl(row.post_url))}\">${esc(row.post_title)}</a></p>`) } }];\n}\n\nconst isBsky = row.platform === 'bluesky';\nconst maxAttr = isBsky ? ' maxlength=\"300\"' : '';\nconst limitNote = isBsky\n  ? 'Bluesky replies are limited to 300 characters. The reply is posted automatically after you approve.'\n  : 'This platform has no safe posting API. After approval you get the final text to paste into the thread yourself.';\n\nconst body = `\n<h1>Review backlink candidate</h1>\n<p class=\"meta\">Platform: <b>${esc(row.platform)}</b> &middot; Solution: <b>${esc(row.solution_title)}</b> &middot; Match score: <b>${esc(row.match_score)}</b></p>\n<div class=\"card\">\n  <p><a href=\"${esc(safeUrl(row.post_url))}\" target=\"_blank\" rel=\"noopener\">${esc(row.post_title || row.post_url)}</a></p>\n  <p class=\"meta\"><b>Matched problem:</b> ${esc(row.matched_problem)}</p>\n  <p class=\"meta\"><b>Why relevant:</b> ${esc(row.relevance_reason)}</p>\n</div>\n<form method=\"POST\" action=\"/webhook/backlink-review-submit\">\n  <input type=\"hidden\" name=\"id\" value=\"${esc(row.id)}\">\n  <input type=\"hidden\" name=\"token\" value=\"${esc(row.review_token)}\">\n  <label for=\"answer\"><b>Answer (edit before approving)</b></label>\n  <textarea id=\"answer\" name=\"answer\" rows=\"12\"${maxAttr}>${esc(row.answer)}</textarea>\n  <p class=\"warn\">${esc(limitNote)}<br>If the text contains a SyaCo link it must also say you work at SyaCo (disclosure).${row.link_included ? '' : ' The AI did not include a link in this draft.'}</p>\n  <p>\n    <button class=\"ok\" type=\"submit\" name=\"action\" value=\"approve\">Approve</button>\n    <button class=\"no\" type=\"submit\" name=\"action\" value=\"reject\" formnovalidate>Reject</button>\n  </p>\n</form>`;\nreturn [{ json: { html: page('Review backlink candidate', body) } }];"
+      },
+      "id": "165c6312-3906-452c-b670-bcd0c97c13f8",
+      "name": "Build Review Page",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.html }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/html; charset=utf-8"
+              }
+            ]
+          }
+        }
+      },
+      "id": "8e311012-a140-4f12-8a06-b918b8eaf3da",
+      "name": "Respond HTML",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        720,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "backlink-review-submit",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "93643081-664a-4abd-8ee8-74edd067d251",
+      "name": "Review Submit (POST)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        320
+      ],
+      "webhookId": "a5138b27-4656-49ee-81fd-9549397a8626"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE backlink_candidates\nSET status = CASE\n      WHEN $3 = 'reject' THEN 'rejected'\n      WHEN platform = 'bluesky' THEN 'approved'\n      ELSE 'manual'\n    END,\n    answer = CASE WHEN $3 = 'reject' THEN answer ELSE $4 END,\n    reviewed_at = now()\nWHERE id::text = $1\n  AND review_token = $2\n  AND status = 'pending_review'\n  AND $3 IN ('approve', 'reject')\n  AND ($3 = 'reject' OR length(trim($4)) > 0)\nRETURNING *;",
+        "options": {
+          "queryReplacement": "={{ [ String($json.body?.id ?? ''), String($json.body?.token ?? ''), String($json.body?.action ?? ''), String($json.body?.answer ?? '').replace(/\\r\\n/g, '\\n').trim() ] }}"
+        }
+      },
+      "id": "a8231d37-1384-46b3-be33-08ad72590721",
+      "name": "Claim Candidate",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        240,
+        320
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c5f960f1-421d-4855-9aa3-c4d431ca1e20",
+              "leftValue": "={{ !!$json.id }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": true
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "ce7bed34-f41f-4b91-8be5-12dc17f8b8c4",
+      "name": "Claim OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        480,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;').replace(/'/g, '&#39;');\nconst safeUrl = (u) => (/^https?:\\/\\//i.test(String(u || '')) ? String(u) : '#');\nconst page = (title, body) => `<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>${esc(title)}</title><style>\nbody{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:720px;margin:24px auto;padding:0 16px;color:#1b1b1f;line-height:1.5}\nh1{font-size:1.35rem;margin:0 0 4px}\n.meta{color:#5c5f66;font-size:.9rem;margin:2px 0}\n.card{border:1px solid #d8dae0;border-radius:10px;padding:14px 16px;margin:16px 0;background:#fafbfc}\ntextarea{width:100%;box-sizing:border-box;font:inherit;padding:10px;border:1px solid #b9bcc4;border-radius:8px}\nbutton{font:inherit;padding:10px 18px;border:0;border-radius:8px;cursor:pointer;margin-right:8px}\n.ok{background:#1f7a3f;color:#fff}.no{background:#b3261e;color:#fff}.neutral{background:#e4e6eb}\n.warn{background:#fff6dd;border:1px solid #f0d27a;border-radius:8px;padding:10px 12px;font-size:.9rem}\n.err{background:#fde8e6;border:1px solid #f1aaa4;border-radius:8px;padding:10px 12px}\na{color:#2457d6}\n</style></head><body>${body}</body></html>`;\n\nreturn [{ json: { html: page('Not processed', '<h1>Nothing was changed</h1><p>The link is invalid, the candidate was already handled, or the answer was empty.</p>') } }];"
+      },
+      "id": "30ec6d69-5361-4892-9328-28780a8d65d2",
+      "name": "Page: Not Valid",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "01153ca6-b423-452b-97ca-4c58735b4dc9",
+              "leftValue": "={{ $json.status }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "rightValue": "rejected"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "5891a29c-615e-4efe-80af-7e2ca5a97977",
+      "name": "Rejected?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        720,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;').replace(/'/g, '&#39;');\nconst safeUrl = (u) => (/^https?:\\/\\//i.test(String(u || '')) ? String(u) : '#');\nconst page = (title, body) => `<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>${esc(title)}</title><style>\nbody{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:720px;margin:24px auto;padding:0 16px;color:#1b1b1f;line-height:1.5}\nh1{font-size:1.35rem;margin:0 0 4px}\n.meta{color:#5c5f66;font-size:.9rem;margin:2px 0}\n.card{border:1px solid #d8dae0;border-radius:10px;padding:14px 16px;margin:16px 0;background:#fafbfc}\ntextarea{width:100%;box-sizing:border-box;font:inherit;padding:10px;border:1px solid #b9bcc4;border-radius:8px}\nbutton{font:inherit;padding:10px 18px;border:0;border-radius:8px;cursor:pointer;margin-right:8px}\n.ok{background:#1f7a3f;color:#fff}.no{background:#b3261e;color:#fff}.neutral{background:#e4e6eb}\n.warn{background:#fff6dd;border:1px solid #f0d27a;border-radius:8px;padding:10px 12px;font-size:.9rem}\n.err{background:#fde8e6;border:1px solid #f1aaa4;border-radius:8px;padding:10px 12px}\na{color:#2457d6}\n</style></head><body>${body}</body></html>`;\n\nreturn [{ json: { html: page('Rejected', '<h1>Rejected</h1><p>The candidate was rejected and will not be shown again.</p>') } }];"
+      },
+      "id": "19d5fd38-0e14-4d4e-a9fb-8643a304b1b0",
+      "name": "Page: Rejected",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "e87c3eb1-3ed8-4eb7-8c9e-8fe0f6d70b34",
+              "leftValue": "={{ $json.platform }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "rightValue": "bluesky"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "3b54f4b4-71dc-4d24-9942-7ac7850615c8",
+      "name": "Is Bluesky?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        960,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;').replace(/'/g, '&#39;');\nconst safeUrl = (u) => (/^https?:\\/\\//i.test(String(u || '')) ? String(u) : '#');\nconst page = (title, body) => `<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>${esc(title)}</title><style>\nbody{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:720px;margin:24px auto;padding:0 16px;color:#1b1b1f;line-height:1.5}\nh1{font-size:1.35rem;margin:0 0 4px}\n.meta{color:#5c5f66;font-size:.9rem;margin:2px 0}\n.card{border:1px solid #d8dae0;border-radius:10px;padding:14px 16px;margin:16px 0;background:#fafbfc}\ntextarea{width:100%;box-sizing:border-box;font:inherit;padding:10px;border:1px solid #b9bcc4;border-radius:8px}\nbutton{font:inherit;padding:10px 18px;border:0;border-radius:8px;cursor:pointer;margin-right:8px}\n.ok{background:#1f7a3f;color:#fff}.no{background:#b3261e;color:#fff}.neutral{background:#e4e6eb}\n.warn{background:#fff6dd;border:1px solid #f0d27a;border-radius:8px;padding:10px 12px;font-size:.9rem}\n.err{background:#fde8e6;border:1px solid #f1aaa4;border-radius:8px;padding:10px 12px}\na{color:#2457d6}\n</style></head><body>${body}</body></html>`;\n\nconst row = $input.first().json;\nconst body = `\n<h1>Approved. Post it yourself</h1>\n<p class=\"meta\">Platform: <b>${esc(row.platform)}</b>. This platform cannot be posted to automatically, so copy the text below into the thread.</p>\n<div class=\"card\"><a href=\"${esc(safeUrl(row.post_url))}\" target=\"_blank\" rel=\"noopener\">${esc(row.post_title || row.post_url)}</a></div>\n<label for=\"t\"><b>Final text</b> (select all and copy)</label>\n<textarea id=\"t\" rows=\"12\" readonly onfocus=\"this.select()\">${esc(row.answer)}</textarea>\n<p class=\"warn\">Post it from your own account and keep the SyaCo disclosure in the text.${row.platform === 'devto' ? ' dev.to has no comment API, so paste it as a normal comment on the article.' : ''}</p>\n<form method=\"POST\" action=\"/webhook/backlink-mark-posted\">\n  <input type=\"hidden\" name=\"id\" value=\"${esc(row.id)}\">\n  <input type=\"hidden\" name=\"token\" value=\"${esc(row.review_token)}\">\n  <button class=\"ok\" type=\"submit\">I posted it</button>\n</form>`;\nreturn [{ json: { html: page('Post manually', body) } }];"
+      },
+      "id": "bd9ba58a-1294-4b73-95cd-668ebd413b62",
+      "name": "Page: Manual",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const row = $input.first().json;\nconst fail = (msg) => [{ json: { ok: false, id: row.id, error: msg, answer: row.answer, post_url: row.post_url } }];\n\nconst m = String(row.post_url || '').match(/^https:\\/\\/bsky\\.app\\/profile\\/([^/]+)\\/post\\/([A-Za-z0-9]+)$/);\nif (!m) return fail('Could not parse the Bluesky post URL');\n\nconst text = String(row.answer || '').trim();\nconst graphemes = (typeof Intl !== 'undefined' && Intl.Segmenter)\n  ? Array.from(new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(text)).length\n  : Array.from(text).length;\nif (graphemes > 300) return fail(`Text is ${graphemes} characters; Bluesky allows 300`);\n\n// UTF-8 length computed by hand: Buffer / TextEncoder are not guaranteed in every n8n Code node sandbox.\nconst byteLen = (s) => {\n  let n = 0;\n  for (const ch of String(s)) {\n    const c = ch.codePointAt(0);\n    n += c < 0x80 ? 1 : c < 0x800 ? 2 : c < 0x10000 ? 3 : 4;\n  }\n  return n;\n};\nconst facets = [];\nconst re = /https?:\\/\\/[^\\s]+/g;\nlet mm;\nwhile ((mm = re.exec(text)) !== null) {\n  const url = mm[0].replace(/[.,;:!?)\\]]+$/, '');\n  const byteStart = byteLen(text.slice(0, mm.index));\n  facets.push({\n    index: { byteStart, byteEnd: byteStart + byteLen(url) },\n    features: [{ $type: 'app.bsky.richtext.facet#link', uri: url }]\n  });\n}\nreturn [{ json: { ok: true, id: row.id, actor: m[1], rkey: m[2], text, facets, answer: row.answer, post_url: row.post_url } }];"
+      },
+      "id": "9745e7d4-c11d-46c8-98cb-1ec69709c7a9",
+      "name": "Prepare Bluesky Post",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "f2a60b98-c074-436c-bd0e-f210b33522b4",
+              "leftValue": "={{ $json.ok }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": true
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "bd410d2b-9c4a-4457-8cab-2344778a0a63",
+      "name": "Bluesky Input OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1440,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://bsky.social/xrpc/com.atproto.server.createSession",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { identifier: $env.BLUESKY_HANDLE, password: $env.BLUESKY_APP_PASSWORD } }}",
+        "options": {}
+      },
+      "id": "8e09b8ff-1128-46ea-833d-a260d532543f",
+      "name": "Create Bluesky Session",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1680,
+        240
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://public.api.bsky.app/xrpc/app.bsky.actor.getProfile",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "actor",
+              "value": "={{ $('Prepare Bluesky Post').first().json.actor }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "340bed45-a828-4bca-b520-9b0ca97d4bef",
+      "name": "Resolve Actor DID",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1920,
+        240
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://public.api.bsky.app/xrpc/app.bsky.feed.getPosts",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "uris",
+              "value": "={{ 'at://' + $json.did + '/app.bsky.feed.post/' + $('Prepare Bluesky Post').first().json.rkey }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "926d63f8-0859-4c7a-ae8b-1203f861a430",
+      "name": "Get Parent Post",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2160,
+        240
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const prep = $('Prepare Bluesky Post').first().json;\nconst session = $('Create Bluesky Session').first().json;\nconst profile = $('Resolve Actor DID').first().json;\nconst posts = $input.first().json;\nconst short = (v) => JSON.stringify(v).slice(0, 300);\nconst fail = (msg) => [{ json: { ok: false, id: prep.id, error: msg, answer: prep.answer, post_url: prep.post_url } }];\n\nif (!session.accessJwt || !session.did) return fail('Bluesky login failed: ' + short(session));\nif (!profile.did) return fail('Could not resolve the author of the Bluesky post: ' + short(profile));\nconst parent = posts.posts && posts.posts[0];\nif (!parent || !parent.uri || !parent.cid) return fail('Could not load the Bluesky post to reply to (deleted or private?)');\n\nconst root = parent.record?.reply?.root?.uri ? parent.record.reply.root : { uri: parent.uri, cid: parent.cid };\nconst record = {\n  $type: 'app.bsky.feed.post',\n  text: prep.text,\n  createdAt: new Date().toISOString(),\n  reply: {\n    root: { uri: root.uri, cid: root.cid },\n    parent: { uri: parent.uri, cid: parent.cid }\n  }\n};\nif (prep.facets && prep.facets.length) record.facets = prep.facets;\n\nreturn [{ json: {\n  ok: true,\n  id: prep.id,\n  handle: session.handle,\n  accessJwt: session.accessJwt,\n  answer: prep.answer,\n  post_url: prep.post_url,\n  createRecordBody: { repo: session.did, collection: 'app.bsky.feed.post', record }\n} }];"
+      },
+      "id": "54aa7d75-f403-41a5-a1df-abf0bcd4efb9",
+      "name": "Build Reply Record",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "0a55f8d6-0c15-4931-a8b8-3a8799329668",
+              "leftValue": "={{ $json.ok }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": true
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "7e685015-3ed5-4b5a-8083-f59c004c2e7c",
+      "name": "Bluesky Ready?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2640,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://bsky.social/xrpc/com.atproto.repo.createRecord",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $json.accessJwt }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.createRecordBody }}",
+        "options": {}
+      },
+      "id": "31905709-1901-4729-a9c0-b40712ec7919",
+      "name": "Post to Bluesky",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2880,
+        160
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const prev = $('Build Reply Record').first().json;\nconst res = $input.first().json;\nif (!res.uri) {\n  return [{ json: { ok: false, id: prev.id, error: 'Bluesky rejected the post: ' + JSON.stringify(res).slice(0, 300), answer: prev.answer, post_url: prev.post_url } }];\n}\nconst rkey = String(res.uri).split('/').pop();\nreturn [{ json: { ok: true, id: prev.id, postedUrl: `https://bsky.app/profile/${prev.handle}/post/${rkey}`, answer: prev.answer, post_url: prev.post_url } }];"
+      },
+      "id": "c669068d-4959-4764-a195-46e692c6bc11",
+      "name": "Evaluate Post Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3120,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "317ab505-2e30-4ad7-929f-c7d15e403129",
+              "leftValue": "={{ $json.ok }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": true
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e1f3d9a9-e94c-4978-a881-a457ee0c9052",
+      "name": "Posted OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3360,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE backlink_candidates\nSET status = 'posted', posted_url = $2, posted_at = now()\nWHERE id::text = $1\nRETURNING *;",
+        "options": {
+          "queryReplacement": "={{ [ String($json.id), String($json.postedUrl) ] }}"
+        }
+      },
+      "id": "ed63d8d9-aa8a-4b93-a8d4-1b6ae008c9a7",
+      "name": "Mark Posted",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3600,
+        80
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE backlink_candidates\nSET status = 'failed', error_message = $2\nWHERE id::text = $1\nRETURNING *;",
+        "options": {
+          "queryReplacement": "={{ [ String($json.id), String($json.error) ] }}"
+        }
+      },
+      "id": "74ead7ef-f45b-49ca-921a-551735e8a6b2",
+      "name": "Mark Failed",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3600,
+        400
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;').replace(/'/g, '&#39;');\nconst safeUrl = (u) => (/^https?:\\/\\//i.test(String(u || '')) ? String(u) : '#');\nconst page = (title, body) => `<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>${esc(title)}</title><style>\nbody{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:720px;margin:24px auto;padding:0 16px;color:#1b1b1f;line-height:1.5}\nh1{font-size:1.35rem;margin:0 0 4px}\n.meta{color:#5c5f66;font-size:.9rem;margin:2px 0}\n.card{border:1px solid #d8dae0;border-radius:10px;padding:14px 16px;margin:16px 0;background:#fafbfc}\ntextarea{width:100%;box-sizing:border-box;font:inherit;padding:10px;border:1px solid #b9bcc4;border-radius:8px}\nbutton{font:inherit;padding:10px 18px;border:0;border-radius:8px;cursor:pointer;margin-right:8px}\n.ok{background:#1f7a3f;color:#fff}.no{background:#b3261e;color:#fff}.neutral{background:#e4e6eb}\n.warn{background:#fff6dd;border:1px solid #f0d27a;border-radius:8px;padding:10px 12px;font-size:.9rem}\n.err{background:#fde8e6;border:1px solid #f1aaa4;border-radius:8px;padding:10px 12px}\na{color:#2457d6}\n</style></head><body>${body}</body></html>`;\n\nconst row = $input.first().json;\nif (!row || !row.id) return [{ json: { html: page('Posted', '<h1>Posted</h1>') } }];\nreturn [{ json: { html: page('Posted', `<h1>Posted to Bluesky</h1><p><a href=\"${esc(safeUrl(row.posted_url))}\" target=\"_blank\" rel=\"noopener\">Open your reply</a></p><div class=\"card\">${esc(row.answer)}</div>`) } }];"
+      },
+      "id": "8a0b33a4-334f-4f89-9970-571d65368311",
+      "name": "Page: Posted",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3840,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;').replace(/'/g, '&#39;');\nconst safeUrl = (u) => (/^https?:\\/\\//i.test(String(u || '')) ? String(u) : '#');\nconst page = (title, body) => `<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>${esc(title)}</title><style>\nbody{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:720px;margin:24px auto;padding:0 16px;color:#1b1b1f;line-height:1.5}\nh1{font-size:1.35rem;margin:0 0 4px}\n.meta{color:#5c5f66;font-size:.9rem;margin:2px 0}\n.card{border:1px solid #d8dae0;border-radius:10px;padding:14px 16px;margin:16px 0;background:#fafbfc}\ntextarea{width:100%;box-sizing:border-box;font:inherit;padding:10px;border:1px solid #b9bcc4;border-radius:8px}\nbutton{font:inherit;padding:10px 18px;border:0;border-radius:8px;cursor:pointer;margin-right:8px}\n.ok{background:#1f7a3f;color:#fff}.no{background:#b3261e;color:#fff}.neutral{background:#e4e6eb}\n.warn{background:#fff6dd;border:1px solid #f0d27a;border-radius:8px;padding:10px 12px;font-size:.9rem}\n.err{background:#fde8e6;border:1px solid #f1aaa4;border-radius:8px;padding:10px 12px}\na{color:#2457d6}\n</style></head><body>${body}</body></html>`;\n\nconst row = $input.first().json;\nif (!row || !row.id) return [{ json: { html: page('Failed', '<h1>Posting failed</h1>') } }];\nreturn [{ json: { html: page('Posting failed', `\n<h1>Posting failed</h1>\n<p class=\"err\">${esc(row.error_message)}</p>\n<p>Nothing was posted. You can still reply manually:</p>\n<div class=\"card\"><a href=\"${esc(safeUrl(row.post_url))}\" target=\"_blank\" rel=\"noopener\">${esc(row.post_title || row.post_url)}</a></div>\n<textarea rows=\"10\" readonly onfocus=\"this.select()\">${esc(row.answer)}</textarea>`) } }];"
+      },
+      "id": "ab2b615e-c073-4c72-bf5c-d7ab462f51b7",
+      "name": "Page: Failed",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3840,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "backlink-mark-posted",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "e862010e-3f7d-4940-808c-d7d7d3871dfb",
+      "name": "Mark Posted (POST)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        640
+      ],
+      "webhookId": "1c343c5d-aea7-4b51-8ee2-e3047897e2e5"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE backlink_candidates\nSET status = 'posted', posted_at = now()\nWHERE id::text = $1 AND review_token = $2 AND status = 'manual'\nRETURNING *;",
+        "options": {
+          "queryReplacement": "={{ [ String($json.body?.id ?? ''), String($json.body?.token ?? '') ] }}"
+        }
+      },
+      "id": "4d583a60-17cb-4c11-bb50-eeca61451107",
+      "name": "Confirm Manual Post",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        240,
+        640
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;').replace(/'/g, '&#39;');\nconst safeUrl = (u) => (/^https?:\\/\\//i.test(String(u || '')) ? String(u) : '#');\nconst page = (title, body) => `<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>${esc(title)}</title><style>\nbody{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:720px;margin:24px auto;padding:0 16px;color:#1b1b1f;line-height:1.5}\nh1{font-size:1.35rem;margin:0 0 4px}\n.meta{color:#5c5f66;font-size:.9rem;margin:2px 0}\n.card{border:1px solid #d8dae0;border-radius:10px;padding:14px 16px;margin:16px 0;background:#fafbfc}\ntextarea{width:100%;box-sizing:border-box;font:inherit;padding:10px;border:1px solid #b9bcc4;border-radius:8px}\nbutton{font:inherit;padding:10px 18px;border:0;border-radius:8px;cursor:pointer;margin-right:8px}\n.ok{background:#1f7a3f;color:#fff}.no{background:#b3261e;color:#fff}.neutral{background:#e4e6eb}\n.warn{background:#fff6dd;border:1px solid #f0d27a;border-radius:8px;padding:10px 12px;font-size:.9rem}\n.err{background:#fde8e6;border:1px solid #f1aaa4;border-radius:8px;padding:10px 12px}\na{color:#2457d6}\n</style></head><body>${body}</body></html>`;\n\nconst row = $input.first().json;\nif (!row || !row.id) {\n  return [{ json: { html: page('Nothing changed', '<h1>Nothing was changed</h1><p>The link is invalid or the candidate was already marked.</p>') } }];\n}\nreturn [{ json: { html: page('Done', '<h1>Marked as posted</h1><p>Thanks. This candidate is now closed.</p>') } }];"
+      },
+      "id": "75a815e3-908f-44dc-a8c1-1f5858c878a4",
+      "name": "Page: Marked Posted",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        640
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Review Page (GET)": {
+      "main": [
+        [
+          {
+            "node": "Load Candidate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Candidate": {
+      "main": [
+        [
+          {
+            "node": "Build Review Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Review Page": {
+      "main": [
+        [
+          {
+            "node": "Respond HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Review Submit (POST)": {
+      "main": [
+        [
+          {
+            "node": "Claim Candidate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim Candidate": {
+      "main": [
+        [
+          {
+            "node": "Claim OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim OK?": {
+      "main": [
+        [
+          {
+            "node": "Rejected?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Page: Not Valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rejected?": {
+      "main": [
+        [
+          {
+            "node": "Page: Rejected",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Is Bluesky?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Bluesky?": {
+      "main": [
+        [
+          {
+            "node": "Prepare Bluesky Post",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Page: Manual",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Bluesky Post": {
+      "main": [
+        [
+          {
+            "node": "Bluesky Input OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Bluesky Input OK?": {
+      "main": [
+        [
+          {
+            "node": "Create Bluesky Session",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Bluesky Session": {
+      "main": [
+        [
+          {
+            "node": "Resolve Actor DID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Actor DID": {
+      "main": [
+        [
+          {
+            "node": "Get Parent Post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Parent Post": {
+      "main": [
+        [
+          {
+            "node": "Build Reply Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Reply Record": {
+      "main": [
+        [
+          {
+            "node": "Bluesky Ready?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Bluesky Ready?": {
+      "main": [
+        [
+          {
+            "node": "Post to Bluesky",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post to Bluesky": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Post Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Post Result": {
+      "main": [
+        [
+          {
+            "node": "Posted OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Posted OK?": {
+      "main": [
+        [
+          {
+            "node": "Mark Posted",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Posted": {
+      "main": [
+        [
+          {
+            "node": "Page: Posted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Failed": {
+      "main": [
+        [
+          {
+            "node": "Page: Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Posted (POST)": {
+      "main": [
+        [
+          {
+            "node": "Confirm Manual Post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Confirm Manual Post": {
+      "main": [
+        [
+          {
+            "node": "Page: Marked Posted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Page: Not Valid": {
+      "main": [
+        [
+          {
+            "node": "Respond HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Page: Rejected": {
+      "main": [
+        [
+          {
+            "node": "Respond HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Page: Manual": {
+      "main": [
+        [
+          {
+            "node": "Respond HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Page: Posted": {
+      "main": [
+        [
+          {
+            "node": "Respond HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Page: Failed": {
+      "main": [
+        [
+          {
+            "node": "Respond HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Page: Marked Posted": {
+      "main": [
+        [
+          {
+            "node": "Respond HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}

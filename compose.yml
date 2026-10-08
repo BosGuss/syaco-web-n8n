@@ -126,6 +126,12 @@ services:
       - N8N_SANDBOX_SERVICE_API_KEY=${N8N_SANDBOX_SERVICE_API_KEY}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
+      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_DB=${POSTGRES_DB:-syaco_n8n_db}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-admin}
+
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
