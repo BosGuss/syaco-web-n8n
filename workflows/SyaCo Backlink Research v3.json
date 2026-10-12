@@ -624,7 +624,7 @@
       "typeVersion": 2.5,
       "position": [
         2768,
-        1760
+        1392
       ],
       "credentials": {
         "postgres": {
@@ -1020,7 +1020,7 @@
     "binaryMode": "separate",
     "availableInMCP": true
   },
-  "versionId": "246534fb-12d5-48a5-a268-26e56cf0e2f9",
+  "versionId": "be800b12-b9c1-4447-b4f3-672e3b47c0d2",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "6f36d1b2b7feb222314ad940be6435e2fafa9f216deae81be3daea4fb15a07ee"

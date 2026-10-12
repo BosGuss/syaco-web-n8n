@@ -114,7 +114,6 @@ services:
       - NODE_ENV=production
       - WEBHOOK_URL=${WEBHOOK_URL:-http://localhost:5678/}
       - REVIEW_BASE_URL=${REVIEW_BASE_URL:-http://localhost:5678}
-      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
       - BLUESKY_HANDLE=${BLUESKY_HANDLE}
       - BLUESKY_APP_PASSWORD=${BLUESKY_APP_PASSWORD}
       - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.5-flash-lite}
@@ -131,6 +130,11 @@ services:
       - POSTGRES_DB=${POSTGRES_DB:-syaco_n8n_db}
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-admin}
+      - DISCORD_CLIENT_ID=${DISCORD_CLIENT_ID}
+      - DISCORD_CLIENT_SECRET=${DISCORD_CLIENT_SECRET}
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
+      - DISCORD_CHANNEL_ID=${DISCORD_CHANNEL_ID}
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
 
     extra_hosts:
       - "host.docker.internal:host-gateway"
