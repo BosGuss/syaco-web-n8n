@@ -305,7 +305,7 @@ async function handleApproval(interaction, candidateId, overrideAnswer = null) {
         components: [],
       });
       await interaction.followUp({
-        content: `🔗 **Thread Link:** ${row.post_url}\n\`\`\`\n${finalAnswer}\n\`\`\``,
+        content: `🔗 **Thread Link:** ${row.post_url}\nDraft Answer:\n\`\`\`\n${finalAnswer}\n\`\`\``,
         ephemeral: true,
       });
     }
@@ -331,7 +331,7 @@ async function handleApproval(interaction, candidateId, overrideAnswer = null) {
         components: [],
       });
       await interaction.followUp({
-        content: `🔗 **Thread Link:** ${row.post_url}\n\`\`\`\n${finalAnswer}\n\`\`\``,
+        content: `🔗 **Thread Link:** ${row.post_url}\nDraft Answer:\n\`\`\`\n${finalAnswer}\n\`\`\``,
         ephemeral: true,
       });
     }
@@ -347,7 +347,7 @@ async function handleApproval(interaction, candidateId, overrideAnswer = null) {
       components: [],
     });
     await interaction.followUp({
-      content: `🔗 **Thread Link:** ${row.post_url}\n\`\`\`\n${finalAnswer}\n\`\`\``,
+      content: `🔗 **Thread Link:** ${row.post_url}\nDraft Answer:\n\`\`\`\n${finalAnswer}\n\`\`\``,
     });
   }
 }
