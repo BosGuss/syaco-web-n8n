@@ -77,7 +77,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const out = [];\nfor (const item of $input.all()) {\n  const { solution, promptTitle, promptDescription } = item.json;\n  const prompt = [\n    'You are a search query generator for SyaCo (an enterprise software development company).',\n    '',\n    'Generate 5 different English search queries that find real questions, problems and discussions related to the solution below, phrased the way people write on Reddit, dev.to or Bluesky.',\n    '',\n    'Solution:',\n    `Title: ${promptTitle}`,\n    `Description: ${promptDescription}`,\n    '',\n    'Rules:',\n    '- Focus on real problems or questions people have, not on the solution name.',\n    '- Use different ways to describe the same problem.',\n    '- Avoid promotional or commercial wording.',\n    '- Be specific enough to find relevant discussions.',\n    '- Use natural language, 4 to 12 words each.',\n    '- Do not use search operators such as site: or quotation marks.',\n    'Return JSON only.'\n  ].join('\\n');\n\n  out.push({\n    json: {\n      solution,\n      geminiBody: {\n        contents: [{ parts: [{ text: prompt }] }],\n        generationConfig: {\n          temperature: 0.7,\n          responseMimeType: 'application/json',\n          responseSchema: {\n            type: 'OBJECT',\n            properties: { queries: { type: 'ARRAY', items: { type: 'STRING' } } },\n            required: ['queries']\n          }\n        }\n      }\n    }\n  });\n}\nreturn out;"
+        "jsCode": "const out = [];\nfor (const item of $input.all()) {\n  const { solution, promptTitle, promptDescription } = item.json;\n  const prompt = [\n    'You are a search query generator for SyaCo (an enterprise software development company).',\n    '',\n    'Generate 5 different English search queries that find real questions, problems and discussions related to the solution below, phrased as concise core keywords that work well in Reddit, dev.to and Bluesky search.',\n    '',\n    'Solution:',\n    `Title: ${promptTitle}`,\n    `Description: ${promptDescription}`,\n    '',\n    'Rules:',\n    '- Focus on real problems, technical pain points or topics people discuss, not on the SyaCo brand name.',\n    '- Use different ways to describe the same problem.',\n    '- Avoid promotional or commercial wording.',\n    '- Keep each query short and keyword-focused: strictly 2 to 4 words each (e.g., \"sap erp integration\", \"legacy plc data\", \"automate manual entry\").',\n    '- Do not use filler words like how, to, between, getting, rid, of, the, with.',\n    '- Do not use search operators such as site: or quotation marks.',\n    'Return JSON only.'\n  ].join('\\n');\n\n  out.push({\n    json: {\n      solution,\n      geminiBody: {\n        contents: [{ parts: [{ text: prompt }] }],\n        generationConfig: {\n          temperature: 0.7,\n          responseMimeType: 'application/json',\n          responseSchema: {\n            type: 'OBJECT',\n            properties: { queries: { type: 'ARRAY', items: { type: 'STRING' } } },\n            required: ['queries']\n          }\n        }\n      }\n    }\n  });\n}\nreturn out;"
       },
       "id": "53815ce3-20ca-4ed7-bf7a-70bb853da5f2",
       "name": "Build Query Request",
@@ -141,7 +141,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Search engines suspend SearXNG when it sends too many requests, so keep the volume low.\n//   MAX_QUERIES  : how many of the generated queries to use per solution (cost: 1 search each)\n//   COMBINE_SITES: true  = one search per query:  q (site:reddit.com OR site:dev.to OR site:bsky.app)\n//                  false = one search per query per site (3x the requests, works on engines without OR support)\nconst MAX_QUERIES = 3;\nconst COMBINE_SITES = true;\nconst SITES = ['reddit.com', 'dev.to', 'bsky.app'];\n\nconst out = [];\nfor (const item of $input.all()) {\n  const { solution, queries } = item.json;\n  for (const q of queries.slice(0, MAX_QUERIES)) {\n    if (!q || typeof q !== 'string') continue;\n    if (COMBINE_SITES) {\n      out.push({ json: { solution, rawQuery: q, query: `${q} (${SITES.map(s => 'site:' + s).join(' OR ')})` } });\n    } else {\n      for (const site of SITES) out.push({ json: { solution, rawQuery: q, query: `${q} site:${site}` } });\n    }\n  }\n}\nreturn out;"
+        "jsCode": "// Search engines suspend SearXNG when it sends too many requests, so keep the volume low.\n//   MAX_QUERIES  : how many of the generated queries to use per solution (cost: 1 search each)\n//   COMBINE_SITES: true  = one search per query:  q (site:reddit.com OR site:dev.to OR site:bsky.app)\n//                  false = one search per query per site (3x the requests, works on engines without OR support)\nconst MAX_QUERIES = 5;\nconst COMBINE_SITES = true;\nconst SITES = ['reddit.com', 'dev.to', 'bsky.app'];\nconst STOP_WORDS = new Set(['how', 'to', 'what', 'is', 'the', 'best', 'way', 'for', 'in', 'on', 'with', 'between', 'and', 'or', 'of', 'from', 'into', 'getting', 'rid', 'why', 'do', 'does', 'can', 'we', 'you', 'your', 'our', 'a', 'an', 'are', 'when', 'using', 'without']);\n\nfunction toShortQuery(q) {\n  const words = String(q || '').toLowerCase().replace(/[^a-z0-9\\s-]/g, ' ').split(/\\s+/).filter(Boolean);\n  const core = words.filter(w => !STOP_WORDS.has(w) && w.length > 1);\n  const chosen = (core.length >= 2 ? core : words).slice(0, 3);\n  return chosen.join(' ');\n}\n\nconst out = [];\nfor (const item of $input.all()) {\n  const { solution, queries } = item.json;\n  for (const q of queries.slice(0, MAX_QUERIES)) {\n    if (!q || typeof q !== 'string') continue;\n    const shortQ = toShortQuery(q) || q;\n    if (COMBINE_SITES) {\n      out.push({ json: { solution, rawQuery: shortQ, fullQuery: q, query: `${shortQ} (${SITES.map(s => 'site:' + s).join(' OR ')})` } });\n    } else {\n      for (const site of SITES) out.push({ json: { solution, rawQuery: shortQ, fullQuery: q, query: `${shortQ} site:${site}` } });\n    }\n  }\n}\nreturn out;"
       },
       "id": "a449e724-1e50-4cb5-9c9f-1c5d13fe1afe",
       "name": "Split Out Queries",
@@ -209,7 +209,7 @@
     },
     {
       "parameters": {
-        "url": "https://www.reddit.com/search.json",
+        "url": "https://api.bsky.app/xrpc/app.bsky.feed.searchPosts",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
@@ -219,19 +219,11 @@
             },
             {
               "name": "sort",
-              "value": "relevance"
-            },
-            {
-              "name": "t",
-              "value": "year"
+              "value": "top"
             },
             {
               "name": "limit",
               "value": "15"
-            },
-            {
-              "name": "raw_json",
-              "value": "1"
             }
           ]
         },
@@ -248,13 +240,13 @@
           "batching": {
             "batch": {
               "batchSize": 1,
-              "batchInterval": 2000
+              "batchInterval": 1500
             }
           }
         }
       },
       "id": "a5662231-90a2-4bb0-b579-5c02b92eef6f",
-      "name": "Reddit Search",
+      "name": "Bluesky Search",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -265,10 +257,10 @@
     },
     {
       "parameters": {
-        "jsCode": "const items = $input.all();\nconst requests = $('Split Out Queries').all();\nif (items.length !== requests.length) {\n  throw new Error(`Search responses (${items.length}) do not match requests (${requests.length})`);\n}\nconst shape = (i, source, ok, error, results, extra) => ({\n  json: Object.assign({\n    solution: requests[i].json.solution,\n    rawQuery: requests[i].json.rawQuery,\n    source,\n    failed: !ok,\n    error: ok ? '' : error,\n    results: ok ? results : []\n  }, extra || {})\n});\n\nreturn items.map((item, i) => {\n  const children = item.json?.data?.children;\n  const ok = Array.isArray(children);\n  // Locked and archived threads cannot be commented on, adult threads are not wanted.\n  const results = ok ? children.map(c => c.data).filter(d => d && d.permalink && !d.locked && !d.archived && !d.over_18)\n    .map(d => ({\n      url: `https://www.reddit.com${d.permalink}`,\n      title: d.title || '',\n      content: String(d.selftext || '').slice(0, 800),\n      publishedDate: d.created_utc ? new Date(d.created_utc * 1000).toISOString() : ''\n    })) : [];\n  return shape(i, 'reddit', ok, JSON.stringify(item.json || {}).slice(0, 200), results);\n});"
+        "jsCode": "const items = $input.all();\nconst requests = $('Split Out Queries').all();\nif (items.length !== requests.length) {\n  throw new Error(`Search responses (${items.length}) do not match requests (${requests.length})`);\n}\nconst shape = (i, source, ok, error, results, extra) => ({\n  json: Object.assign({\n    solution: requests[i].json.solution,\n    rawQuery: requests[i].json.rawQuery,\n    source,\n    failed: !ok,\n    error: ok ? '' : error,\n    results: ok ? results : []\n  }, extra || {})\n});\n\nreturn items.map((item, i) => {\n  const posts = item.json?.posts;\n  const ok = Array.isArray(posts);\n  const results = ok ? posts.filter(p => p && p.uri && p.author && p.record).map(p => {\n    const rkey = String(p.uri).split('/').pop();\n    const handle = p.author.handle || p.author.did;\n    const text = String(p.record.text || '');\n    return {\n      url: `https://bsky.app/profile/${handle}/post/${rkey}`,\n      title: text.slice(0, 120).replace(/\\s+/g, ' ').trim(),\n      content: text.slice(0, 800),\n      publishedDate: p.record.createdAt || p.indexedAt || ''\n    };\n  }) : [];\n  return shape(i, 'bluesky', ok, JSON.stringify(item.json || {}).slice(0, 200), results);\n});"
       },
       "id": "f0cc3397-cfea-4a32-9dd3-5d5f04771e29",
-      "name": "Normalize Reddit",
+      "name": "Normalize Bluesky",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
@@ -278,31 +270,31 @@
     },
     {
       "parameters": {
-        "url": "https://dev.to/search/feed_content",
+        "url": "https://prsobfp46h-dsn.algolia.net/1/indexes/Article_production",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
             {
-              "name": "per_page",
-              "value": "15"
-            },
-            {
-              "name": "page",
-              "value": "0"
-            },
-            {
-              "name": "search_fields",
+              "name": "query",
               "value": "={{ $json.rawQuery }}"
             },
             {
-              "name": "class_name",
-              "value": "Article"
+              "name": "hitsPerPage",
+              "value": "15"
             }
           ]
         },
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
+            {
+              "name": "X-Algolia-Application-Id",
+              "value": "PRSOBFP46H"
+            },
+            {
+              "name": "X-Algolia-API-Key",
+              "value": "9aa7d31610cba78851c9b1f63776a9dd"
+            },
             {
               "name": "User-Agent",
               "value": "n8n:syaco-backlink-research:v1.0 (self-hosted)"
@@ -330,7 +322,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const items = $input.all();\nconst requests = $('Split Out Queries').all();\nif (items.length !== requests.length) {\n  throw new Error(`Search responses (${items.length}) do not match requests (${requests.length})`);\n}\nconst shape = (i, source, ok, error, results, extra) => ({\n  json: Object.assign({\n    solution: requests[i].json.solution,\n    rawQuery: requests[i].json.rawQuery,\n    source,\n    failed: !ok,\n    error: ok ? '' : error,\n    results: ok ? results : []\n  }, extra || {})\n});\n\nreturn items.map((item, i) => {\n  const list = item.json?.result;\n  const ok = Array.isArray(list);\n  const results = ok ? list.filter(r => r && (r.path || r.url)).map(r => ({\n    url: r.path ? `https://dev.to${r.path}` : r.url,\n    title: r.title || '',\n    content: String(r.body_text || r.description || '').slice(0, 800),\n    publishedDate: r.published_timestamp || r.published_at || ''\n  })) : [];\n  return shape(i, 'devto', ok, JSON.stringify(item.json || {}).slice(0, 200), results);\n});"
+        "jsCode": "const items = $input.all();\nconst requests = $('Split Out Queries').all();\nif (items.length !== requests.length) {\n  throw new Error(`Search responses (${items.length}) do not match requests (${requests.length})`);\n}\nconst shape = (i, source, ok, error, results, extra) => ({\n  json: Object.assign({\n    solution: requests[i].json.solution,\n    rawQuery: requests[i].json.rawQuery,\n    source,\n    failed: !ok,\n    error: ok ? '' : error,\n    results: ok ? results : []\n  }, extra || {})\n});\n\nreturn items.map((item, i) => {\n  const list = item.json?.hits || item.json?.result;\n  const ok = Array.isArray(list);\n  const results = ok ? list.filter(r => r && (r.path || r.url)).map(r => {\n    const rawBody = String(r.body_text || r.description || r.body || '').replace(/<[^>]+>/g, ' ').replace(/\\s+/g, ' ').trim();\n    const pub = r.published_timestamp || (typeof r.published_at === 'number' ? new Date(r.published_at * 1000).toISOString() : (r.published_at || ''));\n    return {\n      url: r.path ? `https://dev.to${r.path}` : r.url,\n      title: r.title || '',\n      content: rawBody.slice(0, 800),\n      publishedDate: pub\n    };\n  }) : [];\n  return shape(i, 'devto', ok, JSON.stringify(item.json || {}).slice(0, 200), results);\n});"
       },
       "id": "2bc6a18c-ef13-49f0-ad36-77400455c739",
       "name": "Normalize DevTo",
@@ -635,32 +627,12 @@
     },
     {
       "parameters": {
-        "jsCode": "const base = String($env.REVIEW_BASE_URL || 'http://localhost:5678').replace(/\\/$/, '');\nconst cut = (s, n) => {\n  const v = String(s ?? '');\n  return v.length > n ? v.slice(0, n - 3) + '...' : v;\n};\n\nreturn $input.all()\n  .filter(i => i.json && i.json.id)\n  .map(i => {\n    const r = i.json;\n    const reviewUrl = `${base}/webhook/backlink-review?id=${encodeURIComponent(r.id)}&token=${encodeURIComponent(r.review_token)}`;\n    return {\n      json: {\n        discordPayload: {\n          username: 'SyaCo Backlink Bot',\n          embeds: [{\n            title: cut(`[${r.platform}] ${r.post_title}`, 250),\n            url: r.post_url,\n            description: `**Review and approve:** ${reviewUrl}`,\n            color: 5793266,\n            fields: [\n              { name: 'Solution', value: cut(r.solution_title || '-', 1000), inline: true },\n              { name: 'Match score', value: String(r.match_score), inline: true },\n              { name: 'Link included', value: r.link_included ? 'yes' : 'no', inline: true },\n              { name: 'Matched problem', value: cut(r.matched_problem || '-', 1000) },\n              { name: 'Draft answer', value: cut(r.answer || '-', 1000) }\n            ]\n          }]\n        }\n      }\n    };\n  });"
-      },
-      "id": "2aa2da00-b77a-415b-a1a4-8ddd9d5b4996",
-      "name": "Build Discord Message",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        2048,
-        1808
-      ]
-    },
-    {
-      "parameters": {
         "method": "POST",
-        "url": "={{ $env.DISCORD_WEBHOOK_URL }}",
+        "url": "=http://discord-bot:3000/notify",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ $json.discordPayload }}",
-        "options": {
-          "batching": {
-            "batch": {
-              "batchSize": 1,
-              "batchInterval": 1500
-            }
-          }
-        }
+        "jsonBody": "={{ $json }}",
+        "options": {}
       },
       "id": "5bf07fb5-8344-4b96-a54a-628146695335",
       "name": "Notify Discord",
@@ -851,7 +823,7 @@
             "index": 0
           },
           {
-            "node": "Reddit Search",
+            "node": "Bluesky Search",
             "type": "main",
             "index": 0
           },
@@ -885,18 +857,18 @@
         ]
       ]
     },
-    "Reddit Search": {
+    "Bluesky Search": {
       "main": [
         [
           {
-            "node": "Normalize Reddit",
+            "node": "Normalize Bluesky",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Normalize Reddit": {
+    "Normalize Bluesky": {
       "main": [
         [
           {
@@ -995,17 +967,6 @@
       "main": [
         [
           {
-            "node": "Build Discord Message",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Build Discord Message": {
-      "main": [
-        [
-          {
             "node": "Notify Discord",
             "type": "main",
             "index": 0
@@ -1020,7 +981,7 @@
     "binaryMode": "separate",
     "availableInMCP": true
   },
-  "versionId": "be800b12-b9c1-4447-b4f3-672e3b47c0d2",
+  "versionId": "7bcdf86b-fc4c-410c-a35f-514a0424ad1a",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "6f36d1b2b7feb222314ad940be6435e2fafa9f216deae81be3daea4fb15a07ee"
