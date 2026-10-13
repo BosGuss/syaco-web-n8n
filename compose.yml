@@ -7,7 +7,7 @@ services:
     volumes:
       - ./searxng-settings.yml:/etc/searxng/settings.yml:ro
     ports:
-      - "127.0.0.1:8081:8080"
+      - "127.0.0.1:5679:8080"
     restart: unless-stopped
 
   postgres:
@@ -21,7 +21,7 @@ services:
       - ./pgdata:/var/lib/postgresql/data
       - ./init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
     ports:
-      - "127.0.0.1:5433:5432"
+      - "127.0.0.1:5680:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-syaco_n8n_db}"]
       interval: 10s
@@ -65,7 +65,7 @@ services:
     volumes:
       - sandbox-tls:/tls:ro
     ports:
-      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:5681:8080"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
       interval: 5s
