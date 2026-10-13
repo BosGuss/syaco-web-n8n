@@ -37,15 +37,15 @@ async function postToBluesky(postUrl, text) {
     }),
   });
   const session = await sessionRes.json();
-  if (!session.accessJwt) throw new Error(`Bluesky Login failed: \${JSON.stringify(session)}`);
+  if (!session.accessJwt) throw new Error(`Bluesky Login failed: ${JSON.stringify(session)}`);
 
   // 2. Resolve Profile DID
-  const profileRes = await fetch(`https://public.api.bsky.app/xrpc/app.bsky.actor.getProfile?actor=\${encodeURIComponent(actor)}`);
+  const profileRes = await fetch(`https://api.bsky.app/xrpc/app.bsky.actor.getProfile?actor=${encodeURIComponent(actor)}`);
   const profile = await profileRes.json();
   if (!profile.did) throw new Error('Could not resolve actor DID');
 
   // 3. Get Parent Post
-  const parentRes = await fetch(`https://public.api.bsky.app/xrpc/app.bsky.feed.getPosts?uris=at://${profile.did}/app.bsky.feed.post/${rkey}`);
+  const parentRes = await fetch(`https://api.bsky.app/xrpc/app.bsky.feed.getPosts?uris=at://${profile.did}/app.bsky.feed.post/${rkey}`);
   const parentData = await parentRes.json();
   const parent = parentData.posts?.[0];
   if (!parent?.uri || !parent?.cid) throw new Error('Could not load parent post');
@@ -81,7 +81,7 @@ async function postToBluesky(postUrl, text) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer \${session.accessJwt}`,
+      Authorization: `Bearer ${session.accessJwt}`,
     },
     body: JSON.stringify({
       repo: session.did,
@@ -90,7 +90,7 @@ async function postToBluesky(postUrl, text) {
     }),
   });
   const created = await createRes.json();
-  if (!created.uri) throw new Error(`Bluesky post rejected: \${JSON.stringify(created)}`);
+  if (!created.uri) throw new Error(`Bluesky post rejected: ${JSON.stringify(created)}`);
 
   const createdRkey = String(created.uri).split('/').pop();
   return `https://bsky.app/profile/${session.handle}/post/${createdRkey}`;
@@ -99,10 +99,14 @@ async function postToBluesky(postUrl, text) {
 // Discord Client Setup
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
+client.once('ready', () => {
+  console.log(`Discord bot logged in as ${client.user.tag}`);
+});
+
 function createCandidateEmbed(row) {
   const cut = (s, n) => (String(s || '').length > n ? s.slice(0, n - 3) + '...' : s || '-');
   return new EmbedBuilder()
-    .setTitle(`[${row.platform}]${cut(row.post_title, 200)}`)
+    .setTitle(`[${row.platform}] ${cut(row.post_title, 200)}`)
     .setURL(row.post_url)
     .setColor(0x5865f2)
     .addFields(
@@ -112,14 +116,14 @@ function createCandidateEmbed(row) {
       { name: 'Matched Problem', value: cut(row.matched_problem, 500) },
       { name: 'Draft Answer', value: cut(row.answer, 1000) }
     )
-    .setFooter({ text: `ID: \${row.id}` });
+    .setFooter({ text: `ID: ${row.id}` });
 }
 
 function createActionButtons(id) {
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`approve_\${id}`).setLabel('Approve').setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId(`edit_\${id}`).setLabel('Edit Answer').setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(`reject_\${id}`).setLabel('Reject').setStyle(ButtonStyle.Danger)
+    new ButtonBuilder().setCustomId(`approve_${id}`).setLabel('Approve').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId(`edit_${id}`).setLabel('Edit Answer').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(`reject_${id}`).setLabel('Reject').setStyle(ButtonStyle.Danger)
   );
 }
 
@@ -146,7 +150,7 @@ client.on('interactionCreate', async (interaction) => {
         if (!rows.length) return interaction.reply({ content: 'Candidate not found', ephemeral: true });
 
         const modal = new ModalBuilder()
-          .setCustomId(`modal_\${candidateId}`)
+          .setCustomId(`modal_${candidateId}`)
           .setTitle('Edit Draft Answer');
 
         const answerInput = new TextInputBuilder()
@@ -180,7 +184,7 @@ client.on('interactionCreate', async (interaction) => {
   } catch (err) {
     console.error('Interaction error:', err);
     if (!interaction.replied && !interaction.deferred) {
-      await interaction.reply({ content: `⚠️ Error: \${err.message}`, ephemeral: true });
+      await interaction.reply({ content: `⚠️ Error: ${err.message}`, ephemeral: true });
     }
   }
 });
@@ -208,7 +212,7 @@ async function handleApproval(interaction, candidateId, overrideAnswer = null) {
       );
 
       await interaction.editReply({
-        content: `✅ **Posted to Bluesky!**\n🔗 [Open Reply](\${postedUrl})`,
+        content: `✅ **Posted to Bluesky!**\n🔗 [Open Reply](${postedUrl})`,
         components: [],
       });
     } catch (postError) {
@@ -217,10 +221,10 @@ async function handleApproval(interaction, candidateId, overrideAnswer = null) {
         [postError.message, candidateId]
       );
       await interaction.editReply({
-        content: `⚠️ **Posting failed:** \${postError.message}\nYou can post manually below:`,
+        content: `⚠️ **Posting failed:** ${postError.message}\nYou can post manually below:`,
         components: [],
       });
-      await interaction.followUp({ content: `\`\`\`${finalAnswer}\`\`\``, ephemeral: true });
+      await interaction.followUp({ content: `\`\`\`\n${finalAnswer}\n\`\`\``, ephemeral: true });
     }
   } else {
     // Reddit / Dev.to -> Manual Workflow
@@ -230,10 +234,10 @@ async function handleApproval(interaction, candidateId, overrideAnswer = null) {
     );
 
     await interaction.editReply({
-      content: `📋 **Approved for Manual Posting** (${row.platform})\nThread:${row.post_url}\n\n**Copy text below to reply:**`,
+      content: `📋 **Approved for Manual Posting** (${row.platform})\nThread: ${row.post_url}\n\n**Copy text below to reply:**`,
       components: [],
     });
-    await interaction.followUp({ content: `\`\`\`${finalAnswer}\`\`\`` });
+    await interaction.followUp({ content: `\`\`\`\n${finalAnswer}\n\`\`\`` });
   }
 }
 
@@ -242,20 +246,32 @@ const app = express();
 app.use(express.json());
 
 app.post('/notify', async (req, res) => {
-  const candidate = req.body;
-  if (!candidate || !candidate.id) {
-    return res.status(400).json({ error: 'Missing candidate data or id' });
+  try {
+    const candidate = req.body;
+    // If ON CONFLICT DO NOTHING produced an empty row, skip gracefully without throwing 400
+    if (!candidate || !candidate.id) {
+      return res.json({ ok: true, skipped: true, reason: 'No candidate ID (likely duplicate post_url)' });
+    }
+
+    const channelId = process.env.DISCORD_CHANNEL_ID;
+    if (!channelId) {
+      return res.status(500).json({ error: 'DISCORD_CHANNEL_ID is not configured' });
+    }
+
+    const channel = await client.channels.fetch(channelId);
+    if (!channel) {
+      return res.status(500).json({ error: 'Discord Channel not found' });
+    }
+
+    const embed = createCandidateEmbed(candidate);
+    const row = createActionButtons(candidate.id);
+
+    await channel.send({ embeds: [embed], components: [row] });
+    return res.json({ ok: true, id: candidate.id });
+  } catch (err) {
+    console.error('Notify endpoint error:', err);
+    return res.status(500).json({ error: err.message });
   }
-
-  const channelId = process.env.DISCORD_CHANNEL_ID;
-  const channel = await client.channels.fetch(channelId);
-  if (!channel) return res.status(500).json({ error: 'Discord Channel not found' });
-
-  const embed = createCandidateEmbed(candidate);
-  const row = createActionButtons(candidate.id);
-
-  await channel.send({ embeds: [embed], components: [row] });
-  res.json({ ok: true });
 });
 
 const PORT = 3000;
