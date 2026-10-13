@@ -159,6 +159,7 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-admin}
       - BLUESKY_HANDLE=${BLUESKY_HANDLE}
       - BLUESKY_APP_PASSWORD=${BLUESKY_APP_PASSWORD}
+      - DEVTO_COOKIE=${DEVTO_COOKIE}
     depends_on:
       postgres:
         condition: service_healthy

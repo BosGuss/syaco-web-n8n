@@ -96,6 +96,76 @@ async function postToBluesky(postUrl, text) {
   return `https://bsky.app/profile/${session.handle}/post/${createdRkey}`;
 }
 
+// Dev.to Helper Functions
+async function postToDevTo(postUrl, text) {
+  let cookie = (process.env.DEVTO_COOKIE || '').trim();
+  if (!cookie) throw new Error('DEVTO_COOKIE is not set in environment');
+  if (!cookie.includes('remember_user_token=')) {
+    cookie = `remember_user_token=${cookie}`;
+  }
+
+  const baseHeaders = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Origin': 'https://dev.to',
+    'Referer': postUrl,
+    'Accept': 'application/json, text/javascript, */*; q=0.01',
+    'X-Requested-With': 'XMLHttpRequest',
+  };
+
+  // 1. Fetch live authenticity_token and check login status from async_info/base_data
+  const tokenRes = await fetch('https://dev.to/async_info/base_data', {
+    headers: { ...baseHeaders, 'Cookie': cookie },
+  });
+  const tokenData = await tokenRes.json();
+  const csrfToken = tokenData?.token;
+  if (!csrfToken) throw new Error('Could not fetch Dev.to CSRF token');
+  if (!tokenData?.user) throw new Error('Dev.to session expired or invalid (user is not logged in). Please update DEVTO_COOKIE.');
+
+  // Collect returned session cookies (e.g. _Devto_Forem_Session, updated remember_user_token)
+  const rawSetCookie = tokenRes.headers.getSetCookie ? tokenRes.headers.getSetCookie() : [tokenRes.headers.get('set-cookie')].filter(Boolean);
+  const newCookies = rawSetCookie.map(c => c.split(';')[0]).join('; ');
+  const combinedCookie = newCookies ? `${cookie}; ${newCookies}` : cookie;
+
+  // 2. Fetch article page to extract data-article-id / commentable_id
+  const pageRes = await fetch(postUrl, { headers: { ...baseHeaders, 'Cookie': combinedCookie, 'Accept': 'text/html' } });
+  const html = await pageRes.text();
+  const idMatch = html.match(/data-article-id="(\d+)"/) || html.match(/data-commentable-id="(\d+)"/);
+  if (!idMatch) throw new Error('Could not extract Dev.to Article ID from URL: ' + postUrl);
+  const articleId = parseInt(idMatch[1]);
+
+  // 3. Post comment
+  const postRes = await fetch('https://dev.to/comments', {
+    method: 'POST',
+    headers: {
+      ...baseHeaders,
+      'Cookie': combinedCookie,
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': csrfToken,
+    },
+    body: JSON.stringify({
+      authenticity_token: csrfToken,
+      comment: {
+        body_markdown: text,
+        commentable_id: articleId,
+        commentable_type: 'Article',
+      },
+    }),
+  });
+
+  if (!postRes.ok) {
+    const errText = await postRes.text();
+    throw new Error(`Dev.to comment rejected (HTTP ${postRes.status}): ${errText.slice(0, 300)}`);
+  }
+
+  // Dev.to responds with { status: "created", url: "/username/comment/id", id_code: "..." }
+  const resData = await postRes.json().catch(() => ({}));
+  if (resData?.url) {
+    return `https://dev.to${resData.url}`;
+  }
+  const commentId = resData?.id_code || resData?.id;
+  return commentId ? `${postUrl}#comment-${commentId}` : postUrl;
+}
+
 // Discord Client Setup
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
@@ -115,8 +185,7 @@ function createCandidateEmbed(row) {
       { name: 'Platform', value: String(row.platform), inline: true },
       { name: 'Matched Problem', value: cut(row.matched_problem, 500) },
       { name: 'Draft Answer', value: cut(row.answer, 1000) }
-    )
-    .setFooter({ text: `ID: ${row.id}` });
+    );
 }
 
 function createActionButtons(id) {
@@ -174,12 +243,23 @@ client.on('interactionCreate', async (interaction) => {
       const candidateId = interaction.customId.replace('modal_', '');
       const newAnswer = interaction.fields.getTextInputValue('edited_answer').trim();
 
-      await pool.query(
-        'UPDATE backlink_candidates SET answer = $1 WHERE id::text = $2',
+      const { rows } = await pool.query(
+        'UPDATE backlink_candidates SET answer = $1 WHERE id::text = $2 RETURNING *',
         [newAnswer, candidateId]
       );
 
-      await handleApproval(interaction, candidateId, newAnswer);
+      if (!rows.length) {
+        return await interaction.reply({ content: 'Candidate not found', ephemeral: true });
+      }
+
+      const updatedEmbed = createCandidateEmbed(rows[0]);
+      const actionRow = createActionButtons(rows[0].id);
+
+      await interaction.update({
+        content: '✏️ **Draft Answer Updated!** (Press **Approve** when ready to post)',
+        embeds: [updatedEmbed],
+        components: [actionRow],
+      });
     }
   } catch (err) {
     console.error('Interaction error:', err);
@@ -224,10 +304,39 @@ async function handleApproval(interaction, candidateId, overrideAnswer = null) {
         content: `⚠️ **Posting failed:** ${postError.message}\nYou can post manually below:`,
         components: [],
       });
-      await interaction.followUp({ content: `\`\`\`\n${finalAnswer}\n\`\`\``, ephemeral: true });
+      await interaction.followUp({
+        content: `🔗 **Thread Link:** ${row.post_url}\n\`\`\`\n${finalAnswer}\n\`\`\``,
+        ephemeral: true,
+      });
+    }
+  } else if (row.platform === 'devto') {
+    try {
+      const postedUrl = await postToDevTo(row.post_url, finalAnswer);
+      await pool.query(
+        "UPDATE backlink_candidates SET status = 'posted', answer = $1, posted_url = $2, posted_at = NOW(), reviewed_at = NOW() WHERE id::text = $3",
+        [finalAnswer, postedUrl, candidateId]
+      );
+
+      await interaction.editReply({
+        content: `✅ **Posted to Dev.to!**\n🔗 [Open Comment](${postedUrl})`,
+        components: [],
+      });
+    } catch (postError) {
+      await pool.query(
+        "UPDATE backlink_candidates SET status = 'failed', error_message = $1 WHERE id::text = $2",
+        [postError.message, candidateId]
+      );
+      await interaction.editReply({
+        content: `⚠️ **Dev.to posting failed:** ${postError.message}\nYou can post manually below:`,
+        components: [],
+      });
+      await interaction.followUp({
+        content: `🔗 **Thread Link:** ${row.post_url}\n\`\`\`\n${finalAnswer}\n\`\`\``,
+        ephemeral: true,
+      });
     }
   } else {
-    // Reddit / Dev.to -> Manual Workflow
+    // Reddit -> Manual Workflow
     await pool.query(
       "UPDATE backlink_candidates SET status = 'manual', answer = $1, reviewed_at = NOW() WHERE id::text = $2",
       [finalAnswer, candidateId]
@@ -237,7 +346,9 @@ async function handleApproval(interaction, candidateId, overrideAnswer = null) {
       content: `📋 **Approved for Manual Posting** (${row.platform})\nThread: ${row.post_url}\n\n**Copy text below to reply:**`,
       components: [],
     });
-    await interaction.followUp({ content: `\`\`\`\n${finalAnswer}\n\`\`\`` });
+    await interaction.followUp({
+      content: `🔗 **Thread Link:** ${row.post_url}\n\`\`\`\n${finalAnswer}\n\`\`\``,
+    });
   }
 }
 
