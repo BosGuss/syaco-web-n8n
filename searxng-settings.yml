@@ -4,3 +4,25 @@ search:
   formats:
     - html
     - json
+
+outgoing:
+  request_timeout: 4.0
+  max_request_timeout: 6.0
+
+engines:
+  - name: duckduckgo
+    disabled: true
+  - name: brave
+    disabled: true
+  - name: google
+    disabled: true
+  - name: google cse
+    disabled: true
+  - name: qwant
+    disabled: true
+  - name: bing
+    disabled: false
+    weight: 2
+  - name: yahoo
+    disabled: false
+    weight: 1

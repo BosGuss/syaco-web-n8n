@@ -169,14 +169,19 @@
             {
               "name": "language",
               "value": "en"
+            },
+            {
+              "name": "engines",
+              "value": "bing,yahoo"
             }
           ]
         },
         "options": {
+          "timeout": 10000,
           "batching": {
             "batch": {
               "batchSize": 1,
-              "batchInterval": 2500
+              "batchInterval": 1500
             }
           }
         }
@@ -191,7 +196,7 @@
       ],
       "retryOnFail": true,
       "maxTries": 2,
-      "waitBetweenTries": 3000,
+      "waitBetweenTries": 2000,
       "onError": "continueRegularOutput"
     },
     {
@@ -397,7 +402,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const TOP_N = 5;\n\nconst segmenter = (typeof Intl !== 'undefined' && Intl.Segmenter)\n  ? new Intl.Segmenter('th', { granularity: 'word' })\n  : null;\n\nfunction tokenize(text) {\n  const s = String(text || '').toLowerCase();\n  const words = segmenter\n    ? Array.from(segmenter.segment(s)).filter(x => x.isWordLike).map(x => x.segment)\n    : s.replace(/[^\\p{L}\\p{N}\\s]/gu, ' ').split(/\\s+/);\n  return words.filter(w => (/^[\\x00-\\x7f]+$/.test(w) ? w.length > 2 : w.length > 1));\n}\n\nconst items = $input.all();\nif (items.length === 0) return [];\n\nconst groups = {};\nfor (const item of items) {\n  const json = item.json;\n  const sol = json.solution || {};\n  const key = String(sol.id ?? 'unknown');\n\n  const solutionTokens = new Set(tokenize(\n    [sol.titleEn, sol.titleTh, sol.descEn, sol.descTh].join(' ')\n  ));\n  const resultTokens = tokenize(`${json.title} ${json.content}`);\n\n  let matches = 0;\n  for (const t of resultTokens) if (solutionTokens.has(t)) matches++;\n  const overlap = (solutionTokens.size > 0 && resultTokens.length > 0)\n    ? matches / Math.sqrt(solutionTokens.size * resultTokens.length)\n    : 0;\n\n  let titleMatches = 0;\n  for (const t of tokenize(json.title)) if (solutionTokens.has(t)) titleMatches++;\n  const titleBonus = Math.min(0.3, titleMatches * 0.05);\n\n  const queryTokens = tokenize(json.searchQuery);\n  let queryMatches = 0;\n  for (const t of queryTokens) if (solutionTokens.has(t)) queryMatches++;\n  const queryBonus = queryTokens.length > 0\n    ? Math.min(0.2, (queryMatches / queryTokens.length) * 0.2)\n    : 0;\n\n  json.similarityScore = Number(Math.min(1, overlap + titleBonus + queryBonus).toFixed(3));\n  (groups[key] = groups[key] || []).push(item);\n}\n\nconst top = [];\nfor (const group of Object.values(groups)) {\n  group.sort((a, b) => b.json.similarityScore - a.json.similarityScore);\n  top.push(...group.slice(0, TOP_N));\n}\nreturn top;"
+        "jsCode": "const TOP_N = 25;\n\nconst segmenter = (typeof Intl !== 'undefined' && Intl.Segmenter)\n  ? new Intl.Segmenter('th', { granularity: 'word' })\n  : null;\n\nfunction tokenize(text) {\n  const s = String(text || '').toLowerCase();\n  const words = segmenter\n    ? Array.from(segmenter.segment(s)).filter(x => x.isWordLike).map(x => x.segment)\n    : s.replace(/[^\\p{L}\\p{N}\\s]/gu, ' ').split(/\\s+/);\n  return words.filter(w => (/^[\\x00-\\x7f]+$/.test(w) ? w.length > 2 : w.length > 1));\n}\n\nconst items = $input.all();\nif (items.length === 0) return [];\n\nconst groups = {};\nfor (const item of items) {\n  const json = item.json;\n  const sol = json.solution || {};\n  const key = String(sol.id ?? 'unknown');\n\n  const solutionTokens = new Set(tokenize(\n    [sol.titleEn, sol.titleTh, sol.descEn, sol.descTh].join(' ')\n  ));\n  const resultTokens = tokenize(`${json.title} ${json.content}`);\n\n  let matches = 0;\n  for (const t of resultTokens) if (solutionTokens.has(t)) matches++;\n  const overlap = (solutionTokens.size > 0 && resultTokens.length > 0)\n    ? matches / Math.sqrt(solutionTokens.size * resultTokens.length)\n    : 0;\n\n  let titleMatches = 0;\n  for (const t of tokenize(json.title)) if (solutionTokens.has(t)) titleMatches++;\n  const titleBonus = Math.min(0.3, titleMatches * 0.05);\n\n  const queryTokens = tokenize(json.searchQuery);\n  let queryMatches = 0;\n  for (const t of queryTokens) if (solutionTokens.has(t)) queryMatches++;\n  const queryBonus = queryTokens.length > 0\n    ? Math.min(0.2, (queryMatches / queryTokens.length) * 0.2)\n    : 0;\n\n  json.similarityScore = Number(Math.min(1, overlap + titleBonus + queryBonus).toFixed(3));\n  (groups[key] = groups[key] || []).push(item);\n}\n\nconst top = [];\nfor (const group of Object.values(groups)) {\n  group.sort((a, b) => b.json.similarityScore - a.json.similarityScore);\n  top.push(...group.slice(0, TOP_N));\n}\nreturn top;"
       },
       "id": "c5f94d2a-4c2d-4eb3-ac00-c8f2d831cb7d",
       "name": "Top Candidates Filter",
@@ -441,7 +446,7 @@
           "batching": {
             "batch": {
               "batchSize": 1,
-              "batchInterval": 3500
+              "batchInterval": 3000
             }
           }
         }
