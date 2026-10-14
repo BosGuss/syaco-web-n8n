@@ -168,9 +168,11 @@ async function postToDevTo(postUrl, text) {
 
 // Discord Client Setup
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+const { registerCommands, handleCommand } = require('./commands');
 
-client.once('ready', () => {
+client.once('ready', async () => {
   console.log(`Discord bot logged in as ${client.user.tag}`);
+  await registerCommands(client);
 });
 
 function createCandidateEmbed(row) {
@@ -199,6 +201,10 @@ function createActionButtons(id) {
 // Handle Discord Gateway Interactions
 client.on('interactionCreate', async (interaction) => {
   try {
+    if (interaction.isChatInputCommand()) {
+      return await handleCommand(interaction, { pool, client });
+    }
+
     if (interaction.isButton()) {
       const [action, candidateId] = interaction.customId.split('_');
 
