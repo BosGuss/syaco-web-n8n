@@ -100,9 +100,41 @@ async function postToBluesky(postUrl, text) {
 async function postToDevTo(postUrl, text) {
   let cookie = (process.env.DEVTO_COOKIE || '').trim();
   if (!cookie) throw new Error('DEVTO_COOKIE is not set in environment');
-  if (!cookie.includes('remember_user_token=')) {
-    cookie = `remember_user_token=${cookie}`;
+  if (!cookie.includes('=')) {
+    cookie = cookie.startsWith('eyJf')
+      ? `remember_user_token=${cookie}`
+      : `_Devto_Forem_Session=${cookie}`;
   }
+
+  const cookies = new Map();
+  function addCookies(str) {
+    if (!str) return;
+    for (const p of str.split(';')) {
+      const idx = p.indexOf('=');
+      if (idx > -1) {
+        const k = p.slice(0, idx).trim();
+        const v = p.slice(idx + 1).trim();
+        if (k && v) cookies.set(k, v);
+      }
+    }
+  }
+  function handleSetCookie(res) {
+    const raw = res.headers.getSetCookie ? res.headers.getSetCookie() : [res.headers.get('set-cookie')].filter(Boolean);
+    for (const c of raw) {
+      const p = c.split(';')[0];
+      const idx = p.indexOf('=');
+      if (idx > -1) {
+        const k = p.slice(0, idx).trim();
+        const v = p.slice(idx + 1).trim();
+        if (k && v) cookies.set(k, v);
+      }
+    }
+  }
+  function getCookieHeader() {
+    return Array.from(cookies.entries()).map(([k, v]) => `${k}=${v}`).join('; ');
+  }
+
+  addCookies(cookie);
 
   const baseHeaders = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -112,33 +144,35 @@ async function postToDevTo(postUrl, text) {
     'X-Requested-With': 'XMLHttpRequest',
   };
 
-  // 1. Fetch live authenticity_token and check login status from async_info/base_data
-  const tokenRes = await fetch('https://dev.to/async_info/base_data', {
-    headers: { ...baseHeaders, 'Cookie': cookie },
+  // 1. Visit article page first to activate Devise session and extract article ID
+  const pageRes = await fetch(postUrl, {
+    headers: { ...baseHeaders, 'Cookie': getCookieHeader(), 'Accept': 'text/html' }
   });
-  const tokenData = await tokenRes.json();
-  const csrfToken = tokenData?.token;
-  if (!csrfToken) throw new Error('Could not fetch Dev.to CSRF token');
-  if (!tokenData?.user) throw new Error('Dev.to session expired or invalid (user is not logged in). Please update DEVTO_COOKIE.');
-
-  // Collect returned session cookies (e.g. _Devto_Forem_Session, updated remember_user_token)
-  const rawSetCookie = tokenRes.headers.getSetCookie ? tokenRes.headers.getSetCookie() : [tokenRes.headers.get('set-cookie')].filter(Boolean);
-  const newCookies = rawSetCookie.map(c => c.split(';')[0]).join('; ');
-  const combinedCookie = newCookies ? `${cookie}; ${newCookies}` : cookie;
-
-  // 2. Fetch article page to extract data-article-id / commentable_id
-  const pageRes = await fetch(postUrl, { headers: { ...baseHeaders, 'Cookie': combinedCookie, 'Accept': 'text/html' } });
+  handleSetCookie(pageRes);
   const html = await pageRes.text();
+
   const idMatch = html.match(/data-article-id="(\d+)"/) || html.match(/data-commentable-id="(\d+)"/);
   if (!idMatch) throw new Error('Could not extract Dev.to Article ID from URL: ' + postUrl);
   const articleId = parseInt(idMatch[1]);
 
-  // 3. Post comment
+  // 2. Fetch live authenticity_token and verify logged-in user from async_info/base_data
+  const tokenRes = await fetch('https://dev.to/async_info/base_data', {
+    headers: { ...baseHeaders, 'Cookie': getCookieHeader() },
+  });
+  handleSetCookie(tokenRes);
+  const tokenData = await tokenRes.json();
+  const csrfToken = tokenData?.token;
+  if (!csrfToken) throw new Error('Could not fetch Dev.to CSRF token');
+
+  const user = typeof tokenData?.user === 'string' ? JSON.parse(tokenData.user) : tokenData?.user;
+  if (!user) throw new Error('Dev.to session expired or invalid (user is not logged in). Please update DEVTO_COOKIE.');
+
+  // 3. Post comment using the full accumulated cookies matching the CSRF session
   const postRes = await fetch('https://dev.to/comments', {
     method: 'POST',
     headers: {
       ...baseHeaders,
-      'Cookie': combinedCookie,
+      'Cookie': getCookieHeader(),
       'Content-Type': 'application/json',
       'X-CSRF-Token': csrfToken,
     },
