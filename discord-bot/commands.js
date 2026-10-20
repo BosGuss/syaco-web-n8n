@@ -371,6 +371,15 @@ const commands = [
     ),
 
   new SlashCommandBuilder()
+    .setName('set-channel')
+    .setDescription('ตั้งค่าห้องนี้ (หรือห้องที่เลือก) เป็นห้องรับแจ้งเตือน Backlink Candidates')
+    .addChannelOption(option =>
+      option.setName('channel')
+        .setDescription('ห้องที่ต้องการให้ส่งแจ้งเตือน (หากเว้นว่าง จะใช้ห้องปัจจุบัน)')
+        .setRequired(false)
+    ),
+
+  new SlashCommandBuilder()
     .setName('help')
     .setDescription('แสดงรายการคำสั่งทั้งหมดและวิธีใช้งาน')
 ];
@@ -388,21 +397,38 @@ async function registerCommands(client) {
   const serverId = process.env.DISCORD_SERVER_ID;
 
   try {
+    // 1. ลงทะเบียนสำหรับ Server ID ที่ระบุใน .env (ถ้ามี)
     if (serverId) {
-      console.log(`[Commands] กำลังลงทะเบียนคำสั่งเข้า Server ID: ${serverId} (อัปเดตทันที)...`);
       await rest.put(
         Routes.applicationGuildCommands(client.user.id, serverId),
         { body: commandData }
       );
-      console.log('✅ [Commands] ลงทะเบียน Guild Slash Commands สำเร็จ!');
-    } else {
-      console.log('[Commands] กำลังลงทะเบียน Global Slash Commands...');
-      await rest.put(
-        Routes.applicationCommands(client.user.id),
-        { body: commandData }
-      );
-      console.log('✅ [Commands] ลงทะเบียน Global Slash Commands สำเร็จ!');
+      console.log(`✅ [Commands] ลงทะเบียน Guild Slash Commands เข้า Server ID: ${serverId} สำเร็จ!`);
     }
+
+    // 2. ลงทะเบียนให้ทุก Server ที่บอทเข้าร่วมอยู่ในขณะนี้อัตโนมัติทันที
+    if (client.guilds && client.guilds.cache.size > 0) {
+      for (const [gId, guild] of client.guilds.cache) {
+        if (gId !== serverId) {
+          try {
+            await rest.put(
+              Routes.applicationGuildCommands(client.user.id, gId),
+              { body: commandData }
+            );
+            console.log(`✅ [Commands] อัปเดต Slash Commands ให้ Server "${guild.name}" (${gId}) สำเร็จ!`);
+          } catch (gErr) {
+            console.warn(`[Commands] ข้าม Server "${guild.name}":`, gErr.message);
+          }
+        }
+      }
+    }
+
+    // 3. ลงทะเบียนแบบ Global ด้วย เพื่อให้ Server ใหม่ที่เชิญบอทเข้ามองเห็นคำสั่งได้ทันที
+    await rest.put(
+      Routes.applicationCommands(client.user.id),
+      { body: commandData }
+    );
+    console.log('✅ [Commands] ลงทะเบียน Global Slash Commands สำเร็จ!');
   } catch (error) {
     console.error('❌ [Commands] เกิดข้อผิดพลาดในการลงทะเบียน Commands:', error);
   }
@@ -745,6 +771,10 @@ async function handleCommand(interaction, { pool, client }) {
       }
     }
 
+    // 6. Notification Channel
+    const currentChannelId = process.env.DISCORD_CHANNEL_ID;
+    const channelDisplay = currentChannelId ? `<#${currentChannelId}> (\`${currentChannelId}\`)` : '⚪ Not Set (พิมพ์ `/set-channel` เพื่อตั้งค่า)';
+
     const embed = new EmbedBuilder()
       .setTitle('🩺 รายงานสถานะสุขภาพระบบ (System Health)')
       .setColor(0x5865f2)
@@ -753,11 +783,53 @@ async function handleCommand(interaction, { pool, client }) {
         { name: '⚡ n8n Service', value: n8nStatus, inline: false },
         { name: '🦋 Bluesky Account', value: bskyStatus, inline: false },
         { name: '💻 Dev.to Session', value: devtoStatus, inline: false },
-        { name: '🤖 Gemini AI', value: geminiStatus, inline: false }
+        { name: '🤖 Gemini AI', value: geminiStatus, inline: false },
+        { name: '📢 Notification Channel', value: channelDisplay, inline: false }
       )
       .setTimestamp();
 
     return await interaction.editReply({ embeds: [embed] });
+  }
+
+  // คำสั่ง /set-channel (ตั้งค่าห้องรับแจ้งเตือน)
+  if (commandName === 'set-channel') {
+    await interaction.deferReply({ ephemeral: true });
+    try {
+      const targetChannel = interaction.options.getChannel('channel') || interaction.channel;
+      if (!targetChannel) {
+        return await interaction.editReply('❌ ไม่พบห้องที่ต้องการตั้งค่า');
+      }
+
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS bot_settings (
+          key TEXT PRIMARY KEY,
+          value TEXT,
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        INSERT INTO bot_settings (key, value, updated_at)
+        VALUES ('DISCORD_CHANNEL_ID', $1, NOW())
+        ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW();
+      `, [targetChannel.id]);
+
+      process.env.DISCORD_CHANNEL_ID = targetChannel.id;
+      updateEnvFile('DISCORD_CHANNEL_ID', targetChannel.id);
+
+      const embed = new EmbedBuilder()
+        .setTitle('✅ ตั้งค่าห้องแจ้งเตือนสำเร็จ!')
+        .setColor(0x57f287)
+        .setDescription(`ต่อไปนี้รายการ Backlink Candidates และผลการวิจัยจะถูกส่งมาที่ห้องนี้ครับ 🎉`)
+        .addFields(
+          { name: '📢 ห้องแจ้งเตือน', value: `<#${targetChannel.id}> (\`${targetChannel.name || targetChannel.id}\`)`, inline: true },
+          { name: '🏠 เซิร์ฟเวอร์', value: interaction.guild ? `${interaction.guild.name}` : '-', inline: true },
+          { name: '💾 สถานะการบันทึก', value: 'บันทึกลง Database เรียบร้อย (ย้ายห้องได้ทันที ไม่ต้องรีสตาร์ทบอท)', inline: false }
+        )
+        .setTimestamp();
+
+      return await interaction.editReply({ embeds: [embed] });
+    } catch (err) {
+      console.error('Error in set-channel command:', err);
+      return await interaction.editReply(`⚠️ เกิดข้อผิดพลาด: ${err.message}`);
+    }
   }
 
   // คำสั่ง /set-gemini-key
@@ -829,7 +901,8 @@ async function handleCommand(interaction, { pool, client }) {
         { name: '`/set-gemini-key [key]`', value: 'อัปเดต Gemini API Key (มี Modal ป๊อปอัป)' },
         { name: '`/set-gemini-model <model>`', value: 'เปลี่ยนรุ่น Gemini Model (เช่น gemini-3.8-flash)' },
         { name: '`/set-devto-cookie [cookie]`', value: 'อัปเดต Cookie ของ Dev.to ผ่าน Discord (มี Modal ให้วาง)' },
-        { name: '`/health`', value: 'ตรวจสอบสถานะการเชื่อมต่อ (DB, n8n, Bluesky, Dev.to, Gemini)' },
+        { name: '`/set-channel [channel]`', value: 'ตั้งค่าห้องรับการแจ้งเตือน Candidates (เดินไปพิมพ์ในห้องที่ต้องการได้เลย)' },
+        { name: '`/health`', value: 'ตรวจสอบสถานะการเชื่อมต่อ (DB, n8n, Bluesky, Dev.to, Gemini, Channel)' },
         { name: '`/ping`', value: 'ทดสอบความเร็วและการเชื่อมต่อของบอท' }
       )
       .setFooter({ text: 'SyaCo Content & Backlink Automation Stack' });

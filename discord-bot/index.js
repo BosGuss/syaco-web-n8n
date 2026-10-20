@@ -219,7 +219,7 @@ async function loadBotSettings() {
         updated_at TIMESTAMPTZ DEFAULT NOW()
       )
     `);
-    const { rows } = await pool.query("SELECT key, value FROM bot_settings WHERE key IN ('DEVTO_COOKIE', 'GEMINI_API_KEY', 'GEMINI_MODEL')");
+    const { rows } = await pool.query("SELECT key, value FROM bot_settings WHERE key IN ('DEVTO_COOKIE', 'GEMINI_API_KEY', 'GEMINI_MODEL', 'DISCORD_CHANNEL_ID')");
     for (const r of rows) {
       if (r.value) {
         process.env[r.key] = r.value;
@@ -235,6 +235,17 @@ client.once('ready', async () => {
   console.log(`Discord bot logged in as ${client.user.tag}`);
   await loadBotSettings();
   await registerCommands(client);
+});
+
+// เมื่อบอทได้รับเชิญเข้า Server ใหม่ ให้ลงทะเบียน Slash Commands ทันที
+client.on('guildCreate', async (guild) => {
+  console.log(`[Bot] ได้รับเชิญเข้า Server ใหม่: "${guild.name}" (${guild.id})`);
+  try {
+    await registerCommands(client);
+    console.log(`✅ [Bot] อัปเดตคำสั่งสำหรับ Server ใหม่ "${guild.name}" สำเร็จอัตโนมัติ!`);
+  } catch (err) {
+    console.error(`[Bot] ไม่สามารถลงทะเบียนคำสั่งสำหรับ Server ใหม่:`, err);
+  }
 });
 
 function createCandidateEmbed(row) {
@@ -444,9 +455,19 @@ app.post('/notify', async (req, res) => {
       return res.json({ ok: true, skipped: true, reason: 'No candidate ID (likely duplicate post_url)' });
     }
 
-    const channelId = process.env.DISCORD_CHANNEL_ID;
+    let channelId = process.env.DISCORD_CHANNEL_ID;
     if (!channelId) {
-      return res.status(500).json({ error: 'DISCORD_CHANNEL_ID is not configured' });
+      try {
+        const { rows } = await pool.query("SELECT value FROM bot_settings WHERE key = 'DISCORD_CHANNEL_ID'");
+        if (rows.length && rows[0].value) {
+          channelId = rows[0].value;
+          process.env.DISCORD_CHANNEL_ID = channelId;
+        }
+      } catch (_) {}
+    }
+
+    if (!channelId) {
+      return res.status(500).json({ error: 'DISCORD_CHANNEL_ID is not configured. Please run /set-channel in Discord.' });
     }
 
     const channel = await client.channels.fetch(channelId);
