@@ -202,10 +202,38 @@ async function postToDevTo(postUrl, text) {
 
 // Discord Client Setup
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
-const { registerCommands, handleCommand } = require('./commands');
+const {
+  registerCommands,
+  handleCommand,
+  saveAndVerifyDevtoCookie,
+  saveAndVerifyGeminiKey,
+  saveAndVerifyGeminiModel
+} = require('./commands');
+
+async function loadBotSettings() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS bot_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT,
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    const { rows } = await pool.query("SELECT key, value FROM bot_settings WHERE key IN ('DEVTO_COOKIE', 'GEMINI_API_KEY', 'GEMINI_MODEL')");
+    for (const r of rows) {
+      if (r.value) {
+        process.env[r.key] = r.value;
+        console.log(`[Settings] Loaded ${r.key} from database`);
+      }
+    }
+  } catch (err) {
+    console.error('[Settings] Error loading bot settings:', err);
+  }
+}
 
 client.once('ready', async () => {
   console.log(`Discord bot logged in as ${client.user.tag}`);
+  await loadBotSettings();
   await registerCommands(client);
 });
 
@@ -280,6 +308,18 @@ client.on('interactionCreate', async (interaction) => {
     }
 
     if (interaction.isModalSubmit()) {
+      if (interaction.customId === 'modal_devto_cookie') {
+        const rawCookie = interaction.fields.getTextInputValue('cookie_value');
+        await interaction.deferReply({ ephemeral: true });
+        return await saveAndVerifyDevtoCookie(interaction, rawCookie, pool);
+      }
+
+      if (interaction.customId === 'modal_gemini_key') {
+        const rawKey = interaction.fields.getTextInputValue('key_value');
+        await interaction.deferReply({ ephemeral: true });
+        return await saveAndVerifyGeminiKey(interaction, rawKey, pool);
+      }
+
       const candidateId = interaction.customId.replace('modal_', '');
       const newAnswer = interaction.fields.getTextInputValue('edited_answer').trim();
 
