@@ -1,0 +1,464 @@
+{
+  "name": "SyaCo Flow 3 - Community Lead Assistant",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "answer-question",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "f3-node-webhook-answer",
+      "name": "Webhook: /webhook/answer-question",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        200,
+        300
+      ],
+      "webhookId": "answer-question"
+    },
+    {
+      "parameters": {
+        "jsCode": "function normalizeUrl(rawUrl, platform) {\n  try {\n    const u = new URL(rawUrl.trim());\n    if (platform === 'pantip' || u.hostname.includes('pantip.com')) {\n      const m = u.pathname.match(/\\/topic\\/(\\d+)/);\n      return m ? `https://pantip.com/topic/${m[1]}` : u.origin + u.pathname;\n    }\n    if (platform === 'facebook_group' || u.hostname.includes('facebook.com')) {\n      const keepParams = ['story_fbid', 'id', 'post_id'];\n      const newParams = new URLSearchParams();\n      keepParams.forEach(p => { if (u.searchParams.has(p)) newParams.set(p, u.searchParams.get(p)); });\n      const qs = newParams.toString();\n      return u.origin + u.pathname + (qs ? '?' + qs : '');\n    }\n    return u.origin + u.pathname;\n  } catch (e) {\n    return rawUrl.trim();\n  }\n}\n\nconst body = $json.body || $json;\nconst rawUrl = body.post_url || '';\nconst platform = body.platform || 'pantip';\nconst normalized = normalizeUrl(rawUrl, platform);\n\nreturn [{\n  json: {\n    post_url: normalized,\n    original_url: rawUrl,\n    question_text: String(body.question_text || '').trim(),\n    platform: platform,\n    requested_by: body.requested_by || 'Discord User'\n  }\n}];"
+      },
+      "id": "f3-node-normalize-url",
+      "name": "Platform-Aware Normalize Post URL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH quota AS (\n  SELECT COUNT(*) AS weekly_count \n  FROM backlink_candidates \n  WHERE platform IN ('pantip', 'blognone', 'blockdit', 'facebook_group')\n    AND status IN ('pending_review', 'approved', 'manual', 'posted')\n    AND created_at >= NOW() - INTERVAL '7 days'\n),\nexisting AS (\n  SELECT id, status, match_score \n  FROM backlink_candidates \n  WHERE post_url = $1\n)\nSELECT \n  (SELECT weekly_count FROM quota) AS weekly_count,\n  (SELECT id FROM existing) AS existing_id,\n  (SELECT status FROM existing) AS existing_status;",
+        "options": {
+          "queryReplacement": "={{ [$json.post_url] }}"
+        }
+      },
+      "id": "f3-node-check-quota-db",
+      "name": "Check Weekly Quota & Existing URL",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        680,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "ppHdQYPLGXKAxrFp",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "f3-cond-exists",
+              "leftValue": "={{ $json.existing_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f3-node-if-exists",
+      "name": "If Already Exists",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        920,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { status: 'already_exists', id: $json.existing_id, existing_status: $json.existing_status } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "f3-node-respond-exists",
+      "name": "Respond Already Exists",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1160,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "f3-cond-quota",
+              "leftValue": "={{ parseInt($json.weekly_count || 0) }}",
+              "rightValue": 5,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f3-node-if-quota",
+      "name": "If Quota Exceeded",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1160,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { status: 'quota_exceeded', count: $json.weekly_count } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "f3-node-respond-quota",
+      "name": "Respond Quota Exceeded",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1400,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { status: 'processing', message: 'Thread received and accepted for AI qualification' } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "f3-node-respond-accepted",
+      "name": "Respond Accepted",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1400,
+        460
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://www.syaco.co.th/api/solutions",
+        "options": {}
+      },
+      "id": "f3-node-get-published-solutions",
+      "name": "Get Published Solutions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1640,
+        460
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const req = $('Platform-Aware Normalize Post URL').first().json;\nconst rawSols = $input.first()?.json || [];\nconst solutions = (Array.isArray(rawSols) ? rawSols : (rawSols.data || [rawSols])).map(s => ({\n  id: String(s.id),\n  titleEn: s.titleEn || '',\n  titleTh: s.titleTh || '',\n  descEn: s.content?.en?.hero?.description || s.descEn || '',\n  descTh: s.content?.th?.hero?.description || s.descTh || '',\n  url: s.url || `https://www.syaco.co.th${s.link || `/solutions/${s.id}`}`\n})).filter(s => s.titleEn || s.titleTh);\n\nconst voiceGuidelines = {\n  pantip: 'Tone: Polite, friendly Thai senior engineer peer. Start directly with a practical solution or architecture diagram/concept. No sales pitch.',\n  blognone: 'Tone: Technical, concise, engineering-focused. Discuss trade-offs, architecture, and technology choices.',\n  blockdit: 'Tone: Structured problem breakdown and step-by-step solution. Professional and easy to follow.',\n  facebook_group: 'Tone: Direct troubleshooting, practical advice, conversational and helpful.'\n};\n\nconst prompt = [\n  'You are an Enterprise Lead Qualification and Technical Advisory AI for SyaCo (https://www.syaco.co.th).',\n  '',\n  '## Task:',\n  '1. Evaluate whether the user question represents a genuine Enterprise/B2B need (leadFit: HIGH / MEDIUM / LOW).',\n  '2. Determine whether SyaCo has relevant expertise to answer this question concretely (canAnswer: boolean).',\n  '3. Identify the best matching SyaCo solution (if any).',\n  '4. Draft a high-value, practical technical response tailored to the platform.',\n  '',\n  `## Platform: ${req.platform}`,\n  `Voice Guidelines: ${voiceGuidelines[req.platform] || voiceGuidelines.pantip}`,\n  '',\n  '## Target Thread Content:',\n  `URL: ${req.post_url}`,\n  `Question: ${req.question_text}`,\n  '',\n  '## SyaCo Published Solutions Catalog:',\n  JSON.stringify(solutions, null, 2),\n  '',\n  '## Strict Writing & Anti-Spam Rules:',\n  '- Answer the user\\'s question FIRST with actionable, concrete engineering insights.',\n  '- The answer MUST be 100% useful and standalone even without any link.',\n  '- Do NOT fabricate statistics, fake client names, or exaggerated percentages.',\n  '- Backlink Rule: Include a SyaCo solution URL ONLY if leadFit is HIGH/MEDIUM and the solution directly helps solve their problem. Otherwise set linkIncluded = false and suggestedAnchor = \"\".',\n  '- Disclosure Rule: If a SyaCo link is included, you MUST include a natural, transparent disclosure in Thai (e.g. \"Disclosure: ผมมาจากทีม SyaCo...\").',\n  '- Never repeat the user\\'s question. Jump straight into the technical advice.',\n  '',\n  'Return valid JSON only matching the schema.'\n].join('\\n');\n\nconst geminiBody = {\n  contents: [{ parts: [{ text: prompt }] }],\n  generationConfig: {\n    temperature: 0.6,\n    responseMimeType: 'application/json',\n    responseSchema: {\n      type: 'OBJECT',\n      properties: {\n        leadFit: { type: 'STRING', enum: ['HIGH', 'MEDIUM', 'LOW'] },\n        canAnswer: { type: 'BOOLEAN' },\n        matchedSolutionId: { type: 'STRING' },\n        matchScore: { type: 'NUMBER' },\n        relevanceReason: { type: 'STRING' },\n        matchedProblem: { type: 'STRING' },\n        answer: { type: 'STRING' },\n        linkIncluded: { type: 'BOOLEAN' },\n        linkReason: { type: 'STRING' },\n        suggestedAnchor: { type: 'STRING' }\n      },\n      required: ['leadFit', 'canAnswer', 'matchScore', 'relevanceReason', 'matchedProblem', 'answer', 'linkIncluded', 'suggestedAnchor']\n    }\n  }\n};\n\nreturn [{\n  json: {\n    req,\n    solutions,\n    geminiBody\n  }\n}];"
+      },
+      "id": "f3-node-build-prompt",
+      "name": "Build Lead Qualification & Draft Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1880,
+        460
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://generativelanguage.googleapis.com/v1beta/models/' + ($env.GEMINI_MODEL || 'gemini-3.5-flash-lite') + ':generateContent' }}",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "={{ $env.GEMINI_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.geminiBody }}",
+        "options": {}
+      },
+      "id": "f3-node-gemini-lead",
+      "name": "AI Lead Fit & Draft Generation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2120,
+        460
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const parent = $('Build Lead Qualification & Draft Prompt').first().json;\nconst req = parent.req;\nconst solutions = parent.solutions;\n\nconst candidates = $input.first()?.json?.candidates || [];\nconst rawText = candidates[0]?.content?.parts?.[0]?.text || '{}';\nlet data = {};\ntry {\n  data = JSON.parse(rawText);\n} catch (e) {\n  throw new Error('Failed to parse Gemini evaluation output: ' + e.message);\n}\n\nlet score = Number(data.matchScore || 0);\nif (score > 1) {\n  score = score / 100;\n}\nif (score > 0.999) score = 0.999;\nif (score < 0) score = 0;\nscore = Math.round(score * 1000) / 1000;\n\nconst matchedSol = solutions.find(s => s.id === String(data.matchedSolutionId)) || solutions[0] || {};\nconst isQualified = data.leadFit !== 'LOW' && data.canAnswer === true && (score >= 0.70);\nconst status = isQualified ? 'pending_review' : 'skipped';\n\nlet solUrl = matchedSol.url || '';\nif (solUrl && data.linkIncluded) {\n  const utm = `?utm_source=${encodeURIComponent(req.platform)}&utm_medium=community_answer&utm_campaign=lead_gen`;\n  solUrl += (solUrl.includes('?') ? '&' : '') + utm;\n}\n\nconst postTitle = `[${req.platform.toUpperCase()}] ${req.question_text.slice(0, 100)}`;\n\nreturn [{\n  json: {\n    post_url: req.post_url,\n    post_title: postTitle,\n    platform: req.platform,\n    solution_id: matchedSol.id || null,\n    solution_title: matchedSol.titleTh || matchedSol.titleEn || null,\n    solution_url: data.linkIncluded ? solUrl : null,\n    matched_problem: String(data.matchedProblem || req.question_text).slice(0, 500),\n    match_score: score,\n    relevance_reason: String(data.relevanceReason || `Lead fit: ${data.leadFit}`).slice(0, 500),\n    answer: String(data.answer || '').trim(),\n    link_included: Boolean(data.linkIncluded),\n    link_reason: String(data.linkReason || ''),\n    suggested_anchor: String(data.suggestedAnchor || ''),\n    status: status,\n    is_qualified: isQualified\n  }\n}];"
+      },
+      "id": "f3-node-filter-decision",
+      "name": "Decision Filter & Format Answer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2360,
+        460
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO backlink_candidates (\n  post_url, post_title, platform, solution_id, solution_title, solution_url,\n  matched_problem, match_score, relevance_reason, answer, link_included,\n  link_reason, suggested_anchor, status, created_at\n)\nVALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW())\nON CONFLICT (post_url) DO UPDATE \n  SET answer = EXCLUDED.answer, match_score = EXCLUDED.match_score, status = EXCLUDED.status\nRETURNING *;",
+        "options": {
+          "queryReplacement": "={{ [\n  $json.post_url,\n  $json.post_title,\n  $json.platform,\n  $json.solution_id,\n  $json.solution_title,\n  $json.solution_url,\n  $json.matched_problem,\n  $json.match_score,\n  $json.relevance_reason,\n  $json.answer,\n  $json.link_included,\n  $json.link_reason,\n  $json.suggested_anchor,\n  $json.status\n] }}"
+        }
+      },
+      "id": "f3-node-save-candidate-db",
+      "name": "Insert into backlink_candidates",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2600,
+        460
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "ppHdQYPLGXKAxrFp",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "f3-cond-pending",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "pending_review",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f3-node-if-pending",
+      "name": "If Pending Review",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2840,
+        460
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://discord-bot:3000/notify",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "f3-node-notify-discord",
+      "name": "Notify Discord Review Card",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3080,
+        380
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook: /webhook/answer-question": {
+      "main": [
+        [
+          {
+            "node": "Platform-Aware Normalize Post URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Platform-Aware Normalize Post URL": {
+      "main": [
+        [
+          {
+            "node": "Check Weekly Quota & Existing URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Weekly Quota & Existing URL": {
+      "main": [
+        [
+          {
+            "node": "If Already Exists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Already Exists": {
+      "main": [
+        [
+          {
+            "node": "Respond Already Exists",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "If Quota Exceeded",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Quota Exceeded": {
+      "main": [
+        [
+          {
+            "node": "Respond Quota Exceeded",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Accepted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond Accepted": {
+      "main": [
+        [
+          {
+            "node": "Get Published Solutions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Published Solutions": {
+      "main": [
+        [
+          {
+            "node": "Build Lead Qualification & Draft Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Lead Qualification & Draft Prompt": {
+      "main": [
+        [
+          {
+            "node": "AI Lead Fit & Draft Generation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Lead Fit & Draft Generation": {
+      "main": [
+        [
+          {
+            "node": "Decision Filter & Format Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decision Filter & Format Answer": {
+      "main": [
+        [
+          {
+            "node": "Insert into backlink_candidates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert into backlink_candidates": {
+      "main": [
+        [
+          {
+            "node": "If Pending Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Pending Review": {
+      "main": [
+        [
+          {
+            "node": "Notify Discord Review Card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
