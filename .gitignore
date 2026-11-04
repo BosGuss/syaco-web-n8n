@@ -6,3 +6,4 @@ pgdata/
 *.sqlite-wal
 *.log
 *.py
+.superpowers/
