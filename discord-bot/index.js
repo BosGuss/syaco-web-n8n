@@ -279,6 +279,126 @@ client.on('interactionCreate', async (interaction) => {
     }
 
     if (interaction.isButton()) {
+      if (interaction.customId.startsWith('flow1_approve_')) {
+        const id = interaction.customId.replace('flow1_approve_', '');
+        await interaction.deferUpdate();
+        try {
+          const n8nUrl = process.env.N8N_FLOW1_WEBHOOK_URL || 'http://n8n:5678/webhook/flow1-approve-solution';
+          const res = await fetch(n8nUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ suggestion_id: parseInt(id), action: 'approve' }),
+            signal: AbortSignal.timeout(15000)
+          });
+          const data = await res.json().catch(() => ({}));
+          if (data.success) {
+            await interaction.editReply({
+              content: `✅ **อนุมัติและสร้าง Draft บน syaco.co.th สำเร็จ!** (Solution ID: \`${data.solutionId || id}\`)\nทีมงานสามารถตรวจสอบและใส่ตัวอย่างเพิ่มเติมได้ในระบบหลังบ้าน`,
+              components: []
+            });
+          } else {
+            await interaction.editReply({
+              content: `⚠️ ไม่สามารถสร้าง Draft ได้: ${data.message || data.error || 'Unknown error'}`,
+              components: []
+            });
+          }
+        } catch (err) {
+          await interaction.editReply({
+            content: `⚠️ เกิดข้อผิดพลาดในการเชื่อมต่อไปยัง n8n: ${err.message}`,
+            components: []
+          });
+        }
+        return;
+      }
+
+      if (interaction.customId.startsWith('flow1_reject_')) {
+        const id = interaction.customId.replace('flow1_reject_', '');
+        await pool.query(
+          "UPDATE solution_suggestions SET status = 'rejected', reviewed_at = NOW() WHERE id = $1",
+          [parseInt(id)]
+        );
+        await interaction.update({
+          content: `❌ **ปฏิเสธไอเดียโซลูชันนี้แล้ว** (ID: #${id})`,
+          components: []
+        });
+        return;
+      }
+
+      if (interaction.customId.startsWith('flow2_publish_')) {
+        const id = interaction.customId.replace('flow2_publish_', '');
+        await interaction.deferUpdate();
+        try {
+          const n8nUrl = process.env.N8N_FLOW2_WEBHOOK_URL || 'http://n8n:5678/webhook/flow2-dispatch-action';
+          const res = await fetch(n8nUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ draft_id: parseInt(id), action: 'publish' }),
+            signal: AbortSignal.timeout(20000)
+          });
+          const data = await res.json().catch(() => ({}));
+          if (data.success) {
+            await interaction.editReply({
+              content: `🚀 **เผยแพร่โพสต์สำเร็จ!** (${data.platform || 'Platform'})\n🔗 ${data.posted_url || 'ดูโพสต์ที่เผยแพร่แล้ว'}`,
+              components: []
+            });
+          } else {
+            await interaction.editReply({
+              content: `⚠️ เผยแพร่ไม่สำเร็จ: ${data.error || data.message || 'Unknown error'}`,
+              components: []
+            });
+          }
+        } catch (err) {
+          await interaction.editReply({
+            content: `⚠️ เกิดข้อผิดพลาดในการเรียก n8n: ${err.message}`,
+            components: []
+          });
+        }
+        return;
+      }
+
+      if (interaction.customId.startsWith('flow2_reject_')) {
+        const id = interaction.customId.replace('flow2_reject_', '');
+        await pool.query(
+          "UPDATE content_drafts SET status = 'rejected' WHERE id = $1",
+          [parseInt(id)]
+        );
+        await interaction.update({
+          content: `❌ **ปฏิเสธ Draft นี้แล้ว** (ID: #${id})`,
+          components: []
+        });
+        return;
+      }
+
+      if (interaction.customId.startsWith('flow2_copy_')) {
+        const id = interaction.customId.replace('flow2_copy_', '');
+        const { rows } = await pool.query('SELECT title_th, content_markdown, tags FROM content_drafts WHERE id = $1', [parseInt(id)]);
+        if (!rows.length) {
+          return await interaction.reply({ content: 'ไม่พบข้อมูลบทความ', ephemeral: true });
+        }
+        const draft = rows[0];
+        const tagsStr = (draft.tags || []).join(', ');
+        await interaction.reply({
+          content: `📋 **บทความสำหรับนำไปโพสต์มือ (Blognone / TechTalkThai / Medium)**\n\n📌 **ชื่อบทความ:** ${draft.title_th}\n🏷️ **แท็ก:** \`${tagsStr}\`\n\n\`\`\`markdown\n${draft.content_markdown.slice(0, 1800)}\n\`\`\``,
+          ephemeral: true
+        });
+        return;
+      }
+
+      if (interaction.customId.startsWith('markposted_')) {
+        const candidateId = interaction.customId.replace('markposted_', '');
+        const { rows } = await pool.query(
+          "UPDATE backlink_candidates SET status = 'posted', posted_at = NOW() WHERE id::text = $1 AND status = 'manual' RETURNING *",
+          [candidateId]
+        );
+        if (!rows.length) {
+          return await interaction.reply({ content: 'รายการนี้ไม่อยู่ในสถานะ Manual หรือได้รับการอัปเดตไปแล้ว', ephemeral: true });
+        }
+        return await interaction.update({
+          content: `🎉 **บันทึกสถานะเรียบร้อย:** โพสต์คำตอบในกระทู้สำเร็จแล้ว (${rows[0].platform})\n🔗 [เปิดกระทู้](${rows[0].post_url})`,
+          components: [],
+        });
+      }
+
       const [action, candidateId] = interaction.customId.split('_');
 
       if (action === 'reject') {
@@ -329,6 +449,41 @@ client.on('interactionCreate', async (interaction) => {
         const rawKey = interaction.fields.getTextInputValue('key_value');
         await interaction.deferReply({ ephemeral: true });
         return await saveAndVerifyGeminiKey(interaction, rawKey, pool);
+      }
+
+      if (interaction.customId.startsWith('modal_answer_')) {
+        const platform = interaction.customId.replace('modal_answer_', '');
+        const postUrl = interaction.fields.getTextInputValue('post_url').trim();
+        const questionText = interaction.fields.getTextInputValue('question_text').trim();
+
+        await interaction.deferReply({ ephemeral: true });
+
+        try {
+          const n8nWebhookUrl = process.env.N8N_FLOW3_WEBHOOK_URL || 'http://n8n:5678/webhook/answer-question';
+          const webhookRes = await fetch(n8nWebhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              post_url: postUrl,
+              question_text: questionText,
+              platform: platform,
+              requested_by: interaction.user.tag,
+            }),
+            signal: AbortSignal.timeout(10000),
+          });
+
+          const resData = await webhookRes.json().catch(() => ({}));
+          if (resData.status === 'already_exists') {
+            return await interaction.editReply(`⚠️ กระทู้นี้อยู่ในระบบแล้ว (ID: #${resData.id}, สถานะ: \`${resData.existing_status}\`)`);
+          }
+          if (resData.status === 'quota_exceeded') {
+            return await interaction.editReply(`🚫 **โควตาสัปดาห์นี้เต็มแล้ว (${resData.count}/5)** เพื่อป้องกันการสแปมตามนโยบายชุมชน`);
+          }
+
+          return await interaction.editReply(`✅ **ส่งกระทู้เข้าสู่ระบบเรียบร้อย!** AI กำลังประเมิน Lead Fit และร่างคำตอบ การ์ดจะปรากฏในห้องแจ้งเตือนเมื่อพร้อมตรวจทานครับ`);
+        } catch (err) {
+          return await interaction.editReply(`⚠️ ไม่สามารถส่งคำขอไปยัง n8n ได้: ${err.message}`);
+        }
       }
 
       const candidateId = interaction.customId.replace('modal_', '');
@@ -427,15 +582,22 @@ async function handleApproval(interaction, candidateId, overrideAnswer = null) {
       });
     }
   } else {
-    // Reddit -> Manual Workflow
+    // Reddit, Pantip, Blognone, Blockdit, Facebook -> Manual Workflow
     await pool.query(
       "UPDATE backlink_candidates SET status = 'manual', answer = $1, reviewed_at = NOW() WHERE id::text = $2",
       [finalAnswer, candidateId]
     );
 
+    const markPostedRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`markposted_${candidateId}`)
+        .setLabel('✅ Mark as Posted (โพสต์แล้ว)')
+        .setStyle(ButtonStyle.Success)
+    );
+
     await interaction.editReply({
-      content: `📋 **Approved for Manual Posting** (${row.platform})\nThread: ${row.post_url}\n\n**Copy text below to reply:**`,
-      components: [],
+      content: `📋 **Approved for Manual Posting** (${row.platform})\nThread: ${row.post_url}\n\n**นำข้อความด้านล่างไปตอบในกระทู้ด้วยตนเอง เมื่อเสร็จแล้วกดปุ่ม "Mark as Posted":**`,
+      components: [markPostedRow],
     });
     await interaction.followUp({
       content: `🔗 **Thread Link:** ${row.post_url}\nDraft Answer:\n\`\`\`\n${finalAnswer}\n\`\`\``,
@@ -443,17 +605,13 @@ async function handleApproval(interaction, candidateId, overrideAnswer = null) {
   }
 }
 
-// Internal Express Server for n8n Flow 1 notification
+// Internal Express Server for n8n Flow 1, 2, 3 notifications
 const app = express();
 app.use(express.json());
 
 app.post('/notify', async (req, res) => {
   try {
-    const candidate = req.body;
-    // If ON CONFLICT DO NOTHING produced an empty row, skip gracefully without throwing 400
-    if (!candidate || !candidate.id) {
-      return res.json({ ok: true, skipped: true, reason: 'No candidate ID (likely duplicate post_url)' });
-    }
+    const body = req.body;
 
     let channelId = process.env.DISCORD_CHANNEL_ID;
     if (!channelId) {
@@ -473,6 +631,90 @@ app.post('/notify', async (req, res) => {
     const channel = await client.channels.fetch(channelId);
     if (!channel) {
       return res.status(500).json({ error: 'Discord Channel not found' });
+    }
+
+    // 1. Flow 1: New Proposed Adjacent Solution
+    if (body.type === 'flow1_suggestion' && body.suggestion) {
+      const s = body.suggestion;
+      const cut = (str, len) => (String(str || '').length > len ? str.slice(0, len - 3) + '...' : str || '-');
+      const embed = new EmbedBuilder()
+        .setTitle(`💡 [AI Solution Proposal] ${cut(s.title_th, 100)}`)
+        .setColor(0x57f287)
+        .setDescription(`**Title (EN):** ${s.title_en}\n\n**คำอธิบาย:** ${cut(s.description_th, 500)}\n\n**Rationale:** ${cut(s.rationale, 500)}`)
+        .addFields(
+          { name: '🎯 Base Solution ID', value: String(s.base_solution_id || '-'), inline: true },
+          { name: 'สถานะ', value: 'รอการอนุมัติเพื่อสร้างเป็น Draft บนเว็บ', inline: true }
+        )
+        .setTimestamp();
+
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`flow1_approve_${s.id}`).setLabel('✅ อนุมัติสร้าง Draft บนเว็บ').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId(`flow1_reject_${s.id}`).setLabel('❌ ปฏิเสธ').setStyle(ButtonStyle.Danger)
+      );
+
+      await channel.send({ embeds: [embed], components: [row] });
+      return res.json({ ok: true, type: 'flow1_suggestion', id: s.id });
+    }
+
+    // 2. Flow 2: Multi-Platform Drafts Notification
+    if (body.type === 'flow2_drafts' && body.solution_id) {
+      const { rows } = await pool.query(
+        "SELECT id, platform, title_th, content_markdown, tags FROM content_drafts WHERE solution_id = $1 AND status = 'pending_review'",
+        [body.solution_id]
+      );
+      if (!rows.length) {
+        return res.json({ ok: true, message: 'No pending drafts found' });
+      }
+
+      for (const d of rows) {
+        const cut = (str, len) => (String(str || '').length > len ? str.slice(0, len - 3) + '...' : str || '-');
+        const embed = new EmbedBuilder()
+          .setTitle(`📢 [${d.platform.toUpperCase()}] Draft สำหรับ: ${body.solution_title || 'Solution'}`)
+          .setColor(d.platform === 'bluesky' ? 0x0085ff : (d.platform === 'devto' ? 0x0a0a0a : 0x2563eb))
+          .setDescription(cut(d.content_markdown, 1500))
+          .addFields(
+            { name: 'Platform', value: d.platform, inline: true },
+            { name: 'Tags', value: (d.tags || []).join(', ') || '-', inline: true }
+          )
+          .setTimestamp();
+
+        let actionBtn;
+        if (d.platform === 'bluesky') {
+          actionBtn = new ButtonBuilder().setCustomId(`flow2_publish_${d.id}`).setLabel('🚀 โพสต์ Bluesky').setStyle(ButtonStyle.Primary);
+        } else if (d.platform === 'devto') {
+          actionBtn = new ButtonBuilder().setCustomId(`flow2_publish_${d.id}`).setLabel('🚀 โพสต์ Dev.to').setStyle(ButtonStyle.Primary);
+        } else if (d.platform === 'hashnode') {
+          actionBtn = new ButtonBuilder().setCustomId(`flow2_publish_${d.id}`).setLabel('🚀 โพสต์ Hashnode').setStyle(ButtonStyle.Primary);
+        } else {
+          actionBtn = new ButtonBuilder().setCustomId(`flow2_copy_${d.id}`).setLabel('📋 ดูเนื้อหาโพสต์มือ').setStyle(ButtonStyle.Secondary);
+        }
+
+        const row = new ActionRowBuilder().addComponents(
+          actionBtn,
+          new ButtonBuilder().setCustomId(`flow2_reject_${d.id}`).setLabel('❌ ปฏิเสธ').setStyle(ButtonStyle.Danger)
+        );
+
+        await channel.send({ embeds: [embed], components: [row] });
+      }
+      return res.json({ ok: true, type: 'flow2_drafts', count: rows.length });
+    }
+
+    // 3. Flow 2: Manual Ready Announcement
+    if (body.type === 'manual_ready' && body.draft_id) {
+      const { rows } = await pool.query('SELECT title_th, content_markdown, tags FROM content_drafts WHERE id = $1', [body.draft_id]);
+      if (rows.length) {
+        const d = rows[0];
+        await channel.send({
+          content: `📝 **BLOGNONE / TECHTALKTHAI ARTICLE READY**\n━━━━━━━━━━━━━━━━━━━━━━━\n📌 **ชื่อบทความ:** ${d.title_th}\n🏷️ **แท็ก:** ${(d.tags || []).join(', ')}\n\n\`\`\`markdown\n${d.content_markdown.slice(0, 1800)}\n\`\`\`\n━━━━━━━━━━━━━━━━━━━━━━━\n👉 สามารถคัดลอกไปเผยแพร่บน Blognone / TechTalkThai ได้ทันที`
+        });
+      }
+      return res.json({ ok: true, type: 'manual_ready' });
+    }
+
+    // 4. Default: Candidate for Flow 3
+    const candidate = body;
+    if (!candidate || !candidate.id) {
+      return res.json({ ok: true, skipped: true, reason: 'No candidate ID (likely duplicate post_url)' });
     }
 
     const embed = createCandidateEmbed(candidate);

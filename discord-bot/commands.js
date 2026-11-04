@@ -380,6 +380,22 @@ const commands = [
     ),
 
   new SlashCommandBuilder()
+    .setName('answer')
+    .setDescription('ส่งคำถามจากกระทู้ Pantip, Blognone, Blockdit หรือ Facebook Group ให้ AI ช่วยร่างคำตอบ')
+    .addStringOption(option =>
+      option
+        .setName('platform')
+        .setDescription('แพลตฟอร์มต้นทาง')
+        .setRequired(true)
+        .addChoices(
+          { name: 'Pantip', value: 'pantip' },
+          { name: 'Blognone', value: 'blognone' },
+          { name: 'Blockdit', value: 'blockdit' },
+          { name: 'Facebook Group', value: 'facebook_group' }
+        )
+    ),
+
+  new SlashCommandBuilder()
     .setName('help')
     .setDescription('แสดงรายการคำสั่งทั้งหมดและวิธีใช้งาน')
 ];
@@ -885,6 +901,35 @@ async function handleCommand(interaction, { pool, client }) {
     return await saveAndVerifyDevtoCookie(interaction, rawCookie, pool);
   }
 
+  // คำสั่ง /answer (ส่งคำถามกระทู้ให้ AI ช่วยตอบ)
+  if (commandName === 'answer') {
+    const platform = interaction.options.getString('platform');
+    const modal = new ModalBuilder()
+      .setCustomId(`modal_answer_${platform}`)
+      .setTitle(`ส่งคำถามกระทู้ [${platform}]`);
+
+    const urlInput = new TextInputBuilder()
+      .setCustomId('post_url')
+      .setLabel('ลิงก์กระทู้ (URL)')
+      .setPlaceholder('https://pantip.com/topic/43000000')
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true);
+
+    const questionInput = new TextInputBuilder()
+      .setCustomId('question_text')
+      .setLabel('ข้อความคำถามในกระทู้ (คัดลอกมาวาง)')
+      .setPlaceholder('วางข้อความคำถามที่ต้องการให้ AI วิเคราะห์ที่นี่...')
+      .setStyle(TextInputStyle.Paragraph)
+      .setMaxLength(2000)
+      .setRequired(true);
+
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(urlInput),
+      new ActionRowBuilder().addComponents(questionInput)
+    );
+    return await interaction.showModal(modal);
+  }
+
   // คำสั่ง /help
   if (commandName === 'help') {
     const embed = new EmbedBuilder()
@@ -898,6 +943,7 @@ async function handleCommand(interaction, { pool, client }) {
         { name: '`/status`', value: 'ดูสรุปสถิติจำนวนรายการในแต่ละสถานะ' },
         { name: '`/pending [limit]`', value: 'ดึงรายการที่รอรีวิวขึ้นมาพร้อมปุ่ม Approve / Edit / Reject' },
         { name: '`/run`', value: 'สั่งเริ่มกระบวนการค้นหา Backlink ใน n8n ทันที' },
+        { name: '`/answer <platform>`', value: 'ส่งลิงก์กระทู้และคำถามจาก Pantip, Blognone, Blockdit, Facebook ให้ AI ช่วยร่างคำตอบ' },
         { name: '`/set-gemini-key [key]`', value: 'อัปเดต Gemini API Key (มี Modal ป๊อปอัป)' },
         { name: '`/set-gemini-model <model>`', value: 'เปลี่ยนรุ่น Gemini Model (เช่น gemini-3.8-flash)' },
         { name: '`/set-devto-cookie [cookie]`', value: 'อัปเดต Cookie ของ Dev.to ผ่าน Discord (มี Modal ให้วาง)' },
