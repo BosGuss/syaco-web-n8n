@@ -331,6 +331,10 @@ const commands = [
     .setDescription('สั่งให้ n8n เริ่มค้นหาและประมวลผล Backlink รอบใหม่'),
 
   new SlashCommandBuilder()
+    .setName('request-idea')
+    .setDescription('ขอไอเดียโซลูชันใหม่จาก Flow 1 (วิเคราะห์ข่าวสารและเทคโนโลยี Enterprise)'),
+
+  new SlashCommandBuilder()
     .setName('health')
     .setDescription('ตรวจสอบสุขภาพของระบบ (PostgreSQL, n8n, Bluesky, Dev.to, Gemini AI)'),
 
@@ -696,6 +700,39 @@ async function handleCommand(interaction, { pool, client }) {
     } catch (err) {
       return await interaction.editReply(
         `⚠️ **ไม่สามารถเรียก n8n ได้:** ${err.message}\nปลายทาง: \`${webhookUrl}\`\n💡 *คำแนะนำ: สามารถเพิ่ม Webhook Node ใน n8n Workflow เชื่อมกับจุดเริ่มต้นของ Research Flow เพื่อรองรับคำสั่งนี้ได้ครับ*`
+      );
+    }
+  }
+
+  // คำสั่ง /request-idea (ขอไอเดียโซลูชันใหม่จาก Flow 1)
+  if (commandName === 'request-idea') {
+    await interaction.deferReply();
+    const webhookUrl = process.env.N8N_FLOW1_IDEA_WEBHOOK_URL || 'http://n8n:5678/webhook/flow1-request-idea';
+
+    try {
+      const res = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          triggered_by: interaction.user.tag,
+          user_id: interaction.user.id,
+          requested_at: new Date().toISOString()
+        }),
+        signal: AbortSignal.timeout(10000)
+      });
+
+      if (res.ok) {
+        return await interaction.editReply(
+          '💡 **สั่งขอไอเดียโซลูชันใหม่บน n8n สำเร็จแล้ว!**\nระบบกำลังดึงข้อมูลฟีด TechTalkThai & Blognone เพื่อวิเคราะห์ Gap และสร้าง Adjacent Solution ผ่าน Gemini AI\nเมื่อประมวลผลเสร็จแล้วจะส่งการแจ้งเตือนมายังห้องนี้ครับ'
+        );
+      } else {
+        return await interaction.editReply(
+          `⚠️ **n8n ตอบกลับสถานะ HTTP ${res.status}**\nปลายทาง: \`${webhookUrl}\``
+        );
+      }
+    } catch (err) {
+      return await interaction.editReply(
+        `⚠️ **ไม่สามารถเรียก n8n ได้:** ${err.message}\nปลายทาง: \`${webhookUrl}\``
       );
     }
   }

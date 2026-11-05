@@ -21,8 +21,25 @@
       "typeVersion": 1.2,
       "position": [
         200,
-        480
+        360
       ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "flow1-request-idea",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "f1-node-webhook-idea",
+      "name": "Webhook ขอไอเดียใหม่",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        200,
+        600
+      ],
+      "webhookId": "flow1-request-idea"
     },
     {
       "parameters": {
@@ -43,7 +60,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        420,
+        440,
         480
       ]
     },
@@ -72,7 +89,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        640,
+        660,
         360
       ],
       "onError": "continueRegularOutput"
@@ -102,7 +119,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        640,
+        660,
         600
       ],
       "onError": "continueRegularOutput"
@@ -120,7 +137,7 @@
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3.2,
       "position": [
-        860,
+        880,
         480
       ]
     },
@@ -133,7 +150,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1080,
+        1100,
         480
       ]
     },
@@ -160,7 +177,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1300,
+        1320,
         480
       ]
     },
@@ -173,7 +190,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1520,
+        1540,
         480
       ]
     },
@@ -190,7 +207,7 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        1740,
+        1760,
         480
       ],
       "credentials": {
@@ -214,257 +231,24 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1960,
+        1980,
         480
-      ]
-    },
-    {
-      "parameters": {
-        "httpMethod": "POST",
-        "path": "flow1-approve-solution",
-        "responseMode": "responseNode",
-        "options": {}
-      },
-      "id": "f1-node-webhook-approve",
-      "name": "Webhook: Approve Solution",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
-      "position": [
-        200,
-        960
-      ],
-      "webhookId": "flow1-approve-solution"
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "UPDATE solution_suggestions\nSET status = 'publishing', reviewed_at = NOW(), error_message = NULL\nWHERE id = $1 AND status IN ('pending_review', 'failed')\nRETURNING *;",
-        "options": {
-          "queryReplacement": "={{ [parseInt($json.body.suggestion_id || $json.body.id)] }}"
-        }
-      },
-      "id": "f1-node-lock-postgres",
-      "name": "Atomic Lock Before Publish",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "position": [
-        440,
-        960
-      ],
-      "credentials": {
-        "postgres": {
-          "id": "ppHdQYPLGXKAxrFp",
-          "name": "Postgres account"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "loose"
-          },
-          "conditions": [
-            {
-              "id": "f1-cond-locked",
-              "leftValue": "={{ String($json.id || \"\") }}",
-              "rightValue": "",
-              "operator": {
-                "type": "string",
-                "operation": "notEmpty"
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "id": "f1-node-if-locked",
-      "name": "If Locked Successfully",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [
-        680,
-        960
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const item = $input.first().json;\n\nfunction buildContent(isTh) {\n  const lang = isTh ? 'th' : 'en';\n  const titles = isTh ? {\n    results: 'ผลลัพธ์',\n    problems: 'เราช่วยแก้ปัญหาอะไร',\n    target: 'ระบบนี้เหมาะกับใคร',\n    examples: 'ตัวอย่างระบบที่พัฒนา'\n  } : {\n    results: 'Expected Results',\n    problems: 'What problems we solve',\n    target: 'Who this system is for',\n    examples: 'Examples of Developed Systems'\n  };\n\n  const contentAi = typeof item.content_ai === 'string' ? JSON.parse(item.content_ai) : (item.content_ai || {});\n  const langData = contentAi[lang] || {};\n\n  return {\n    hero: {\n      titleLine1: isTh ? item.title_th : item.title_en,\n      description: isTh ? item.description_th : item.description_en,\n      backgroundImage: '/asset/image/bg/ai-hero-bg.webp'\n    },\n    solutions: {\n      results: {\n        title: titles.results,\n        items: langData.results || []\n      },\n      problems: {\n        title: titles.problems,\n        items: langData.problems || []\n      },\n      targetAudience: {\n        title: titles.target,\n        items: (langData.targetAudience || []).map((t, idx) => ({\n          icon: `/asset/icons/target-${(idx % 4) + 1}.svg`,\n          text: typeof t === 'string' ? t : (t.text || '')\n        }))\n      }\n    },\n    examplesDeveloped: {\n      title: titles.examples,\n      items: []\n    }\n  };\n}\n\nconst rawFeatures = typeof item.features === 'string' ? JSON.parse(item.features) : (item.features || []);\nconst features = (Array.isArray(rawFeatures) ? rawFeatures : []).map((f, i) => ({\n  labelTh: f.labelTh || f.titleTh || f,\n  labelEn: f.labelEn || f.titleEn || f,\n  order: i + 1\n}));\n\nconst syacoPayload = {\n  titleEn: item.title_en,\n  titleTh: item.title_th,\n  descEn: item.description_en,\n  descTh: item.description_th,\n  link: '',\n  icon: 'Layers',\n  alt: item.title_en,\n  order: 99,\n  isPublished: false,\n  metaTitleTh: item.title_th,\n  metaTitleEn: item.title_en,\n  metaDescriptionTh: item.description_th,\n  metaDescriptionEn: item.description_en,\n  features: features,\n  content: {\n    th: buildContent(true),\n    en: buildContent(false)\n  }\n};\n\nreturn [{\n  json: {\n    suggestionId: item.id,\n    titleEn: item.title_en,\n    titleTh: item.title_th,\n    syacoPayload\n  }\n}];"
-      },
-      "id": "f1-node-build-syaco-payload",
-      "name": "Build SyaCo Payload (Draft Mode)",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        920,
-        860
-      ]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "https://www.syaco.co.th/api/solutions",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "={{ 'Bearer ' + ($env.SYACO_API_TOKEN || 'sya_perm_79279d93e026ed7638b9065af33c5b78bff1c5fdfd62e3ecbf12a707bcd97b71') }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ $json.syacoPayload }}",
-        "options": {}
-      },
-      "id": "f1-node-post-syaco",
-      "name": "POST to SyaCo Solutions API",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        1160,
-        860
-      ],
-      "onError": "continueErrorOutput"
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "loose"
-          },
-          "conditions": [
-            {
-              "id": "f1-cond-api-success",
-              "leftValue": "={{ String($json.id || \"\") }}",
-              "rightValue": "",
-              "operator": {
-                "type": "string",
-                "operation": "notEmpty"
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "id": "f1-node-if-api-success",
-      "name": "If Create Success",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [
-        1400,
-        860
-      ]
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "UPDATE solution_suggestions\nSET status = 'published_as_draft', published_solution_id = $1, published_at = NOW(), error_message = NULL\nWHERE id = $2\nRETURNING *;",
-        "options": {
-          "queryReplacement": "={{ [String($json.id), $('Build SyaCo Payload (Draft Mode)').first().json.suggestionId] }}"
-        }
-      },
-      "id": "f1-node-update-success-db",
-      "name": "Update Postgres Published",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "position": [
-        1640,
-        760
-      ],
-      "credentials": {
-        "postgres": {
-          "id": "ppHdQYPLGXKAxrFp",
-          "name": "Postgres account"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ { success: true, message: 'Published as draft on SyaCo', solutionId: $json.id } }}",
-        "options": {}
-      },
-      "id": "f1-node-respond-success",
-      "name": "Respond Webhook Success",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
-      "position": [
-        1880,
-        760
-      ]
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "UPDATE solution_suggestions\nSET status = 'failed', error_message = $1\nWHERE id = $2\nRETURNING *;",
-        "options": {
-          "queryReplacement": "={{ [String($json.message || $json.error || 'Failed to create solution on SyaCo API'), $('Build SyaCo Payload (Draft Mode)').first().json.suggestionId] }}"
-        }
-      },
-      "id": "f1-node-update-failed-db",
-      "name": "Update Postgres Failed",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "position": [
-        1640,
-        960
-      ],
-      "credentials": {
-        "postgres": {
-          "id": "ppHdQYPLGXKAxrFp",
-          "name": "Postgres account"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ { success: false, error: $json.error_message || 'Failed to publish draft' } }}",
-        "options": {
-          "responseCode": 500
-        }
-      },
-      "id": "f1-node-respond-failed",
-      "name": "Respond Webhook Failed",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
-      "position": [
-        1880,
-        960
-      ]
-    },
-    {
-      "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ { success: false, message: 'Proposal not found, already locked, or already published' } }}",
-        "options": {
-          "responseCode": 409
-        }
-      },
-      "id": "f1-node-respond-locked",
-      "name": "Respond Already Locked",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
-      "position": [
-        920,
-        1120
       ]
     }
   ],
   "connections": {
     "Weekly Trigger (Monday 9AM)": {
+      "main": [
+        [
+          {
+            "node": "Get Current Solutions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook ขอไอเดียใหม่": {
       "main": [
         [
           {
@@ -513,6 +297,17 @@
         ]
       ]
     },
+    "Merge Feeds": {
+      "main": [
+        [
+          {
+            "node": "Filter Topics & Build Adjacent Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "Filter Topics & Build Adjacent Prompt": {
       "main": [
         [
@@ -551,126 +346,6 @@
         [
           {
             "node": "Notify Discord",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Webhook: Approve Solution": {
-      "main": [
-        [
-          {
-            "node": "Atomic Lock Before Publish",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Atomic Lock Before Publish": {
-      "main": [
-        [
-          {
-            "node": "If Locked Successfully",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "If Locked Successfully": {
-      "main": [
-        [
-          {
-            "node": "Build SyaCo Payload (Draft Mode)",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Respond Already Locked",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Build SyaCo Payload (Draft Mode)": {
-      "main": [
-        [
-          {
-            "node": "POST to SyaCo Solutions API",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "POST to SyaCo Solutions API": {
-      "main": [
-        [
-          {
-            "node": "If Create Success",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Update Postgres Failed",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "If Create Success": {
-      "main": [
-        [
-          {
-            "node": "Update Postgres Published",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Update Postgres Failed",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Update Postgres Published": {
-      "main": [
-        [
-          {
-            "node": "Respond Webhook Success",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Update Postgres Failed": {
-      "main": [
-        [
-          {
-            "node": "Respond Webhook Failed",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Merge Feeds": {
-      "main": [
-        [
-          {
-            "node": "Filter Topics & Build Adjacent Prompt",
             "type": "main",
             "index": 0
           }

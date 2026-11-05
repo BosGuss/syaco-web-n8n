@@ -11,6 +11,7 @@ const {
 } = require('discord.js');
 const express = require('express');
 const { Pool } = require('pg');
+const { approveAndCreateDraft } = require('./solution-draft');
 
 // Database Connection
 const pool = new Pool({
@@ -283,28 +284,21 @@ client.on('interactionCreate', async (interaction) => {
         const id = interaction.customId.replace('flow1_approve_', '');
         await interaction.deferUpdate();
         try {
-          const n8nUrl = process.env.N8N_FLOW1_WEBHOOK_URL || 'http://n8n:5678/webhook/flow1-approve-solution';
-          const res = await fetch(n8nUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ suggestion_id: parseInt(id), action: 'approve' }),
-            signal: AbortSignal.timeout(15000)
-          });
-          const data = await res.json().catch(() => ({}));
-          if (data.success) {
+          const result = await approveAndCreateDraft({ id, pool });
+          if (result.success) {
             await interaction.editReply({
-              content: `✅ **อนุมัติและสร้าง Draft บน syaco.co.th สำเร็จ!** (Solution ID: \`${data.solutionId || id}\`)\nทีมงานสามารถตรวจสอบและใส่ตัวอย่างเพิ่มเติมได้ในระบบหลังบ้าน`,
+              content: `✅ **อนุมัติและสร้าง Draft บน syaco.co.th สำเร็จ!** (Solution ID: \`${result.solutionId}\`)\n🔗 https://www.syaco.co.th/solutions (Draft Mode)\nทีมงานสามารถตรวจสอบและใส่ตัวอย่างเพิ่มเติมได้ในระบบหลังบ้าน`,
               components: []
             });
           } else {
             await interaction.editReply({
-              content: `⚠️ ไม่สามารถสร้าง Draft ได้: ${data.message || data.error || 'Unknown error'}`,
+              content: `⚠️ ไม่สามารถสร้าง Draft ได้: ${result.message || result.error || 'Unknown error'}`,
               components: []
             });
           }
         } catch (err) {
           await interaction.editReply({
-            content: `⚠️ เกิดข้อผิดพลาดในการเชื่อมต่อไปยัง n8n: ${err.message}`,
+            content: `⚠️ เกิดข้อผิดพลาดในการสร้าง Draft: ${err.message}`,
             components: []
           });
         }
