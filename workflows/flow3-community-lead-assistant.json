@@ -60,12 +60,12 @@
           "options": {
             "caseSensitive": true,
             "leftValue": "",
-            "typeValidation": "strict"
+            "typeValidation": "loose"
           },
           "conditions": [
             {
               "id": "f3-cond-exists",
-              "leftValue": "={{ $json.existing_id }}",
+              "leftValue": "={{ String($json.existing_id || \"\") }}",
               "rightValue": "",
               "operator": {
                 "type": "string",

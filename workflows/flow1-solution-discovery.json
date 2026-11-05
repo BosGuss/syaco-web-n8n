@@ -264,12 +264,12 @@
           "options": {
             "caseSensitive": true,
             "leftValue": "",
-            "typeValidation": "strict"
+            "typeValidation": "loose"
           },
           "conditions": [
             {
               "id": "f1-cond-locked",
-              "leftValue": "={{ $json.id }}",
+              "leftValue": "={{ String($json.id || \"\") }}",
               "rightValue": "",
               "operator": {
                 "type": "string",
@@ -341,12 +341,12 @@
           "options": {
             "caseSensitive": true,
             "leftValue": "",
-            "typeValidation": "strict"
+            "typeValidation": "loose"
           },
           "conditions": [
             {
               "id": "f1-cond-api-success",
-              "leftValue": "={{ $json.id }}",
+              "leftValue": "={{ String($json.id || \"\") }}",
               "rightValue": "",
               "operator": {
                 "type": "string",
@@ -679,6 +679,8 @@
     }
   },
   "settings": {
-    "executionOrder": "v1"
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveExecutionProgress": true
   }
 }
