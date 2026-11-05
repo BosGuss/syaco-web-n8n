@@ -39,7 +39,7 @@
         "options": {}
       },
       "id": "f1-node-get-solutions",
-      "name": "Get SyaCo Solutions",
+      "name": "Get Current Solutions",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -451,14 +451,14 @@
       "main": [
         [
           {
-            "node": "Get SyaCo Solutions",
+            "node": "Get Current Solutions",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Get SyaCo Solutions": {
+    "Get Current Solutions": {
       "main": [
         [
           {
