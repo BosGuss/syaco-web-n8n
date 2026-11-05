@@ -408,9 +408,11 @@ git commit -m "feat(discord-bot): add /answer slash command modal and mark-poste
 
 Create `workflows/flow1-solution-discovery.json` with the complete node configuration:
 1. Schedule Trigger (Every Monday 9:00 AM)
-2. HTTP Request: `GET https://www.syaco.co.th/api/solutions?all=true`
-3. HTTP Request: `GET https://www.techtalkthai.com/feed/`
-4. HTTP Request: `GET https://www.blognone.com/node/feed`
+2. HTTP Request: `GET https://www.syaco.co.th/api/solutions?all=true` (Node name: `Get Current Solutions`)
+3. Parallel Branches (Fan-out from `Get Current Solutions`):
+   - Branch A: HTTP Request `GET https://www.techtalkthai.com/feed/` (Node: `Fetch TechTalkThai Feed`)
+   - Branch B: HTTP Request `GET https://www.blognone.com/node/feed` (Node: `Fetch Blognone Feed`)
+4. Merge Node: `Merge Feeds` (`n8n-nodes-base.merge` v3.2, mode: `chooseBranch`, waitForAll) to synchronize both feeds
 5. Code Node: `Filter Topics & Build Adjacent Prompt`:
    - Extracts catalog core topics (ERP, PLC, IoT, API integration).
    - Filters external RSS items by enterprise keywords (`erp`, `plc`, `data pipeline`, `legacy`, `modbus`, `iot`, `factory`, `automation`).
