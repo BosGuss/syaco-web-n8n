@@ -21,7 +21,7 @@
       "typeVersion": 1.2,
       "position": [
         200,
-        300
+        480
       ]
     },
     {
@@ -43,8 +43,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        440,
-        300
+        420,
+        480
       ]
     },
     {
@@ -72,8 +72,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        440,
-        480
+        640,
+        360
       ],
       "onError": "continueRegularOutput"
     },
@@ -102,10 +102,27 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        440,
-        660
+        640,
+        600
       ],
       "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "chooseBranch",
+        "chooseBranchMode": "waitForAll",
+        "output": "specifiedInput",
+        "useDataOfInput": "1",
+        "numberInputs": 2
+      },
+      "id": "f1-node-merge-feeds",
+      "name": "Merge Feeds",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        860,
+        480
+      ]
     },
     {
       "parameters": {
@@ -116,7 +133,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        700,
+        1080,
         480
       ]
     },
@@ -143,7 +160,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        940,
+        1300,
         480
       ]
     },
@@ -156,7 +173,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1180,
+        1520,
         480
       ]
     },
@@ -173,7 +190,7 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        1420,
+        1740,
         480
       ],
       "credentials": {
@@ -197,7 +214,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1660,
+        1960,
         480
       ]
     },
@@ -465,6 +482,11 @@
             "node": "Fetch TechTalkThai Feed",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "Fetch Blognone Feed",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -473,7 +495,7 @@
       "main": [
         [
           {
-            "node": "Fetch Blognone Feed",
+            "node": "Merge Feeds",
             "type": "main",
             "index": 0
           }
@@ -484,9 +506,9 @@
       "main": [
         [
           {
-            "node": "Filter Topics & Build Adjacent Prompt",
+            "node": "Merge Feeds",
             "type": "main",
-            "index": 0
+            "index": 1
           }
         ]
       ]
@@ -638,6 +660,17 @@
         [
           {
             "node": "Respond Webhook Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Feeds": {
+      "main": [
+        [
+          {
+            "node": "Filter Topics & Build Adjacent Prompt",
             "type": "main",
             "index": 0
           }
