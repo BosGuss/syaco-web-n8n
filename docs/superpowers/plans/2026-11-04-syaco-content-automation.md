@@ -401,7 +401,7 @@ git commit -m "feat(discord-bot): add /answer slash command modal and mark-poste
 - Test: `scripts/test-flow1.js`
 
 **Interfaces:**
-- Consumes: `https://www.syaco.co.th/api/solutions?all=true`, `https://www.techtalkthai.com/feed/`, `https://www.blognone.com/feed`, Gemini API.
+- Consumes: `https://www.syaco.co.th/api/solutions?all=true`, `https://www.techtalkthai.com/feed/`, `https://www.blognone.com/node/feed`, Gemini API.
 - Produces: Entries in `solution_suggestions`, notifications to `http://discord-bot:3000/notify`, and POST requests to `https://www.syaco.co.th/api/solutions` with `isPublished: false`.
 
 - [ ] **Step 1: Create n8n Flow 1 Workflow JSON**
@@ -410,7 +410,7 @@ Create `workflows/flow1-solution-discovery.json` with the complete node configur
 1. Schedule Trigger (Every Monday 9:00 AM)
 2. HTTP Request: `GET https://www.syaco.co.th/api/solutions?all=true`
 3. HTTP Request: `GET https://www.techtalkthai.com/feed/`
-4. HTTP Request: `GET https://www.blognone.com/feed`
+4. HTTP Request: `GET https://www.blognone.com/node/feed`
 5. Code Node: `Filter Topics & Build Adjacent Prompt`:
    - Extracts catalog core topics (ERP, PLC, IoT, API integration).
    - Filters external RSS items by enterprise keywords (`erp`, `plc`, `data pipeline`, `legacy`, `modbus`, `iot`, `factory`, `automation`).

@@ -59,7 +59,7 @@
 3. **Format Solutions Catalog** — Code node: รวบรวมหมวดหมู่และความเชี่ยวชาญหลัก (ERP, IoT, Data Pipelines, Web Platform)
 4. **Fetch External Feeds (Parallel):**
    - **TechTalkThai RSS** — HTTP GET `https://www.techtalkthai.com/feed/` (Enterprise & B2B IT trends)
-   - **Blognone RSS** — HTTP GET `https://www.blognone.com/feed` (Dev & Local Tech discussions)
+   - **Blognone RSS** — HTTP GET `https://www.blognone.com/node/feed` (Dev & Local Tech discussions)
 5. **Filter by Keywords & Extract Topics** — Code node:
    - กรองเฉพาะหัวข้อที่ตรงกับ Enterprise/Data/Cloud/IoT keywords (เช่น `erp`, `data pipeline`, `legacy`, `modbus`, `iot`, `factory`, `automation`)
 6. **Build Adjacent Solution Prompt** — Code node:
