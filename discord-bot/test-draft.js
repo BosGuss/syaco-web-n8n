@@ -32,10 +32,10 @@ async function runTests() {
 
   const payload = buildSyacoPayload(sampleItem);
   assert.strictEqual(payload.isPublished, false, 'isPublished must strictly be false');
-  assert.strictEqual(payload.link, '', 'link must be empty string');
+  assert.strictEqual(payload.link, '/solutions/industrial-iot-control-platform', 'link must be valid kebab-case slug');
   assert.strictEqual(payload.order, 99, 'order must default to 99');
-  assert.strictEqual(payload.icon, 'Layers');
-  assert.strictEqual(payload.alt, 'Industrial IoT Control Platform');
+  assert.strictEqual(payload.icon, 'lucide:layers', 'icon must be normalized to iconify format');
+  assert.strictEqual(payload.alt, 'Industrial IoT Control Platform Icon');
   assert.strictEqual(payload.titleEn, 'Industrial IoT Control Platform');
   assert.strictEqual(payload.titleTh, 'โซลูชันระบบควบคุม IoT ในโรงงาน');
   assert.strictEqual(payload.features.length, 2);
@@ -44,8 +44,10 @@ async function runTests() {
   assert.strictEqual(payload.content.th.solutions.results.items[0], 'ลด Downtime ของเครื่องจักร');
   assert.strictEqual(payload.content.th.solutions.targetAudience.items[0].icon, '/asset/icons/target-1.svg');
   assert.strictEqual(payload.content.th.solutions.targetAudience.items[0].text, 'ผู้จัดการฝ่ายผลิต');
-  assert.deepStrictEqual(payload.content.th.examplesDeveloped.items, []);
-  console.log('  ✅ Payload structure is 100% compliant with SyaCo schema.\n');
+  assert.strictEqual(payload.content.th.examplesDeveloped.items.length, 2, 'examplesDeveloped must have generated items');
+  assert.deepStrictEqual(payload.caseStudyIds, []);
+  assert.strictEqual(payload.metaImage, '');
+  console.log('  ✅ Payload structure is 100% compliant with SyaCo schema and C# DTO.\n');
 
   // Simulated Endpoint (Mock fetchFn)
   let mockStatus = 201;

@@ -1,9 +1,26 @@
 /**
  * SyaCo Solution Draft Publisher Module
  * Handles atomic locking in PostgreSQL, SyaCo payload generation, and publishing as draft.
+ * Strictly compliant with Api.DTOs.SolutionCreateRequest DataAnnotations.
  */
 
-function buildContent(item, isTh) {
+function slugify(text) {
+  return String(text || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 120);
+}
+
+function normalizeIcon(icon) {
+  const raw = String(icon || '').trim();
+  if (!raw) return 'lucide:layers';
+  if (raw.includes(':')) return raw.slice(0, 300);
+  const clean = raw.toLowerCase().replace(/[^a-z0-9-]/g, '');
+  return `lucide:${clean || 'layers'}`.slice(0, 300);
+}
+
+function buildContent(item, isTh, featuresList) {
   const lang = isTh ? 'th' : 'en';
   const titles = isTh ? {
     results: 'ผลลัพธ์',
@@ -28,37 +45,67 @@ function buildContent(item, isTh) {
   contentAi = contentAi || {};
   const langData = contentAi[lang] || {};
 
+  // Build examples developed: if empty, generate 2-3 items from features
+  let examplesItems = Array.isArray(langData.examplesDeveloped?.items)
+    ? langData.examplesDeveloped.items
+    : [];
+
+  if (examplesItems.length === 0 && featuresList && featuresList.length > 0) {
+    examplesItems = featuresList.slice(0, 3).map((f, idx) => ({
+      title: String(isTh ? (f.labelTh || f.titleTh || f) : (f.labelEn || f.titleEn || f)).trim().slice(0, 160),
+      desc: String(isTh ? item.description_th : item.description_en).trim().slice(0, 300),
+      icon: `/asset/icons/home-services-${(idx % 4) + 1}.svg`
+    }));
+  }
+
   return {
     hero: {
-      titleLine1: isTh ? item.title_th : item.title_en,
-      description: isTh ? item.description_th : item.description_en,
+      titleLine1: (isTh ? item.title_th : item.title_en || '').trim().slice(0, 160),
+      description: (isTh ? item.description_th : item.description_en || '').trim().slice(0, 500),
       backgroundImage: '/asset/image/bg/ai-hero-bg.webp'
     },
     solutions: {
       results: {
         title: titles.results,
-        items: Array.isArray(langData.results) ? langData.results : []
+        items: (Array.isArray(langData.results) ? langData.results : []).map(r => String(r).trim().slice(0, 300))
       },
       problems: {
         title: titles.problems,
-        items: Array.isArray(langData.problems) ? langData.problems : []
+        items: (Array.isArray(langData.problems) ? langData.problems : []).map(p => String(p).trim().slice(0, 300))
       },
       targetAudience: {
         title: titles.target,
         items: (Array.isArray(langData.targetAudience) ? langData.targetAudience : []).map((t, idx) => ({
           icon: `/asset/icons/target-${(idx % 4) + 1}.svg`,
-          text: typeof t === 'string' ? t : (t?.text || '')
+          text: String(typeof t === 'string' ? t : (t?.text || '')).trim().slice(0, 300)
         }))
       }
     },
     examplesDeveloped: {
       title: titles.examples,
-      items: []
+      items: examplesItems
     }
   };
 }
 
 function buildSyacoPayload(item) {
+  // 1. Sanitize Titles (MaxLength 160)
+  const titleEn = String(item.title_en || '').trim().slice(0, 160);
+  const titleTh = String(item.title_th || titleEn).trim().slice(0, 160);
+
+  // 2. Sanitize Descriptions (MaxLength 500)
+  const descEn = String(item.description_en || '').trim().slice(0, 500);
+  const descTh = String(item.description_th || descEn).trim().slice(0, 500);
+
+  // 3. Compute Slug & Link (MaxLength 300)
+  const slug = slugify(titleEn);
+  const link = (slug ? `/solutions/${slug}` : '/solutions').slice(0, 300);
+
+  // 4. Sanitize Icon & Alt (MaxLength 300)
+  const icon = normalizeIcon(item.icon || 'lucide:layers');
+  const alt = `${titleEn} Icon`.slice(0, 300);
+
+  // 5. Parse & Sanitize Features (SolutionFeatureInput: LabelEn/LabelTh MaxLength 160)
   let rawFeatures = item.features;
   if (typeof rawFeatures === 'string') {
     try {
@@ -68,31 +115,43 @@ function buildSyacoPayload(item) {
     }
   }
   const featuresList = Array.isArray(rawFeatures) ? rawFeatures : [];
-  const features = featuresList.map((f, i) => ({
-    labelTh: f?.labelTh || f?.titleTh || (typeof f === 'string' ? f : ''),
-    labelEn: f?.labelEn || f?.titleEn || (typeof f === 'string' ? f : ''),
-    order: i + 1
-  }));
+  const features = featuresList.map((f, i) => {
+    const labelEn = String(f?.labelEn || f?.titleEn || (typeof f === 'string' ? f : '')).trim().slice(0, 160);
+    const labelTh = String(f?.labelTh || f?.titleTh || labelEn).trim().slice(0, 160);
+    return {
+      labelEn: labelEn || 'Enterprise Feature',
+      labelTh: labelTh || 'Enterprise Feature',
+      order: i + 1
+    };
+  }).filter(f => f.labelEn && f.labelTh);
+
+  // 6. Metadata (MetaTitle MaxLength 200, MetaDescription MaxLength 500)
+  const metaTitleEn = `${titleEn} | SyaCo`.slice(0, 200);
+  const metaTitleTh = `${titleTh} | SyaCo`.slice(0, 200);
+  const metaDescriptionEn = descEn.slice(0, 500);
+  const metaDescriptionTh = descTh.slice(0, 500);
 
   return {
-    titleEn: item.title_en,
-    titleTh: item.title_th,
-    descEn: item.description_en,
-    descTh: item.description_th,
-    link: '',
-    icon: 'Layers',
-    alt: item.title_en,
-    order: 99,
+    titleEn,
+    titleTh,
+    descEn,
+    descTh,
+    icon,
+    alt,
+    link,
+    order: parseInt(item.order, 10) || 99,
     isPublished: false,
-    metaTitleTh: item.title_th,
-    metaTitleEn: item.title_en,
-    metaDescriptionTh: item.description_th,
-    metaDescriptionEn: item.description_en,
-    features: features,
     content: {
-      th: buildContent(item, true),
-      en: buildContent(item, false)
-    }
+      th: buildContent(item, true, features),
+      en: buildContent(item, false, features)
+    },
+    features,
+    caseStudyIds: [],
+    metaTitleTh,
+    metaTitleEn,
+    metaDescriptionTh,
+    metaDescriptionEn,
+    metaImage: ''
   };
 }
 
@@ -123,7 +182,6 @@ async function approveAndCreateDraft({
   }
 
   if (!lockRes.rows || lockRes.rows.length === 0) {
-    // Check why it wasn't locked
     const checkRes = await pool.query(
       'SELECT id, status, published_solution_id FROM solution_suggestions WHERE id = $1;',
       [suggestionId]
@@ -165,8 +223,15 @@ async function approveAndCreateDraft({
     }
 
     if (!response.ok || !resData || !resData.id) {
-      const errMsg = (resData && (resData.message || resData.error))
-        || `API HTTP error ${response.status}: ${response.statusText || 'Unknown error'}`;
+      let errMsg = '';
+      if (resData?.errors && typeof resData.errors === 'object') {
+        errMsg = Object.entries(resData.errors)
+          .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`)
+          .join('; ');
+      } else {
+        errMsg = (resData && (resData.message || resData.error))
+          || `API HTTP error ${response.status}: ${response.statusText || 'Unknown error'}`;
+      }
 
       await pool.query(
         "UPDATE solution_suggestions SET status = 'failed', error_message = $1 WHERE id = $2",
@@ -213,6 +278,8 @@ async function approveAndCreateDraft({
 }
 
 module.exports = {
+  slugify,
+  normalizeIcon,
   buildContent,
   buildSyacoPayload,
   approveAndCreateDraft
