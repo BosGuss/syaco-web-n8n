@@ -1,5 +1,5 @@
 const assert = require('assert');
-const { buildSyacoPayload, approveAndCreateDraft } = require('./solution-draft');
+const { buildSyacoPayload, getNextSequentialOrder, approveAndCreateDraft } = require('./solution-draft');
 
 async function runTests() {
   console.log('🧪 Starting Discord Bot Solution Draft Tests (Simulated Endpoint)...\n');
@@ -204,7 +204,30 @@ async function runTests() {
   assert.strictEqual(resultNetErr.error, 'Connection refused to simulated endpoint');
   console.log(`  ✅ Network error cleanly caught and DB marked as failed: ${resultNetErr.error}\n`);
 
-  console.log('🎉 ALL 6 TESTS PASSED SUCCESSFULLY! The Discord Bot approval/draft engine is completely solid.');
+  // Test 7: Sequential Order Calculation
+  console.log('Test 7: Testing dynamic sequential order calculation...');
+  const mockFetchForOrder = async (url) => {
+    return {
+      ok: true,
+      json: async () => [
+        { id: 1, order: 1 },
+        { id: 2, order: 2 },
+        { id: 3, order: 10 }
+      ]
+    };
+  };
+  const orderResult = await getNextSequentialOrder({
+    fetchFn: mockFetchForOrder,
+    apiUrl: 'https://mock.syaco.local/api/solutions',
+    token: 'test'
+  });
+  assert.strictEqual(orderResult, 11, 'Next order should be 11 (max 10 + 1)');
+
+  const payloadWithOrder = buildSyacoPayload(sampleItem, 11);
+  assert.strictEqual(payloadWithOrder.order, 11, 'Payload order must match sequential order');
+  console.log('  ✅ Sequential order successfully calculated (10 -> 11).\n');
+
+  console.log('🎉 ALL 7 TESTS PASSED SUCCESSFULLY! The Discord Bot approval/draft engine is completely solid.');
 }
 
 runTests().catch(err => {

@@ -88,7 +88,7 @@ function buildContent(item, isTh, featuresList) {
   };
 }
 
-function buildSyacoPayload(item) {
+function buildSyacoPayload(item, orderNumber) {
   // 1. Sanitize Titles (MaxLength 160)
   const titleEn = String(item.title_en || '').trim().slice(0, 160);
   const titleTh = String(item.title_th || titleEn).trim().slice(0, 160);
@@ -131,6 +131,12 @@ function buildSyacoPayload(item) {
   const metaDescriptionEn = descEn.slice(0, 500);
   const metaDescriptionTh = descTh.slice(0, 500);
 
+  let finalOrder = orderNumber;
+  if (!Number.isInteger(finalOrder) || finalOrder <= 0) {
+    const parsed = parseInt(item.order, 10);
+    finalOrder = !isNaN(parsed) && parsed > 0 ? parsed : 99;
+  }
+
   return {
     titleEn,
     titleTh,
@@ -139,7 +145,7 @@ function buildSyacoPayload(item) {
     icon,
     alt,
     link,
-    order: parseInt(item.order, 10) || 99,
+    order: finalOrder,
     isPublished: false,
     content: {
       th: buildContent(item, true, features),
@@ -153,6 +159,34 @@ function buildSyacoPayload(item) {
     metaDescriptionEn,
     metaImage: ''
   };
+}
+
+async function getNextSequentialOrder({
+  fetchFn = globalThis.fetch,
+  apiUrl = process.env.SYACO_API_URL || 'https://www.syaco.co.th/api/solutions',
+  token = process.env.SYACO_API_TOKEN || 'sya_perm_79279d93e026ed7638b9065af33c5b78bff1c5fdfd62e3ecbf12a707bcd97b71'
+} = {}) {
+  try {
+    const listUrl = apiUrl.includes('?') ? `${apiUrl}&all=true` : `${apiUrl}?all=true`;
+    const res = await fetchFn(listUrl, {
+      method: 'GET',
+      headers: { 'Authorization': `Bearer ${token}` },
+      signal: AbortSignal.timeout(8000)
+    });
+    if (res && res.ok) {
+      const list = await res.json();
+      if (Array.isArray(list) && list.length > 0) {
+        const validOrders = list
+          .map(s => parseInt(s.order, 10))
+          .filter(o => !isNaN(o) && o > 0 && o < 90);
+        return validOrders.length > 0 ? Math.max(...validOrders) + 1 : list.length + 1;
+      }
+      return 1;
+    }
+  } catch (err) {
+    console.warn('[SolutionDraft] Failed to fetch current solutions for order calculation:', err.message);
+  }
+  return null;
 }
 
 async function approveAndCreateDraft({
@@ -200,8 +234,11 @@ async function approveAndCreateDraft({
 
   const item = lockRes.rows[0];
 
-  // 2. Build SyaCo draft payload
-  const payload = buildSyacoPayload(item);
+  // 2. Determine next sequential order from existing solutions
+  const nextOrder = await getNextSequentialOrder({ fetchFn, apiUrl, token });
+
+  // 3. Build SyaCo draft payload
+  const payload = buildSyacoPayload(item, nextOrder);
 
   // 3. Call SyaCo Solutions API
   try {
@@ -282,5 +319,6 @@ module.exports = {
   normalizeIcon,
   buildContent,
   buildSyacoPayload,
+  getNextSequentialOrder,
   approveAndCreateDraft
 };
