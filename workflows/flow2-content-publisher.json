@@ -64,9 +64,10 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT solution_id FROM processed_solutions WHERE status = 'completed';",
+        "query": "SELECT solution_id FROM processed_solutions WHERE status = 'completed'\nUNION ALL\nSELECT '__INIT__'\nWHERE NOT EXISTS (SELECT 1 FROM processed_solutions WHERE status = 'completed');",
         "options": {}
       },
+      "alwaysOutputData": true,
       "id": "f2-node-load-processed",
       "name": "Load Processed IDs",
       "type": "n8n-nodes-base.postgres",
@@ -101,7 +102,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// 1. Get processed solution IDs (stringified)\nconst processed = new Set(\n  $('Load Processed IDs').all().map(i => String(i.json.solution_id || '')).filter(Boolean)\n);\n\n// 2. Collect all current solutions from API\nconst allSolutionItems = $('Get Current Solutions').all();\nconst allSolutions = [];\n\nfor (const item of allSolutionItems) {\n  const data = item.json;\n  if (Array.isArray(data)) {\n    allSolutions.push(...data);\n  } else if (Array.isArray(data?.data)) {\n    allSolutions.push(...data.data);\n  } else if (data && data.id) {\n    allSolutions.push(data);\n  }\n}\n\n// 3. Filter only solutions that haven't been completed yet\nconst newSolutions = allSolutions.filter(s => s && s.id && !processed.has(String(s.id)));\n\nreturn newSolutions.map(s => ({\n  json: {\n    id: String(s.id),\n    titleEn: s.titleEn || '',\n    titleTh: s.titleTh || '',\n    descEn: s.content?.en?.hero?.description || s.descEn || '',\n    descTh: s.content?.th?.hero?.description || s.descTh || '',\n    link: s.link || `/solutions/${s.id}`,\n    url: `https://www.syaco.co.th${s.link || `/solutions/${s.id}`}`\n  }\n}));"
+        "jsCode": "// 1. Get processed solution IDs (stringified, ignoring __INIT__)\nconst processed = new Set(\n  $('Load Processed IDs').all()\n    .map(i => String(i.json.solution_id || ''))\n    .filter(id => id && id !== '__INIT__')\n);\n\n// 2. Collect all current solutions from API\nconst allSolutionItems = $('Get Current Solutions').all();\nconst allSolutions = [];\n\nfor (const item of allSolutionItems) {\n  const data = item.json;\n  if (Array.isArray(data)) {\n    allSolutions.push(...data);\n  } else if (Array.isArray(data?.data)) {\n    allSolutions.push(...data.data);\n  } else if (data && data.id) {\n    allSolutions.push(data);\n  }\n}\n\n// 3. Filter only solutions that haven't been completed yet\nconst newSolutions = allSolutions.filter(s => s && s.id && !processed.has(String(s.id)));\n\nreturn newSolutions.map(s => ({\n  json: {\n    id: String(s.id),\n    titleEn: s.titleEn || '',\n    titleTh: s.titleTh || '',\n    descEn: s.content?.en?.hero?.description || s.descEn || '',\n    descTh: s.content?.th?.hero?.description || s.descTh || '',\n    link: s.link || `/solutions/${s.id}`,\n    url: `https://www.syaco.co.th${s.link || `/solutions/${s.id}`}`\n  }\n}));"
       },
       "id": "f2-node-filter-new",
       "name": "Filter New Solutions",
@@ -1179,6 +1180,9 @@
     }
   },
   "settings": {
-    "executionOrder": "v1"
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true
   }
 }

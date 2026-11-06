@@ -41,7 +41,9 @@ assert.strictEqual(extractedUrl, link, 'Extracted URL using byte offsets must ma
 // 3. Test Filter New Solutions Logic
 function filterNewSolutions(allSolutionItems, processedDbRows) {
   const processed = new Set(
-    processedDbRows.map(i => String(i.solution_id || '')).filter(Boolean)
+    processedDbRows
+      .map(i => String(i.solution_id || ''))
+      .filter(id => id && id !== '__INIT__')
   );
 
   const allSolutions = [];
@@ -90,7 +92,11 @@ assert.strictEqual(filtered.length, 1, 'Must find exactly 1 new solution');
 assert.strictEqual(filtered[0].id, '31');
 assert.strictEqual(filtered[0].titleEn, 'Secure Enterprise AI & API Gateway');
 
-// When all are completed
+// Test Empty DB scenario: when processed_solutions is completely empty (returns [{ solution_id: '__INIT__' }])
+const filteredEmptyDb = filterNewSolutions(mockCurrentApiItems, [{ solution_id: '__INIT__' }]);
+assert.strictEqual(filteredEmptyDb.length, 9, 'When DB is completely empty, all 9 solutions must be processed as new');
+
+// Test When all are completed
 const filteredNone = filterNewSolutions(mockCurrentApiItems, [...mockProcessed, { solution_id: '31' }]);
 assert.strictEqual(filteredNone.length, 0, 'Must find 0 new solutions when all are completed');
 
