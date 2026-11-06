@@ -38,4 +38,60 @@ const textBuf = Buffer.from(thaiText, 'utf8');
 const extractedUrl = textBuf.slice(facet.index.byteStart, facet.index.byteEnd).toString('utf8');
 assert.strictEqual(extractedUrl, link, 'Extracted URL using byte offsets must match original link');
 
-console.log('✅ Flow 2 sanitization and UTF-8 byte offset tests passed.');
+// 3. Test Filter New Solutions Logic
+function filterNewSolutions(allSolutionItems, processedDbRows) {
+  const processed = new Set(
+    processedDbRows.map(i => String(i.solution_id || '')).filter(Boolean)
+  );
+
+  const allSolutions = [];
+  for (const item of allSolutionItems) {
+    const data = item.json || item;
+    if (Array.isArray(data)) {
+      allSolutions.push(...data);
+    } else if (Array.isArray(data?.data)) {
+      allSolutions.push(...data.data);
+    } else if (data && data.id) {
+      allSolutions.push(data);
+    }
+  }
+
+  const newSolutions = allSolutions.filter(s => s && s.id && !processed.has(String(s.id)));
+  return newSolutions.map(s => ({
+    id: String(s.id),
+    titleEn: s.titleEn || '',
+    titleTh: s.titleTh || '',
+    descEn: s.content?.en?.hero?.description || s.descEn || '',
+    descTh: s.content?.th?.hero?.description || s.descTh || '',
+    link: s.link || `/solutions/${s.id}`,
+    url: `https://www.syaco.co.th${s.link || `/solutions/${s.id}`}`
+  }));
+}
+
+const mockProcessed = [
+  { solution_id: '7' }, { solution_id: '8' }, { solution_id: '9' }, { solution_id: '10' },
+  { solution_id: '11' }, { solution_id: '12' }, { solution_id: '13' }, { solution_id: '14' }
+];
+
+const mockCurrentApiItems = [
+  { json: { id: 7, titleEn: 'Data Integration & APIs' } },
+  { json: { id: 8, titleEn: 'Real-time Tracking & Logistics' } },
+  { json: { id: 9, titleEn: 'Smart Inventory & Warehouse' } },
+  { json: { id: 10, titleEn: 'Analytics & Dashboard' } },
+  { json: { id: 11, titleEn: 'AI & Automation' } },
+  { json: { id: 12, titleEn: 'Enterprise Web & Mobile Apps' } },
+  { json: { id: 13, titleEn: 'Alerts & Notification System' } },
+  { json: { id: 14, titleEn: 'Digital Growth & Performance' } },
+  { json: { id: 31, titleEn: 'Secure Enterprise AI & API Gateway' } }
+];
+
+const filtered = filterNewSolutions(mockCurrentApiItems, mockProcessed);
+assert.strictEqual(filtered.length, 1, 'Must find exactly 1 new solution');
+assert.strictEqual(filtered[0].id, '31');
+assert.strictEqual(filtered[0].titleEn, 'Secure Enterprise AI & API Gateway');
+
+// When all are completed
+const filteredNone = filterNewSolutions(mockCurrentApiItems, [...mockProcessed, { solution_id: '31' }]);
+assert.strictEqual(filteredNone.length, 0, 'Must find 0 new solutions when all are completed');
+
+console.log('✅ Flow 2 sanitization, UTF-8 byte offset, and Filter New Solutions tests passed.');

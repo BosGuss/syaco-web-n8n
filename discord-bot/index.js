@@ -370,9 +370,16 @@ client.on('interactionCreate', async (interaction) => {
           return await interaction.reply({ content: 'ไม่พบข้อมูลบทความ', ephemeral: true });
         }
         const draft = rows[0];
-        const tagsStr = (draft.tags || []).join(', ');
+        const tagsStr = (draft.tags || []).join(', ') || '-';
+        const header = `📋 **บทความสำหรับนำไปโพสต์มือ (Blognone / TechTalkThai / Medium)**\n\n📌 **ชื่อบทความ:** ${draft.title_th}\n🏷️ **แท็ก:** \`${tagsStr}\`\n\n\`\`\`markdown\n`;
+        const footer = `\n\`\`\``;
+        const maxBody = Math.max(100, 1950 - header.length - footer.length);
+        const text = (draft.content_markdown || '').length > maxBody
+          ? draft.content_markdown.slice(0, maxBody - 3) + '...'
+          : (draft.content_markdown || '');
+
         await interaction.reply({
-          content: `📋 **บทความสำหรับนำไปโพสต์มือ (Blognone / TechTalkThai / Medium)**\n\n📌 **ชื่อบทความ:** ${draft.title_th}\n🏷️ **แท็ก:** \`${tagsStr}\`\n\n\`\`\`markdown\n${draft.content_markdown.slice(0, 1800)}\n\`\`\``,
+          content: `${header}${text}${footer}`,
           ephemeral: true
         });
         return;
