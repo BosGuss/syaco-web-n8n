@@ -371,7 +371,7 @@ client.on('interactionCreate', async (interaction) => {
         }
         const draft = rows[0];
         const tagsStr = (draft.tags || []).join(', ') || '-';
-        const header = `📋 **บทความสำหรับนำไปโพสต์มือ (Blognone / TechTalkThai / Medium)**\n\n📌 **ชื่อบทความ:** ${draft.title_th}\n🏷️ **แท็ก:** \`${tagsStr}\`\n\n\`\`\`markdown\n`;
+        const header = `📋 **บทความสำหรับนำไปเผยแพร่ (Manual Post)**\n\n📌 **ชื่อบทความ:** ${draft.title_th}\n🏷️ **แท็ก:** \`${tagsStr}\`\n\n\`\`\`markdown\n`;
         const footer = `\n\`\`\``;
         const maxBody = Math.max(100, 1950 - header.length - footer.length);
         const text = (draft.content_markdown || '').length > maxBody
@@ -687,7 +687,7 @@ app.post('/notify', async (req, res) => {
         } else if (d.platform === 'hashnode') {
           actionBtn = new ButtonBuilder().setCustomId(`flow2_publish_${d.id}`).setLabel('🚀 โพสต์ Hashnode').setStyle(ButtonStyle.Primary);
         } else {
-          actionBtn = new ButtonBuilder().setCustomId(`flow2_copy_${d.id}`).setLabel('📋 ดูเนื้อหาโพสต์มือ').setStyle(ButtonStyle.Secondary);
+          actionBtn = new ButtonBuilder().setCustomId(`flow2_copy_${d.id}`).setLabel('📋 ดูเนื้อหาบทความ').setStyle(ButtonStyle.Secondary);
         }
 
         const row = new ActionRowBuilder().addComponents(
@@ -706,7 +706,7 @@ app.post('/notify', async (req, res) => {
       if (rows.length) {
         const d = rows[0];
         await channel.send({
-          content: `📝 **BLOGNONE / TECHTALKTHAI ARTICLE READY**\n━━━━━━━━━━━━━━━━━━━━━━━\n📌 **ชื่อบทความ:** ${d.title_th}\n🏷️ **แท็ก:** ${(d.tags || []).join(', ')}\n\n\`\`\`markdown\n${d.content_markdown.slice(0, 1800)}\n\`\`\`\n━━━━━━━━━━━━━━━━━━━━━━━\n👉 สามารถคัดลอกไปเผยแพร่บน Blognone / TechTalkThai ได้ทันที`
+          content: `📝 **MANUAL ARTICLE READY**\n━━━━━━━━━━━━━━━━━━━━━━━\n📌 **ชื่อบทความ:** ${d.title_th}\n🏷️ **แท็ก:** ${(d.tags || []).join(', ')}\n\n\`\`\`markdown\n${d.content_markdown.slice(0, 1800)}\n\`\`\`\n━━━━━━━━━━━━━━━━━━━━━━━\n👉 สามารถคัดลอกไปเผยแพร่ตามแพลตฟอร์มต่างๆ ได้ทันที`
         });
       }
       return res.json({ ok: true, type: 'manual_ready' });
