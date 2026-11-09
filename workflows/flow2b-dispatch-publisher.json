@@ -1,0 +1,710 @@
+{
+  "name": "SyaCo Flow 2b - Dispatch & Publish",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "flow2-dispatch-action",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "f2-node-webhook-dispatch",
+      "name": "Webhook: /webhook/flow2-dispatch-action",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        200,
+        960
+      ],
+      "webhookId": "flow2-dispatch-action"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "f2-cond-reject",
+              "leftValue": "={{ $json.body.action }}",
+              "rightValue": "reject",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f2-node-if-reject",
+      "name": "If Action = Reject",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        440,
+        960
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE content_drafts SET status = 'rejected' WHERE id = $1 RETURNING *;",
+        "options": {
+          "queryReplacement": "={{ [parseInt($json.body.draft_id)] }}"
+        }
+      },
+      "id": "f2-node-update-rejected",
+      "name": "Update DB Rejected",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        680,
+        860
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "ppHdQYPLGXKAxrFp",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, action: 'rejected', id: $json.id } }}",
+        "options": {}
+      },
+      "id": "f2-node-respond-reject",
+      "name": "Respond Webhook Rejected",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        920,
+        860
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE content_drafts\nSET status = 'publishing'\nWHERE id = $1 AND status IN ('pending_review', 'failed')\nRETURNING *;",
+        "options": {
+          "queryReplacement": "={{ [parseInt($json.body.draft_id)] }}"
+        }
+      },
+      "id": "f2-node-lock-draft",
+      "name": "Atomic Lock Draft for Publishing",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        680,
+        1060
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "ppHdQYPLGXKAxrFp",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.platform }}",
+                    "rightValue": "bluesky",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.platform }}",
+                    "rightValue": "devto",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.platform }}",
+                    "rightValue": "hashnode",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.platform }}",
+                    "rightValue": "manual_article",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "f2-node-platform-router",
+      "name": "Platform Switch Router",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        920,
+        1060
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://bsky.social/xrpc/com.atproto.server.createSession",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { identifier: $env.BLUESKY_HANDLE, password: $env.BLUESKY_APP_PASSWORD } }}",
+        "options": {}
+      },
+      "id": "f2-node-bsky-session",
+      "name": "Bluesky Create Session",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1180,
+        860
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const draft = $('Atomic Lock Draft for Publishing').first().json;\nconst session = $input.first().json;\nconst text = draft.content_markdown;\n\n// Compute UTF-8 Facet for link\nconst urlMatch = text.match(/https?:\\/\\/[^\\s]+/);\nconst facets = [];\nif (urlMatch) {\n  const link = urlMatch[0];\n  const linkIndex = text.indexOf(link);\n  const byteStart = Buffer.byteLength(text.slice(0, linkIndex), 'utf8');\n  const byteEnd = byteStart + Buffer.byteLength(link, 'utf8');\n  facets.push({\n    index: { byteStart, byteEnd },\n    features: [{ \"$type\": \"app.bsky.richtext.facet#link\", uri: link }]\n  });\n}\n\nconst record = {\n  \"$type\": \"app.bsky.feed.post\",\n  text: text,\n  createdAt: new Date().toISOString(),\n  facets: facets\n};\n\nreturn [{\n  json: {\n    draftId: draft.id,\n    accessJwt: session.accessJwt,\n    did: session.did,\n    handle: session.handle,\n    blueskyBody: {\n      repo: session.did,\n      collection: \"app.bsky.feed.post\",\n      record: record\n    }\n  }\n}];"
+      },
+      "id": "f2-node-bsky-payload",
+      "name": "Compute Bluesky UTF-8 Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1400,
+        860
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://bsky.social/xrpc/com.atproto.repo.createRecord",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $json.accessJwt }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.blueskyBody }}",
+        "options": {}
+      },
+      "id": "f2-node-bsky-post",
+      "name": "Post to Bluesky API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1620,
+        860
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE content_drafts\nSET status = 'posted', posted_url = $1, posted_at = NOW(), error_message = NULL\nWHERE id = $2\nRETURNING *;",
+        "options": {
+          "queryReplacement": "={{ [\n  'https://bsky.app/profile/' + $('Compute Bluesky UTF-8 Payload').first().json.handle + '/post/' + ($json.uri ? $json.uri.split('/').pop() : ''),\n  $('Compute Bluesky UTF-8 Payload').first().json.draftId\n] }}"
+        }
+      },
+      "id": "f2-node-bsky-update-db",
+      "name": "Update DB Bluesky Posted",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1840,
+        860
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "ppHdQYPLGXKAxrFp",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const draft = $('Atomic Lock Draft for Publishing').first().json;\nreturn [{\n  json: {\n    draftId: draft.id,\n    devtoBody: {\n      article: {\n        title: draft.title_th,\n        body_markdown: draft.content_markdown,\n        published: true,\n        tags: draft.tags || ['architecture', 'tech']\n      }\n    }\n  }\n}];"
+      },
+      "id": "f2-node-devto-payload",
+      "name": "Build Dev.to Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1180,
+        1000
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://dev.to/api/articles",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "api-key",
+              "value": "={{ $env.DEVTO_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.devtoBody }}",
+        "options": {}
+      },
+      "id": "f2-node-devto-post",
+      "name": "POST to Dev.to API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1400,
+        1000
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE content_drafts\nSET status = 'posted', posted_url = $1, posted_at = NOW(), error_message = NULL\nWHERE id = $2\nRETURNING *;",
+        "options": {
+          "queryReplacement": "={{ [$json.url || ('https://dev.to/' + $json.id), $('Build Dev.to Payload').first().json.draftId] }}"
+        }
+      },
+      "id": "f2-node-devto-update-db",
+      "name": "Update DB Dev.to Posted",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1620,
+        1000
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "ppHdQYPLGXKAxrFp",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const draft = $('Atomic Lock Draft for Publishing').first().json;\nreturn [{\n  json: {\n    draftId: draft.id,\n    hashnodeBody: {\n      query: `mutation PublishPost($input: PublishPostInput!) { publishPost(input: $input) { post { id url title } } }`,\n      variables: {\n        input: {\n          title: draft.title_th,\n          contentMarkdown: draft.content_markdown,\n          publicationId: process.env.HASHNODE_PUBLICATION_ID || 'dummy_publication_id',\n          tags: (draft.tags || ['tech']).map(t => ({ name: t, slug: t.toLowerCase() }))\n        }\n      }\n    }\n  }\n}];"
+      },
+      "id": "f2-node-hashnode-payload",
+      "name": "Build Hashnode Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1180,
+        1140
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://gql.hashnode.com",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ $env.HASHNODE_ACCESS_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.hashnodeBody }}",
+        "options": {}
+      },
+      "id": "f2-node-hashnode-post",
+      "name": "POST to Hashnode GraphQL",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1400,
+        1140
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE content_drafts\nSET status = 'posted', posted_url = $1, posted_at = NOW(), error_message = NULL\nWHERE id = $2\nRETURNING *;",
+        "options": {
+          "queryReplacement": "={{ [$json.data?.publishPost?.post?.url || 'https://hashnode.com', $('Build Hashnode Payload').first().json.draftId] }}"
+        }
+      },
+      "id": "f2-node-hashnode-update-db",
+      "name": "Update DB Hashnode Posted",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1620,
+        1140
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "ppHdQYPLGXKAxrFp",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://discord-bot:3000/notify",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\n  type: 'manual_ready',\n  draft_id: $json.id\n} }}",
+        "options": {}
+      },
+      "id": "f2-node-notify-manual",
+      "name": "Send Manual Article to Discord",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1180,
+        1280
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE content_drafts\nSET status = 'ready_to_post', posted_at = NOW(), error_message = NULL\nWHERE id = $1\nRETURNING *;",
+        "options": {
+          "queryReplacement": "={{ [$('Atomic Lock Draft for Publishing').first().json.id] }}"
+        }
+      },
+      "id": "f2-node-manual-update-db",
+      "name": "Update DB Manual Ready",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1400,
+        1280
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "ppHdQYPLGXKAxrFp",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, message: 'Draft published/processed successfully', draftId: $json.id, status: $json.status, posted_url: $json.posted_url } }}",
+        "options": {}
+      },
+      "id": "f2-node-respond-success",
+      "name": "Respond Publish Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2100,
+        1060
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook: /webhook/flow2-dispatch-action": {
+      "main": [
+        [
+          {
+            "node": "If Action = Reject",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Action = Reject": {
+      "main": [
+        [
+          {
+            "node": "Update DB Rejected",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Atomic Lock Draft for Publishing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update DB Rejected": {
+      "main": [
+        [
+          {
+            "node": "Respond Webhook Rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Atomic Lock Draft for Publishing": {
+      "main": [
+        [
+          {
+            "node": "Platform Switch Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Platform Switch Router": {
+      "main": [
+        [
+          {
+            "node": "Bluesky Create Session",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Dev.to Payload",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Hashnode Payload",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Manual Article to Discord",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Bluesky Create Session": {
+      "main": [
+        [
+          {
+            "node": "Compute Bluesky UTF-8 Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Bluesky UTF-8 Payload": {
+      "main": [
+        [
+          {
+            "node": "Post to Bluesky API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post to Bluesky API": {
+      "main": [
+        [
+          {
+            "node": "Update DB Bluesky Posted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update DB Bluesky Posted": {
+      "main": [
+        [
+          {
+            "node": "Respond Publish Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Dev.to Payload": {
+      "main": [
+        [
+          {
+            "node": "POST to Dev.to API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST to Dev.to API": {
+      "main": [
+        [
+          {
+            "node": "Update DB Dev.to Posted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update DB Dev.to Posted": {
+      "main": [
+        [
+          {
+            "node": "Respond Publish Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Hashnode Payload": {
+      "main": [
+        [
+          {
+            "node": "POST to Hashnode GraphQL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST to Hashnode GraphQL": {
+      "main": [
+        [
+          {
+            "node": "Update DB Hashnode Posted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update DB Hashnode Posted": {
+      "main": [
+        [
+          {
+            "node": "Respond Publish Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Manual Article to Discord": {
+      "main": [
+        [
+          {
+            "node": "Update DB Manual Ready",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update DB Manual Ready": {
+      "main": [
+        [
+          {
+            "node": "Respond Publish Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true
+  }
+}
