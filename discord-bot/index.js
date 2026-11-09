@@ -12,6 +12,7 @@ const {
 const express = require('express');
 const { Pool } = require('pg');
 const { approveAndCreateDraft } = require('./solution-draft');
+const { publishDraft, rejectDraft } = require('./flow2-publisher');
 
 // Database Connection
 const pool = new Pool({
@@ -322,28 +323,26 @@ client.on('interactionCreate', async (interaction) => {
         const id = interaction.customId.replace('flow2_publish_', '');
         await interaction.deferUpdate();
         try {
-          const n8nUrl = process.env.N8N_FLOW2_WEBHOOK_URL || 'http://n8n:5678/webhook/flow2-dispatch-action';
-          const res = await fetch(n8nUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ draft_id: parseInt(id), action: 'publish' }),
-            signal: AbortSignal.timeout(20000)
+          const result = await publishDraft({
+            id: parseInt(id),
+            pool,
+            client,
+            channelId: interaction.channelId
           });
-          const data = await res.json().catch(() => ({}));
-          if (data.success) {
+          if (result.success) {
             await interaction.editReply({
-              content: `🚀 **เผยแพร่โพสต์สำเร็จ!** (${data.platform || 'Platform'})\n🔗 ${data.posted_url || 'ดูโพสต์ที่เผยแพร่แล้ว'}`,
+              content: `🚀 **เผยแพร่โพสต์สำเร็จ!** (${(result.platform || 'Platform').toUpperCase()})\n🔗 ${result.postedUrl ? `[ดูโพสต์ที่เผยแพร่แล้ว](${result.postedUrl})` : 'พร้อมเผยแพร่แล้ว'}`,
               components: []
             });
           } else {
             await interaction.editReply({
-              content: `⚠️ เผยแพร่ไม่สำเร็จ: ${data.error || data.message || 'Unknown error'}`,
+              content: `⚠️ เผยแพร่ไม่สำเร็จ: ${result.error || result.message || 'Unknown error'}`,
               components: []
             });
           }
         } catch (err) {
           await interaction.editReply({
-            content: `⚠️ เกิดข้อผิดพลาดในการเรียก n8n: ${err.message}`,
+            content: `⚠️ เกิดข้อผิดพลาดในการเผยแพร่: ${err.message}`,
             components: []
           });
         }
@@ -352,10 +351,7 @@ client.on('interactionCreate', async (interaction) => {
 
       if (interaction.customId.startsWith('flow2_reject_')) {
         const id = interaction.customId.replace('flow2_reject_', '');
-        await pool.query(
-          "UPDATE content_drafts SET status = 'rejected' WHERE id = $1",
-          [parseInt(id)]
-        );
+        await rejectDraft({ id: parseInt(id), pool });
         await interaction.update({
           content: `❌ **ปฏิเสธ Draft นี้แล้ว** (ID: #${id})`,
           components: []
