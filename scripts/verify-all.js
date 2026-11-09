@@ -24,7 +24,7 @@ async function getPool() {
       await pool.query('SELECT 1');
       return pool;
     } catch (e) {
-      if (e.code === 'ECONNREFUSED' || e.code === '3D000' || (e.message && e.message.includes('does not exist'))) {
+      if (e.code === 'ECONNREFUSED' || e.code === 'EACCES' || e.code === '3D000' || (e.message && e.message.includes('does not exist')) || (e.errors && e.errors.some(err => err.code === 'EACCES' || err.code === 'ECONNREFUSED'))) {
         const fallbackPool = new Pool({ ...baseConfig, port: 5680 });
         await fallbackPool.query('SELECT 1');
         await pool.end().catch(() => {});

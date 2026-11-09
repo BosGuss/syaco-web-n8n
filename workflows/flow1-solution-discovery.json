@@ -43,16 +43,7 @@
     },
     {
       "parameters": {
-        "url": "https://www.syaco.co.th/api/solutions?all=true",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "={{ 'Bearer ' + ($env.SYACO_API_TOKEN || 'sya_perm_79279d93e026ed7638b9065af33c5b78bff1c5fdfd62e3ecbf12a707bcd97b71') }}"
-            }
-          ]
-        },
+        "url": "https://www.syaco.co.th/api/solutions",
         "options": {}
       },
       "id": "f1-node-get-solutions",
