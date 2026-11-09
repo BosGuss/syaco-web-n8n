@@ -213,7 +213,10 @@
       "position": [
         2000,
         380
-      ]
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
     },
     {
       "parameters": {
@@ -240,7 +243,10 @@
       "position": [
         2220,
         380
-      ]
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
     },
     {
       "parameters": {
@@ -387,6 +393,7 @@
     },
     "Split In Batches": {
       "main": [
+        [],
         [
           {
             "node": "Lock Solution Status",
