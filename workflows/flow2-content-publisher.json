@@ -19,7 +19,7 @@
       "typeVersion": 1.2,
       "position": [
         200,
-        300
+        280
       ]
     },
     {
@@ -50,7 +50,7 @@
       "typeVersion": 4.2,
       "position": [
         440,
-        300
+        280
       ]
     },
     {
@@ -148,8 +148,8 @@
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
       "position": [
-        1160,
-        360
+        1340,
+        380
       ]
     },
     {
@@ -165,8 +165,8 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        1380,
-        360
+        1560,
+        380
       ],
       "credentials": {
         "postgres": {
@@ -184,8 +184,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1600,
-        360
+        1780,
+        380
       ]
     },
     {
@@ -211,8 +211,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1840,
-        260
+        2000,
+        380
       ]
     },
     {
@@ -238,8 +238,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1840,
-        460
+        2220,
+        380
       ]
     },
     {
@@ -251,8 +251,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2080,
-        360
+        2440,
+        380
       ]
     },
     {
@@ -268,8 +268,8 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        2320,
-        360
+        2660,
+        380
       ],
       "credentials": {
         "postgres": {
@@ -292,8 +292,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2560,
-        360
+        2880,
+        380
       ]
     }
   ],
