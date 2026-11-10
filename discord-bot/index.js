@@ -23,13 +23,30 @@ const pool = new Pool({
   password: process.env.POSTGRES_PASSWORD || 'admin',
 });
 
+// Grapheme Helpers (for AT Protocol 300 grapheme limit)
+function truncateToGraphemes(text, max = 300) {
+  if (!text) return '';
+  if (typeof Intl !== 'undefined' && Intl.Segmenter) {
+    const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+    const segments = Array.from(segmenter.segment(text)).map(s => s.segment);
+    if (segments.length <= max) return text;
+    return segments.slice(0, max - 3).join('') + '...';
+  }
+  const chars = Array.from(text);
+  if (chars.length <= max) return text;
+  return chars.slice(0, max - 3).join('') + '...';
+}
+
 // Bluesky Helper Functions
 async function postToBluesky(postUrl, text) {
   const m = String(postUrl || '').match(/^https:\/\/bsky\.app\/profile\/([^/]+)\/post\/([A-Za-z0-9]+)$/);
   if (!m) throw new Error('Invalid Bluesky URL format');
   const [, actor, rkey] = m;
 
-  // 1. Create Session
+  // 1. Truncate text to max 300 graphemes (AT Protocol limit)
+  const trimmedText = truncateToGraphemes(String(text || '').trim(), 300);
+
+  // 2. Create Session
   const sessionRes = await fetch('https://bsky.social/xrpc/com.atproto.server.createSession', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -38,39 +55,51 @@ async function postToBluesky(postUrl, text) {
       password: process.env.BLUESKY_APP_PASSWORD,
     }),
   });
+  if (!sessionRes.ok) {
+    const errBody = await sessionRes.text().catch(() => '');
+    throw new Error(`Bluesky Login failed (HTTP ${sessionRes.status}): ${errBody.slice(0, 300)}`);
+  }
   const session = await sessionRes.json();
-  if (!session.accessJwt) throw new Error(`Bluesky Login failed: ${JSON.stringify(session)}`);
+  if (!session.accessJwt) throw new Error('Bluesky Login failed: No access token');
 
-  // 2. Resolve Profile DID
+  // 3. Resolve Profile DID
   const profileRes = await fetch(`https://api.bsky.app/xrpc/app.bsky.actor.getProfile?actor=${encodeURIComponent(actor)}`);
+  if (!profileRes.ok) {
+    const errBody = await profileRes.text().catch(() => '');
+    throw new Error(`Bluesky resolve profile failed (HTTP ${profileRes.status}): ${errBody.slice(0, 300)}`);
+  }
   const profile = await profileRes.json();
   if (!profile.did) throw new Error('Could not resolve actor DID');
 
-  // 3. Get Parent Post
+  // 4. Get Parent Post
   const parentRes = await fetch(`https://api.bsky.app/xrpc/app.bsky.feed.getPosts?uris=at://${profile.did}/app.bsky.feed.post/${rkey}`);
+  if (!parentRes.ok) {
+    const errBody = await parentRes.text().catch(() => '');
+    throw new Error(`Bluesky load parent post failed (HTTP ${parentRes.status}): ${errBody.slice(0, 300)}`);
+  }
   const parentData = await parentRes.json();
   const parent = parentData.posts?.[0];
   if (!parent?.uri || !parent?.cid) throw new Error('Could not load parent post');
 
-  // 4. Parse Links into Facets
+  // 5. Parse Links into Facets using byte offsets of trimmedText
   const byteLen = (str) => Buffer.byteLength(str, 'utf8');
   const facets = [];
   const linkRegex = /https?:\/\/[^\s]+/g;
   let match;
-  while ((match = linkRegex.exec(text)) !== null) {
+  while ((match = linkRegex.exec(trimmedText)) !== null) {
     const url = match[0].replace(/[.,;:!?)]+$/, '');
-    const byteStart = byteLen(text.slice(0, match.index));
+    const byteStart = byteLen(trimmedText.slice(0, match.index));
     facets.push({
       index: { byteStart, byteEnd: byteStart + byteLen(url) },
       features: [{ $type: 'app.bsky.richtext.facet#link', uri: url }],
     });
   }
 
-  // 5. Build Record & Create
+  // 6. Build Record & Create
   const root = parent.record?.reply?.root || { uri: parent.uri, cid: parent.cid };
   const record = {
     $type: 'app.bsky.feed.post',
-    text,
+    text: trimmedText,
     createdAt: new Date().toISOString(),
     reply: {
       root: { uri: root.uri, cid: root.cid },
@@ -91,6 +120,10 @@ async function postToBluesky(postUrl, text) {
       record,
     }),
   });
+  if (!createRes.ok) {
+    const errBody = await createRes.text().catch(() => '');
+    throw new Error(`Bluesky createRecord rejected (HTTP ${createRes.status}): ${errBody.slice(0, 300)}`);
+  }
   const created = await createRes.json();
   if (!created.uri) throw new Error(`Bluesky post rejected: ${JSON.stringify(created)}`);
 
@@ -207,6 +240,8 @@ const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 const {
   registerCommands,
   handleCommand,
+  createCandidateEmbed,
+  createActionButtons,
   saveAndVerifyDevtoCookie,
   saveAndVerifyGeminiKey,
   saveAndVerifyGeminiModel
@@ -272,29 +307,6 @@ client.on('guildCreate', async (guild) => {
     console.error(`[Bot] ไม่สามารถลงทะเบียนคำสั่งสำหรับ Server ใหม่:`, err);
   }
 });
-
-function createCandidateEmbed(row) {
-  const cut = (s, n) => (String(s || '').length > n ? s.slice(0, n - 3) + '...' : s || '-');
-  return new EmbedBuilder()
-    .setTitle(`[${row.platform}] ${cut(row.post_title, 200)}`)
-    .setURL(row.post_url)
-    .setColor(0x5865f2)
-    .addFields(
-      { name: 'Solution', value: cut(row.solution_title, 250), inline: true },
-      { name: 'Match Score', value: String(row.match_score), inline: true },
-      { name: 'Platform', value: String(row.platform), inline: true },
-      { name: 'Matched Problem', value: cut(row.matched_problem, 500) },
-      { name: 'Draft Answer', value: cut(row.answer, 1000) }
-    );
-}
-
-function createActionButtons(id) {
-  return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`approve_${id}`).setLabel('Approve').setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId(`edit_${id}`).setLabel('Edit Answer').setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(`reject_${id}`).setLabel('Reject').setStyle(ButtonStyle.Danger)
-  );
-}
 
 // Handle Discord Gateway Interactions
 client.on('interactionCreate', async (interaction) => {
@@ -550,8 +562,20 @@ client.on('interactionCreate', async (interaction) => {
     }
   } catch (err) {
     console.error('Interaction error:', err);
-    if (!interaction.replied && !interaction.deferred) {
-      await interaction.reply({ content: `⚠️ Error: ${err.message}`, ephemeral: true });
+    try {
+      if (interaction.deferred) {
+        await interaction.editReply({
+          content: `⚠️ เกิดข้อผิดพลาด: ${err.message}`,
+          components: []
+        });
+      } else if (!interaction.replied) {
+        await interaction.reply({
+          content: `⚠️ เกิดข้อผิดพลาด: ${err.message}`,
+          ephemeral: true
+        });
+      }
+    } catch (replyErr) {
+      console.error('Failed to report interaction error to Discord:', replyErr);
     }
   }
 });
@@ -560,7 +584,7 @@ async function handleApproval(interaction, candidateId, overrideAnswer = null) {
   await interaction.deferUpdate();
 
   const { rows } = await pool.query(
-    "SELECT * FROM backlink_candidates WHERE id::text = $1 AND status = 'pending_review'",
+    "SELECT * FROM backlink_candidates WHERE id::text = $1 AND status IN ('pending_review', 'failed')",
     [candidateId]
   );
   if (!rows.length) {
@@ -575,7 +599,7 @@ async function handleApproval(interaction, candidateId, overrideAnswer = null) {
     try {
       const postedUrl = await postToBluesky(row.post_url, finalAnswer);
       await pool.query(
-        "UPDATE backlink_candidates SET status = 'posted', answer = $1, posted_url = $2, posted_at = NOW(), reviewed_at = NOW(), reviewed_by = $4 WHERE id::text = $3",
+        "UPDATE backlink_candidates SET status = 'posted', answer = $1, posted_url = $2, posted_at = NOW(), reviewed_at = NOW(), reviewed_by = $4, error_message = NULL WHERE id::text = $3",
         [finalAnswer, postedUrl, candidateId, reviewedBy]
       );
 
@@ -588,9 +612,14 @@ async function handleApproval(interaction, candidateId, overrideAnswer = null) {
         "UPDATE backlink_candidates SET status = 'failed', error_message = $1, reviewed_at = NOW(), reviewed_by = $3 WHERE id::text = $2",
         [postError.message, candidateId, reviewedBy]
       );
+      const retryRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`approve_${candidateId}`).setLabel('🔄 Retry Approve').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId(`edit_${candidateId}`).setLabel('Edit Answer').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId(`reject_${candidateId}`).setLabel('Reject').setStyle(ButtonStyle.Danger)
+      );
       await interaction.editReply({
-        content: `⚠️ **Posting failed:** ${postError.message}\nYou can post manually below:`,
-        components: [],
+        content: `⚠️ **Posting failed:** ${postError.message}\nYou can retry or post manually below:`,
+        components: [retryRow],
       });
       await interaction.followUp({
         content: `🔗 **Thread Link:** ${row.post_url}\nDraft Answer:\n\`\`\`\n${finalAnswer}\n\`\`\``,
@@ -601,7 +630,7 @@ async function handleApproval(interaction, candidateId, overrideAnswer = null) {
     try {
       const postedUrl = await postToDevTo(row.post_url, finalAnswer);
       await pool.query(
-        "UPDATE backlink_candidates SET status = 'posted', answer = $1, posted_url = $2, posted_at = NOW(), reviewed_at = NOW(), reviewed_by = $4 WHERE id::text = $3",
+        "UPDATE backlink_candidates SET status = 'posted', answer = $1, posted_url = $2, posted_at = NOW(), reviewed_at = NOW(), reviewed_by = $4, error_message = NULL WHERE id::text = $3",
         [finalAnswer, postedUrl, candidateId, reviewedBy]
       );
 
@@ -614,9 +643,14 @@ async function handleApproval(interaction, candidateId, overrideAnswer = null) {
         "UPDATE backlink_candidates SET status = 'failed', error_message = $1, reviewed_at = NOW(), reviewed_by = $3 WHERE id::text = $2",
         [postError.message, candidateId, reviewedBy]
       );
+      const retryRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`approve_${candidateId}`).setLabel('🔄 Retry Approve').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId(`edit_${candidateId}`).setLabel('Edit Answer').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId(`reject_${candidateId}`).setLabel('Reject').setStyle(ButtonStyle.Danger)
+      );
       await interaction.editReply({
-        content: `⚠️ **Dev.to posting failed:** ${postError.message}\nYou can post manually below:`,
-        components: [],
+        content: `⚠️ **Dev.to posting failed:** ${postError.message}\nYou can retry or post manually below:`,
+        components: [retryRow],
       });
       await interaction.followUp({
         content: `🔗 **Thread Link:** ${row.post_url}\nDraft Answer:\n\`\`\`\n${finalAnswer}\n\`\`\``,
@@ -626,7 +660,7 @@ async function handleApproval(interaction, candidateId, overrideAnswer = null) {
   } else {
     // Reddit, Pantip, Blognone, Blockdit, Facebook -> Manual Workflow
     await pool.query(
-      "UPDATE backlink_candidates SET status = 'manual', answer = $1, reviewed_at = NOW(), reviewed_by = $3 WHERE id::text = $2",
+      "UPDATE backlink_candidates SET status = 'manual', answer = $1, reviewed_at = NOW(), reviewed_by = $3, error_message = NULL WHERE id::text = $2",
       [finalAnswer, candidateId, reviewedBy]
     );
 
