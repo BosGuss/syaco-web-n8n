@@ -242,9 +242,7 @@ const {
   handleCommand,
   createCandidateEmbed,
   createActionButtons,
-  saveAndVerifyDevtoCookie,
-  saveAndVerifyGeminiKey,
-  saveAndVerifyGeminiModel
+  saveAndVerifyDevtoCookie
 } = require('./commands');
 
 // Admin Allowlist Helpers
@@ -495,12 +493,6 @@ client.on('interactionCreate', async (interaction) => {
         const rawCookie = interaction.fields.getTextInputValue('cookie_value');
         await interaction.deferReply({ ephemeral: true });
         return await saveAndVerifyDevtoCookie(interaction, rawCookie, pool);
-      }
-
-      if (interaction.customId === 'modal_gemini_key') {
-        const rawKey = interaction.fields.getTextInputValue('key_value');
-        await interaction.deferReply({ ephemeral: true });
-        return await saveAndVerifyGeminiKey(interaction, rawKey, pool);
       }
 
       if (interaction.customId.startsWith('modal_answer_')) {

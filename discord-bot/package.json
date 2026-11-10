@@ -4,7 +4,7 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "test": "node test-flow2-publisher.js && node test-draft.js"
+    "test": "node test-flow2-publisher.js && node test-draft.js && node test-commands.js"
   },
   "dependencies": {
     "discord.js": "^14.16.3",

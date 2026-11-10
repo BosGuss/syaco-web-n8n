@@ -152,116 +152,6 @@ async function verifyGemini(apiKey, model) {
   }
 }
 
-async function saveAndVerifyGeminiKey(interaction, rawKey, pool) {
-  const key = (rawKey || '').trim();
-  if (!key) return await interaction.editReply('❌ ค่า API Key ว่างเปล่า');
-
-  const currentModel = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
-  const check = await verifyGemini(key, currentModel);
-
-  // Save to DB
-  try {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS bot_settings (
-        key TEXT PRIMARY KEY,
-        value TEXT,
-        updated_at TIMESTAMPTZ DEFAULT NOW()
-      )
-    `);
-    await pool.query(`
-      INSERT INTO bot_settings (key, value, updated_at)
-      VALUES ('GEMINI_API_KEY', $1, NOW())
-      ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()
-    `, [key]);
-    process.env.GEMINI_API_KEY = key;
-  } catch (err) {
-    console.error('Failed to save GEMINI_API_KEY to DB:', err);
-  }
-
-  // Update .env
-  updateEnvFile('GEMINI_API_KEY', key);
-
-  const masked = key.length > 8 ? `${key.slice(0, 6)}...${key.slice(-4)}` : '******';
-  if (check.ok) {
-    const embed = new EmbedBuilder()
-      .setTitle('✅ บันทึก GEMINI_API_KEY สำเร็จ!')
-      .setColor(0x57f287)
-      .setDescription('เชื่อมต่อ Google Gemini API สำเร็จแล้ว')
-      .addFields(
-        { name: '🔑 API Key', value: `\`${masked}\``, inline: true },
-        { name: '🤖 ทดสอบกับ Model', value: `\`${check.model}\``, inline: true },
-        { name: '💾 สถานะการบันทึก', value: 'บันทึกลง Database และไฟล์ .env เรียบร้อย', inline: false }
-      )
-      .setTimestamp();
-    return await interaction.editReply({ embeds: [embed] });
-  } else {
-    const embed = new EmbedBuilder()
-      .setTitle('⚠️ บันทึก GEMINI_API_KEY แล้ว แต่การทดสอบไม่ผ่าน')
-      .setColor(0xfee75c)
-      .setDescription('ระบบบันทึกคีย์แล้ว แต่ Google API ส่งข้อผิดพลาดกลับมา')
-      .addFields(
-        { name: '🔑 API Key', value: `\`${masked}\``, inline: true },
-        { name: '⚠️ ข้อความตอบกลับ', value: `\`${check.message}\``, inline: false }
-      )
-      .setFooter({ text: 'สามารถทดสอบอีกครั้งผ่านคำสั่ง /health' })
-      .setTimestamp();
-    return await interaction.editReply({ embeds: [embed] });
-  }
-}
-
-async function saveAndVerifyGeminiModel(interaction, modelName, pool) {
-  const model = (modelName || '').trim();
-  if (!model) return await interaction.editReply('❌ ชื่อโมเดลว่างเปล่า');
-
-  const check = await verifyGemini(process.env.GEMINI_API_KEY, model);
-
-  // Save to DB
-  try {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS bot_settings (
-        key TEXT PRIMARY KEY,
-        value TEXT,
-        updated_at TIMESTAMPTZ DEFAULT NOW()
-      )
-    `);
-    await pool.query(`
-      INSERT INTO bot_settings (key, value, updated_at)
-      VALUES ('GEMINI_MODEL', $1, NOW())
-      ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()
-    `, [model]);
-    process.env.GEMINI_MODEL = model;
-  } catch (err) {
-    console.error('Failed to save GEMINI_MODEL to DB:', err);
-  }
-
-  // Update .env
-  updateEnvFile('GEMINI_MODEL', model);
-
-  if (check.ok) {
-    const embed = new EmbedBuilder()
-      .setTitle('✅ เปลี่ยน GEMINI_MODEL สำเร็จ!')
-      .setColor(0x57f287)
-      .setDescription('ตั้งค่าและทดสอบโมเดลสำเร็จแล้ว พร้อมใช้งานใน Pipeline')
-      .addFields(
-        { name: '🤖 Model', value: `\`${model}\``, inline: true },
-        { name: '💾 สถานะการบันทึก', value: 'บันทึกลง Database และไฟล์ .env เรียบร้อย', inline: true }
-      )
-      .setTimestamp();
-    return await interaction.editReply({ embeds: [embed] });
-  } else {
-    const embed = new EmbedBuilder()
-      .setTitle('⚠️ บันทึก GEMINI_MODEL แล้ว แต่การทดสอบไม่ผ่าน')
-      .setColor(0xfee75c)
-      .setDescription('ระบบบันทึกชื่อโมเดลแล้ว แต่ Google API ตอบกลับว่าไม่สามารถเรียกใช้โมเดลนี้ได้')
-      .addFields(
-        { name: '🤖 Model', value: `\`${model}\``, inline: true },
-        { name: '⚠️ ข้อความตอบกลับ', value: `\`${check.message}\``, inline: false }
-      )
-      .setFooter({ text: 'คำแนะนำ: แนะนำให้ใช้ gemini-3.8-flash หรือตรวจสอบโควตา API' })
-      .setTimestamp();
-    return await interaction.editReply({ embeds: [embed] });
-  }
-}
 function createCandidateEmbed(row) {
   const cut = (s, n) => (String(s || '').length > n ? s.slice(0, n - 3) + '...' : s || '-');
   return new EmbedBuilder()
@@ -339,40 +229,8 @@ const commands = [
     .setDescription('ตรวจสอบสุขภาพของระบบ (PostgreSQL, n8n, Bluesky, Dev.to, Gemini AI)'),
 
   new SlashCommandBuilder()
-    .setName('set-gemini-key')
-    .setDescription('ตั้งค่าหรืออัปเดต GEMINI_API_KEY สำหรับ AI Pipeline')
-    .addStringOption(option =>
-      option.setName('key')
-        .setDescription('ค่า Gemini API Key (หากเว้นว่างไว้จะมีหน้าต่างป๊อปอัปให้วาง)')
-        .setRequired(false)
-    ),
-
-  new SlashCommandBuilder()
-    .setName('set-gemini-model')
-    .setDescription('ตั้งค่าหรือเปลี่ยนรุ่น GEMINI_MODEL สำหรับ AI Pipeline')
-    .addStringOption(option =>
-      option.setName('model')
-        .setDescription('ชื่อโมเดล เช่น gemini-3.8-flash, gemini-3.5-flash-lite, gemini-2.5-pro')
-        .setRequired(true)
-    ),
-
-  new SlashCommandBuilder()
     .setName('set-devto-cookie')
-    .setDescription('ตั้งค่าหรืออัปเดต DEVTO_COOKIE สำหรับโพสต์คอมเมนต์บน Dev.to')
-    .addStringOption(option =>
-      option.setName('cookie')
-        .setDescription('ค่า Cookie ของ Dev.to (หากเว้นว่างไว้จะมีหน้าต่างป๊อปอัปให้วาง)')
-        .setRequired(false)
-    ),
-
-  new SlashCommandBuilder()
-    .setName('set-cookie')
-    .setDescription('ตั้งค่า DEVTO_COOKIE (ป๊อปอัปหรือระบุค่าโดยตรง)')
-    .addStringOption(option =>
-      option.setName('cookie')
-        .setDescription('ค่า Cookie ของ Dev.to')
-        .setRequired(false)
-    ),
+    .setDescription('ตั้งค่าหรืออัปเดต DEVTO_COOKIE สำหรับโพสต์คอมเมนต์บน Dev.to (เปิดหน้าต่างกรอก)'),
 
   new SlashCommandBuilder()
     .setName('set-channel')
@@ -883,6 +741,8 @@ async function handleCommand(interaction, { pool, client }) {
           value TEXT,
           updated_at TIMESTAMPTZ DEFAULT NOW()
         );
+      `);
+      await pool.query(`
         INSERT INTO bot_settings (key, value, updated_at)
         VALUES ('DISCORD_ADMIN_IDS', $1, NOW())
         ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW();
@@ -913,6 +773,8 @@ async function handleCommand(interaction, { pool, client }) {
           value TEXT,
           updated_at TIMESTAMPTZ DEFAULT NOW()
         );
+      `);
+      await pool.query(`
         INSERT INTO bot_settings (key, value, updated_at)
         VALUES ('DISCORD_CHANNEL_ID', $1, NOW())
         ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW();
@@ -939,57 +801,21 @@ async function handleCommand(interaction, { pool, client }) {
     }
   }
 
-  // คำสั่ง /set-gemini-key
-  if (commandName === 'set-gemini-key') {
-    const rawKey = interaction.options.getString('key');
-    if (!rawKey) {
-      const modal = new ModalBuilder()
-        .setCustomId('modal_gemini_key')
-        .setTitle('ตั้งค่า GEMINI_API_KEY');
+  // คำสั่ง /set-devto-cookie (เปิด Modal ให้กรอกอย่างปลอดภัย ไม่แสดงค่าในแชท)
+  if (commandName === 'set-devto-cookie') {
+    const modal = new ModalBuilder()
+      .setCustomId('modal_devto_cookie')
+      .setTitle('ตั้งค่า DEVTO_COOKIE');
 
-      const keyInput = new TextInputBuilder()
-        .setCustomId('key_value')
-        .setLabel('Gemini API Key')
-        .setPlaceholder('วางค่า Gemini API Key ที่นี่...')
-        .setStyle(TextInputStyle.Short)
-        .setRequired(true);
+    const cookieInput = new TextInputBuilder()
+      .setCustomId('cookie_value')
+      .setLabel('Dev.to Cookie')
+      .setPlaceholder('วาง Cookie ทั้งหมด หรือ remember_user_token=...')
+      .setStyle(TextInputStyle.Paragraph)
+      .setRequired(true);
 
-      modal.addComponents(new ActionRowBuilder().addComponents(keyInput));
-      return await interaction.showModal(modal);
-    }
-
-    await interaction.deferReply({ ephemeral: true });
-    return await saveAndVerifyGeminiKey(interaction, rawKey, pool);
-  }
-
-  // คำสั่ง /set-gemini-model
-  if (commandName === 'set-gemini-model') {
-    const model = interaction.options.getString('model');
-    await interaction.deferReply({ ephemeral: true });
-    return await saveAndVerifyGeminiModel(interaction, model, pool);
-  }
-
-  // คำสั่ง /set-devto-cookie และ /set-cookie
-  if (commandName === 'set-devto-cookie' || commandName === 'set-cookie') {
-    const rawCookie = interaction.options.getString('cookie');
-    if (!rawCookie) {
-      const modal = new ModalBuilder()
-        .setCustomId('modal_devto_cookie')
-        .setTitle('ตั้งค่า DEVTO_COOKIE');
-
-      const cookieInput = new TextInputBuilder()
-        .setCustomId('cookie_value')
-        .setLabel('Dev.to Cookie')
-        .setPlaceholder('วาง Cookie ทั้งหมด หรือ remember_user_token=...')
-        .setStyle(TextInputStyle.Paragraph)
-        .setRequired(true);
-
-      modal.addComponents(new ActionRowBuilder().addComponents(cookieInput));
-      return await interaction.showModal(modal);
-    }
-
-    await interaction.deferReply({ ephemeral: true });
-    return await saveAndVerifyDevtoCookie(interaction, rawCookie, pool);
+    modal.addComponents(new ActionRowBuilder().addComponents(cookieInput));
+    return await interaction.showModal(modal);
   }
 
   // คำสั่ง /answer (ส่งคำถามกระทู้ให้ AI ช่วยตอบ)
@@ -1034,11 +860,11 @@ async function handleCommand(interaction, { pool, client }) {
         { name: '`/status`', value: 'ดูสรุปสถิติจำนวนรายการในแต่ละสถานะ' },
         { name: '`/pending [limit]`', value: 'ดึงรายการที่รอรีวิวขึ้นมาพร้อมปุ่ม Approve / Edit / Reject' },
         { name: '`/run`', value: 'สั่งเริ่มกระบวนการค้นหา Backlink ใน n8n ทันที' },
+        { name: '`/request-idea`', value: 'ขอไอเดียโซลูชันใหม่จาก Flow 1' },
         { name: '`/answer <platform>`', value: 'ส่งลิงก์กระทู้และคำถามจาก Pantip, Blognone, Blockdit, Facebook ให้ AI ช่วยร่างคำตอบ' },
-        { name: '`/set-gemini-key [key]`', value: 'อัปเดต Gemini API Key (มี Modal ป๊อปอัป)' },
-        { name: '`/set-gemini-model <model>`', value: 'เปลี่ยนรุ่น Gemini Model (เช่น gemini-3.8-flash)' },
-        { name: '`/set-devto-cookie [cookie]`', value: 'อัปเดต Cookie ของ Dev.to ผ่าน Discord (มี Modal ให้วาง)' },
+        { name: '`/set-devto-cookie`', value: 'อัปเดต Cookie ของ Dev.to สำหรับโพสต์คอมเมนต์ (เปิด Modal กรอกข้อมูล)' },
         { name: '`/set-channel [channel]`', value: 'ตั้งค่าห้องรับการแจ้งเตือน Candidates (เดินไปพิมพ์ในห้องที่ต้องการได้เลย)' },
+        { name: '`/set-admin-ids <ids>`', value: 'ตั้งค่า Discord User IDs ที่มีสิทธิ์อนุมัติ/เผยแพร่ (คั่นด้วย comma)' },
         { name: '`/health`', value: 'ตรวจสอบสถานะการเชื่อมต่อ (DB, n8n, Bluesky, Dev.to, Gemini, Channel)' },
         { name: '`/ping`', value: 'ทดสอบความเร็วและการเชื่อมต่อของบอท' }
       )
@@ -1056,6 +882,5 @@ module.exports = {
   createActionButtons,
   normalizeDevtoCookie,
   saveAndVerifyDevtoCookie,
-  saveAndVerifyGeminiKey,
-  saveAndVerifyGeminiModel
+  verifyGemini
 };
