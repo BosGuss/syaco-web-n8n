@@ -163,14 +163,11 @@ function buildSyacoPayload(item, orderNumber) {
 
 async function getNextSequentialOrder({
   fetchFn = globalThis.fetch,
-  apiUrl = process.env.SYACO_API_URL || 'https://www.syaco.co.th/api/solutions',
-  token = process.env.SYACO_API_TOKEN || 'sya_perm_79279d93e026ed7638b9065af33c5b78bff1c5fdfd62e3ecbf12a707bcd97b71'
+  apiUrl = process.env.SYACO_API_URL || 'https://www.syaco.co.th/api/solutions'
 } = {}) {
   try {
-    const listUrl = apiUrl.includes('?') ? `${apiUrl}&all=true` : `${apiUrl}?all=true`;
-    const res = await fetchFn(listUrl, {
+    const res = await fetchFn(apiUrl, {
       method: 'GET',
-      headers: { 'Authorization': `Bearer ${token}` },
       signal: AbortSignal.timeout(8000)
     });
     if (res && res.ok) {
@@ -194,7 +191,7 @@ async function approveAndCreateDraft({
   pool,
   fetchFn = globalThis.fetch,
   apiUrl = process.env.SYACO_API_URL || 'https://www.syaco.co.th/api/solutions',
-  token = process.env.SYACO_API_TOKEN || 'sya_perm_79279d93e026ed7638b9065af33c5b78bff1c5fdfd62e3ecbf12a707bcd97b71'
+  token = process.env.SYACO_API_TOKEN
 }) {
   const suggestionId = parseInt(id, 10);
   if (isNaN(suggestionId)) {

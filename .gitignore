@@ -1,9 +1,19 @@
+# Secrets & Local Environment
 .env
+
+# Docker runtime volumes & databases
 n8n_data/
 pgdata/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
 *.log
-*.py
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Temporary tool data
 .superpowers/
+

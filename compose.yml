@@ -164,7 +164,7 @@ services:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.5-flash-lite}
       - SYACO_API_URL=${SYACO_API_URL:-https://www.syaco.co.th/api/solutions}
-      - SYACO_API_TOKEN=${SYACO_API_TOKEN:-sya_perm_79279d93e026ed7638b9065af33c5b78bff1c5fdfd62e3ecbf12a707bcd97b71}
+      - SYACO_API_TOKEN=${SYACO_API_TOKEN}
     volumes:
       - ./.env:/app/.env
     depends_on:

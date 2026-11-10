@@ -30,7 +30,8 @@ files.forEach(file => {
 });
 
 if (hasError) {
-  console.log('\nFound broken node references!');
+  console.error('\n❌ Found broken node references!');
+  process.exit(1);
 } else {
-  console.log('\nAll node references are valid!');
+  console.log('\n✅ All node references are valid!');
 }

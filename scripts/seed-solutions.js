@@ -42,11 +42,7 @@ async function getPool() {
 async function seed() {
   const pool = await getPool();
   console.log('Fetching existing solutions from SyaCo API...');
-  const res = await fetch('https://www.syaco.co.th/api/solutions?all=true', {
-    headers: {
-      Authorization: `Bearer ${process.env.SYACO_API_TOKEN || 'sya_perm_79279d93e026ed7638b9065af33c5b78bff1c5fdfd62e3ecbf12a707bcd97b71'}`
-    }
-  });
+  const res = await fetch('https://www.syaco.co.th/api/solutions');
   if (!res.ok) throw new Error(`API error: ${res.status} ${res.statusText}`);
   const solutions = await res.json();
   console.log(`Found ${solutions.length} existing solutions. Seeding into processed_solutions...`);
