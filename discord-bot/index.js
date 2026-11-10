@@ -212,6 +212,29 @@ const {
   saveAndVerifyGeminiModel
 } = require('./commands');
 
+// Admin Allowlist Helpers
+function getAdminIds() {
+  const raw = process.env.DISCORD_ADMIN_IDS || '';
+  return raw
+    .split(/[,;\s]+/)
+    .map(id => id.trim())
+    .filter(Boolean);
+}
+
+function isAuthorizedAdmin(user) {
+  const adminIds = getAdminIds();
+  if (adminIds.length > 0) {
+    return adminIds.includes(String(user?.id || ''));
+  }
+  return true;
+}
+
+function formatReviewedBy(user) {
+  if (!user) return 'system';
+  const name = user.tag || user.username || 'unknown';
+  return `${name} (${user.id})`;
+}
+
 async function loadBotSettings() {
   try {
     await pool.query(`
@@ -221,7 +244,7 @@ async function loadBotSettings() {
         updated_at TIMESTAMPTZ DEFAULT NOW()
       )
     `);
-    const { rows } = await pool.query("SELECT key, value FROM bot_settings WHERE key IN ('DEVTO_COOKIE', 'GEMINI_API_KEY', 'GEMINI_MODEL', 'DISCORD_CHANNEL_ID')");
+    const { rows } = await pool.query("SELECT key, value FROM bot_settings WHERE key IN ('DEVTO_COOKIE', 'GEMINI_API_KEY', 'GEMINI_MODEL', 'DISCORD_CHANNEL_ID', 'DISCORD_ADMIN_IDS')");
     for (const r of rows) {
       if (r.value) {
         process.env[r.key] = r.value;
@@ -281,14 +304,22 @@ client.on('interactionCreate', async (interaction) => {
     }
 
     if (interaction.isButton()) {
+      if (!isAuthorizedAdmin(interaction.user)) {
+        return await interaction.reply({
+          content: `⛔ **ไม่มีสิทธิ์ดำเนินการ:** เฉพาะผู้ดูแลระบบที่ระบุใน \`DISCORD_ADMIN_IDS\` เท่านั้นที่สามารถกดปุ่มนี้ได้ (ID ของคุณ: \`${interaction.user.id}\`)`,
+          ephemeral: true
+        });
+      }
+
       if (interaction.customId.startsWith('flow1_approve_')) {
         const id = interaction.customId.replace('flow1_approve_', '');
         await interaction.deferUpdate();
         try {
-          const result = await approveAndCreateDraft({ id, pool });
+          const reviewedBy = formatReviewedBy(interaction.user);
+          const result = await approveAndCreateDraft({ id, pool, reviewedBy });
           if (result.success) {
             await interaction.editReply({
-              content: `✅ **อนุมัติและสร้าง Draft บน syaco.co.th สำเร็จ!** (Solution ID: \`${result.solutionId}\`)\n🔗 https://www.syaco.co.th/solutions (Draft Mode)\nทีมงานสามารถตรวจสอบและใส่ตัวอย่างเพิ่มเติมได้ในระบบหลังบ้าน`,
+              content: `✅ **อนุมัติและสร้าง Draft บน syaco.co.th สำเร็จ!** (Solution ID: \`${result.solutionId}\`)\n👤 **อนุมัติโดย:** \`${reviewedBy}\`\n🔗 https://www.syaco.co.th/solutions (Draft Mode)\nทีมงานสามารถตรวจสอบและใส่ตัวอย่างเพิ่มเติมได้ในระบบหลังบ้าน`,
               components: []
             });
           } else {
@@ -308,12 +339,13 @@ client.on('interactionCreate', async (interaction) => {
 
       if (interaction.customId.startsWith('flow1_reject_')) {
         const id = interaction.customId.replace('flow1_reject_', '');
+        const reviewedBy = formatReviewedBy(interaction.user);
         await pool.query(
-          "UPDATE solution_suggestions SET status = 'rejected', reviewed_at = NOW() WHERE id = $1",
-          [parseInt(id)]
+          "UPDATE solution_suggestions SET status = 'rejected', reviewed_at = NOW(), reviewed_by = $2 WHERE id = $1",
+          [parseInt(id), reviewedBy]
         );
         await interaction.update({
-          content: `❌ **ปฏิเสธไอเดียโซลูชันนี้แล้ว** (ID: #${id})`,
+          content: `❌ **ปฏิเสธไอเดียโซลูชันนี้แล้ว** (ID: #${id})\n👤 **ปฏิเสธโดย:** \`${reviewedBy}\``,
           components: []
         });
         return;
@@ -323,15 +355,17 @@ client.on('interactionCreate', async (interaction) => {
         const id = interaction.customId.replace('flow2_publish_', '');
         await interaction.deferUpdate();
         try {
+          const reviewedBy = formatReviewedBy(interaction.user);
           const result = await publishDraft({
             id: parseInt(id),
             pool,
             client,
-            channelId: interaction.channelId
+            channelId: interaction.channelId,
+            reviewedBy
           });
           if (result.success) {
             await interaction.editReply({
-              content: `🚀 **เผยแพร่โพสต์สำเร็จ!** (${(result.platform || 'Platform').toUpperCase()})\n🔗 ${result.postedUrl ? `[ดูโพสต์ที่เผยแพร่แล้ว](${result.postedUrl})` : 'พร้อมเผยแพร่แล้ว'}`,
+              content: `🚀 **เผยแพร่โพสต์สำเร็จ!** (${(result.platform || 'Platform').toUpperCase()})\n👤 **เผยแพร่โดย:** \`${reviewedBy}\`\n🔗 ${result.postedUrl ? `[ดูโพสต์ที่เผยแพร่แล้ว](${result.postedUrl})` : 'พร้อมเผยแพร่แล้ว'}`,
               components: []
             });
           } else {
@@ -351,9 +385,10 @@ client.on('interactionCreate', async (interaction) => {
 
       if (interaction.customId.startsWith('flow2_reject_')) {
         const id = interaction.customId.replace('flow2_reject_', '');
-        await rejectDraft({ id: parseInt(id), pool });
+        const reviewedBy = formatReviewedBy(interaction.user);
+        await rejectDraft({ id: parseInt(id), pool, reviewedBy });
         await interaction.update({
-          content: `❌ **ปฏิเสธ Draft นี้แล้ว** (ID: #${id})`,
+          content: `❌ **ปฏิเสธ Draft นี้แล้ว** (ID: #${id})\n👤 **ปฏิเสธโดย:** \`${reviewedBy}\``,
           components: []
         });
         return;
@@ -383,15 +418,16 @@ client.on('interactionCreate', async (interaction) => {
 
       if (interaction.customId.startsWith('markposted_')) {
         const candidateId = interaction.customId.replace('markposted_', '');
+        const reviewedBy = formatReviewedBy(interaction.user);
         const { rows } = await pool.query(
-          "UPDATE backlink_candidates SET status = 'posted', posted_at = NOW() WHERE id::text = $1 AND status = 'manual' RETURNING *",
-          [candidateId]
+          "UPDATE backlink_candidates SET status = 'posted', posted_at = NOW(), reviewed_at = NOW(), reviewed_by = $2 WHERE id::text = $1 AND status = 'manual' RETURNING *",
+          [candidateId, reviewedBy]
         );
         if (!rows.length) {
           return await interaction.reply({ content: 'รายการนี้ไม่อยู่ในสถานะ Manual หรือได้รับการอัปเดตไปแล้ว', ephemeral: true });
         }
         return await interaction.update({
-          content: `🎉 **บันทึกสถานะเรียบร้อย:** โพสต์คำตอบในกระทู้สำเร็จแล้ว (${rows[0].platform})\n🔗 [เปิดกระทู้](${rows[0].post_url})`,
+          content: `🎉 **บันทึกสถานะเรียบร้อย:** โพสต์คำตอบในกระทู้สำเร็จแล้ว (${rows[0].platform})\n👤 **บันทึกโดย:** \`${reviewedBy}\`\n🔗 [เปิดกระทู้](${rows[0].post_url})`,
           components: [],
         });
       }
@@ -399,12 +435,13 @@ client.on('interactionCreate', async (interaction) => {
       const [action, candidateId] = interaction.customId.split('_');
 
       if (action === 'reject') {
+        const reviewedBy = formatReviewedBy(interaction.user);
         await pool.query(
-          "UPDATE backlink_candidates SET status = 'rejected', reviewed_at = NOW() WHERE id::text = $1",
-          [candidateId]
+          "UPDATE backlink_candidates SET status = 'rejected', reviewed_at = NOW(), reviewed_by = $2 WHERE id::text = $1",
+          [candidateId, reviewedBy]
         );
         await interaction.update({
-          content: '❌ **Candidate Rejected**',
+          content: `❌ **Candidate Rejected**\n👤 **ปฏิเสธโดย:** \`${reviewedBy}\``,
           components: [],
         });
         return;
@@ -436,6 +473,12 @@ client.on('interactionCreate', async (interaction) => {
     }
 
     if (interaction.isModalSubmit()) {
+      if (!isAuthorizedAdmin(interaction.user)) {
+        return await interaction.reply({
+          content: `⛔ **ไม่มีสิทธิ์ดำเนินการ:** เฉพาะผู้ดูแลระบบที่ระบุใน \`DISCORD_ADMIN_IDS\` เท่านั้นที่สามารถส่งข้อมูลนี้ได้ (ID ของคุณ: \`${interaction.user.id}\`)`,
+          ephemeral: true
+        });
+      }
       if (interaction.customId === 'modal_devto_cookie') {
         const rawCookie = interaction.fields.getTextInputValue('cookie_value');
         await interaction.deferReply({ ephemeral: true });
@@ -485,10 +528,11 @@ client.on('interactionCreate', async (interaction) => {
 
       const candidateId = interaction.customId.replace('modal_', '');
       const newAnswer = interaction.fields.getTextInputValue('edited_answer').trim();
+      const reviewedBy = formatReviewedBy(interaction.user);
 
       const { rows } = await pool.query(
-        'UPDATE backlink_candidates SET answer = $1 WHERE id::text = $2 RETURNING *',
-        [newAnswer, candidateId]
+        'UPDATE backlink_candidates SET answer = $1, reviewed_at = NOW(), reviewed_by = $3 WHERE id::text = $2 RETURNING *',
+        [newAnswer, candidateId, reviewedBy]
       );
 
       if (!rows.length) {
@@ -499,7 +543,7 @@ client.on('interactionCreate', async (interaction) => {
       const actionRow = createActionButtons(rows[0].id);
 
       await interaction.update({
-        content: '✏️ **Draft Answer Updated!** (Press **Approve** when ready to post)',
+        content: `✏️ **Draft Answer Updated!** (แก้ไขโดย \`${reviewedBy}\` — กด **Approve** เมื่อพร้อมโพสต์)`,
         embeds: [updatedEmbed],
         components: [actionRow],
       });
@@ -525,23 +569,24 @@ async function handleApproval(interaction, candidateId, overrideAnswer = null) {
 
   const row = rows[0];
   const finalAnswer = overrideAnswer || row.answer;
+  const reviewedBy = formatReviewedBy(interaction.user);
 
   if (row.platform === 'bluesky') {
     try {
       const postedUrl = await postToBluesky(row.post_url, finalAnswer);
       await pool.query(
-        "UPDATE backlink_candidates SET status = 'posted', answer = $1, posted_url = $2, posted_at = NOW(), reviewed_at = NOW() WHERE id::text = $3",
-        [finalAnswer, postedUrl, candidateId]
+        "UPDATE backlink_candidates SET status = 'posted', answer = $1, posted_url = $2, posted_at = NOW(), reviewed_at = NOW(), reviewed_by = $4 WHERE id::text = $3",
+        [finalAnswer, postedUrl, candidateId, reviewedBy]
       );
 
       await interaction.editReply({
-        content: `✅ **Posted to Bluesky!**\n🔗 [Open Reply](${postedUrl})`,
+        content: `✅ **Posted to Bluesky!**\n👤 **อนุมัติโดย:** \`${reviewedBy}\`\n🔗 [Open Reply](${postedUrl})`,
         components: [],
       });
     } catch (postError) {
       await pool.query(
-        "UPDATE backlink_candidates SET status = 'failed', error_message = $1 WHERE id::text = $2",
-        [postError.message, candidateId]
+        "UPDATE backlink_candidates SET status = 'failed', error_message = $1, reviewed_at = NOW(), reviewed_by = $3 WHERE id::text = $2",
+        [postError.message, candidateId, reviewedBy]
       );
       await interaction.editReply({
         content: `⚠️ **Posting failed:** ${postError.message}\nYou can post manually below:`,
@@ -556,18 +601,18 @@ async function handleApproval(interaction, candidateId, overrideAnswer = null) {
     try {
       const postedUrl = await postToDevTo(row.post_url, finalAnswer);
       await pool.query(
-        "UPDATE backlink_candidates SET status = 'posted', answer = $1, posted_url = $2, posted_at = NOW(), reviewed_at = NOW() WHERE id::text = $3",
-        [finalAnswer, postedUrl, candidateId]
+        "UPDATE backlink_candidates SET status = 'posted', answer = $1, posted_url = $2, posted_at = NOW(), reviewed_at = NOW(), reviewed_by = $4 WHERE id::text = $3",
+        [finalAnswer, postedUrl, candidateId, reviewedBy]
       );
 
       await interaction.editReply({
-        content: `✅ **Posted to Dev.to!**\n🔗 [Open Comment](${postedUrl})`,
+        content: `✅ **Posted to Dev.to!**\n👤 **อนุมัติโดย:** \`${reviewedBy}\`\n🔗 [Open Comment](${postedUrl})`,
         components: [],
       });
     } catch (postError) {
       await pool.query(
-        "UPDATE backlink_candidates SET status = 'failed', error_message = $1 WHERE id::text = $2",
-        [postError.message, candidateId]
+        "UPDATE backlink_candidates SET status = 'failed', error_message = $1, reviewed_at = NOW(), reviewed_by = $3 WHERE id::text = $2",
+        [postError.message, candidateId, reviewedBy]
       );
       await interaction.editReply({
         content: `⚠️ **Dev.to posting failed:** ${postError.message}\nYou can post manually below:`,
@@ -581,8 +626,8 @@ async function handleApproval(interaction, candidateId, overrideAnswer = null) {
   } else {
     // Reddit, Pantip, Blognone, Blockdit, Facebook -> Manual Workflow
     await pool.query(
-      "UPDATE backlink_candidates SET status = 'manual', answer = $1, reviewed_at = NOW() WHERE id::text = $2",
-      [finalAnswer, candidateId]
+      "UPDATE backlink_candidates SET status = 'manual', answer = $1, reviewed_at = NOW(), reviewed_by = $3 WHERE id::text = $2",
+      [finalAnswer, candidateId, reviewedBy]
     );
 
     const markPostedRow = new ActionRowBuilder().addComponents(
@@ -593,7 +638,7 @@ async function handleApproval(interaction, candidateId, overrideAnswer = null) {
     );
 
     await interaction.editReply({
-      content: `📋 **Approved for Manual Posting** (${row.platform})\nThread: ${row.post_url}\n\n**นำข้อความด้านล่างไปตอบในกระทู้ด้วยตนเอง เมื่อเสร็จแล้วกดปุ่ม "Mark as Posted":**`,
+      content: `📋 **Approved for Manual Posting** (${row.platform})\n👤 **อนุมัติโดย:** \`${reviewedBy}\`\nThread: ${row.post_url}\n\n**นำข้อความด้านล่างไปตอบในกระทู้ด้วยตนเอง เมื่อเสร็จแล้วกดปุ่ม "Mark as Posted":**`,
       components: [markPostedRow],
     });
     await interaction.followUp({

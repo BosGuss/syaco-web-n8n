@@ -191,7 +191,8 @@ async function approveAndCreateDraft({
   pool,
   fetchFn = globalThis.fetch,
   apiUrl = process.env.SYACO_API_URL || 'https://www.syaco.co.th/api/solutions',
-  token = process.env.SYACO_API_TOKEN
+  token = process.env.SYACO_API_TOKEN,
+  reviewedBy = null
 }) {
   const suggestionId = parseInt(id, 10);
   if (isNaN(suggestionId)) {
@@ -203,10 +204,10 @@ async function approveAndCreateDraft({
   try {
     lockRes = await pool.query(
       `UPDATE solution_suggestions
-       SET status = 'publishing', reviewed_at = NOW(), error_message = NULL
+       SET status = 'publishing', reviewed_at = NOW(), reviewed_by = COALESCE($2, reviewed_by), error_message = NULL
        WHERE id = $1 AND status IN ('pending_review', 'failed')
        RETURNING *;`,
-      [suggestionId]
+      [suggestionId, reviewedBy]
     );
   } catch (dbErr) {
     return { success: false, code: 'DB_ERROR', message: `Database error: ${dbErr.message}` };
@@ -283,9 +284,9 @@ async function approveAndCreateDraft({
     // 4. Update Postgres status to 'published_as_draft'
     await pool.query(
       `UPDATE solution_suggestions
-       SET status = 'published_as_draft', published_solution_id = $1, published_at = NOW(), error_message = NULL
+       SET status = 'published_as_draft', published_solution_id = $1, published_at = NOW(), reviewed_by = COALESCE($3, reviewed_by), error_message = NULL
        WHERE id = $2;`,
-      [String(resData.id), item.id]
+      [String(resData.id), item.id, reviewedBy]
     );
 
     return {

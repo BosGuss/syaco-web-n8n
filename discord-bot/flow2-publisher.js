@@ -138,7 +138,8 @@ async function publishDraft({
   fetchFn = globalThis.fetch,
   client = null,
   channelId = null,
-  config = {}
+  config = {},
+  reviewedBy = null
 }) {
   const draftId = parseInt(id, 10);
   if (isNaN(draftId)) {
@@ -150,10 +151,10 @@ async function publishDraft({
   try {
     lockRes = await pool.query(
       `UPDATE content_drafts
-       SET status = 'publishing', error_message = NULL
+       SET status = 'publishing', reviewed_at = NOW(), reviewed_by = COALESCE($2, reviewed_by), error_message = NULL
        WHERE id = $1 AND status IN ('pending_review', 'failed')
        RETURNING *;`,
-      [draftId]
+      [draftId, reviewedBy]
     );
   } catch (dbErr) {
     return { success: false, code: 'DB_ERROR', message: `Database error: ${dbErr.message}` };
@@ -205,8 +206,8 @@ async function publishDraft({
       }
 
       await pool.query(
-        "UPDATE content_drafts SET status = 'ready_to_post', posted_at = NOW(), error_message = NULL WHERE id = $1",
-        [draft.id]
+        "UPDATE content_drafts SET status = 'ready_to_post', posted_at = NOW(), reviewed_at = NOW(), reviewed_by = COALESCE($2, reviewed_by), error_message = NULL WHERE id = $1",
+        [draft.id, reviewedBy]
       );
 
       return {
@@ -222,9 +223,9 @@ async function publishDraft({
     // Update DB to posted
     await pool.query(
       `UPDATE content_drafts
-       SET status = 'posted', posted_url = $1, posted_at = NOW(), error_message = NULL
+       SET status = 'posted', posted_url = $1, posted_at = NOW(), reviewed_at = NOW(), reviewed_by = COALESCE($3, reviewed_by), error_message = NULL
        WHERE id = $2;`,
-      [result.postedUrl, draft.id]
+      [result.postedUrl, draft.id, reviewedBy]
     );
 
     return {
@@ -250,15 +251,15 @@ async function publishDraft({
   }
 }
 
-async function rejectDraft({ id, pool }) {
+async function rejectDraft({ id, pool, reviewedBy = null }) {
   const draftId = parseInt(id, 10);
   if (isNaN(draftId)) {
     return { success: false, code: 'INVALID_ID', message: 'ID ไม่ถูกต้อง' };
   }
 
   await pool.query(
-    "UPDATE content_drafts SET status = 'rejected' WHERE id = $1",
-    [draftId]
+    "UPDATE content_drafts SET status = 'rejected', reviewed_at = NOW(), reviewed_by = COALESCE($2, reviewed_by) WHERE id = $1",
+    [draftId, reviewedBy]
   );
 
   return { success: true, id: draftId };

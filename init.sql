@@ -20,7 +20,8 @@ CREATE TABLE IF NOT EXISTS solution_suggestions (
   error_message TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   reviewed_at TIMESTAMPTZ,
-  published_at TIMESTAMPTZ
+  published_at TIMESTAMPTZ,
+  reviewed_by TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_solution_suggestions_status ON solution_suggestions (status, created_at DESC);
@@ -54,6 +55,8 @@ CREATE TABLE IF NOT EXISTS content_drafts (
   error_message TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   posted_at TIMESTAMPTZ,
+  reviewed_at TIMESTAMPTZ,
+  reviewed_by TEXT,
   CONSTRAINT uq_solution_platform UNIQUE (solution_id, platform)
 );
 
@@ -90,7 +93,8 @@ CREATE TABLE IF NOT EXISTS backlink_candidates (
 
   created_at       timestamptz NOT NULL DEFAULT now(),
   reviewed_at      timestamptz,
-  posted_at        timestamptz
+  posted_at        timestamptz,
+  reviewed_by      text
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS backlink_candidates_post_url_key ON backlink_candidates (post_url);

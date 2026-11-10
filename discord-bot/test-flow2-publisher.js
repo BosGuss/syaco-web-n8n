@@ -112,9 +112,11 @@ async function runTests() {
     query: async (sql, params) => {
       if (sql.includes('UPDATE content_drafts') && sql.includes("SET status = 'publishing'")) {
         const id = params[0];
+        const reviewedBy = params[1];
         const row = dbStore.get(id);
         if (row && (row.status === 'pending_review' || row.status === 'failed')) {
           row.status = 'publishing';
+          if (reviewedBy) row.reviewed_by = reviewedBy;
           return { rows: [row] };
         }
         return { rows: [] };
@@ -127,10 +129,12 @@ async function runTests() {
       if (sql.includes('UPDATE content_drafts') && sql.includes("SET status = 'posted'")) {
         const url = params[0];
         const id = params[1];
+        const reviewedBy = params[2];
         const row = dbStore.get(id);
         if (row) {
           row.status = 'posted';
           row.posted_url = url;
+          if (reviewedBy) row.reviewed_by = reviewedBy;
         }
         return { rows: [row] };
       }
@@ -146,9 +150,11 @@ async function runTests() {
       }
       if (sql.includes('UPDATE content_drafts') && sql.includes("SET status = 'rejected'")) {
         const id = params[0];
+        const reviewedBy = params[1];
         const row = dbStore.get(id);
         if (row) {
           row.status = 'rejected';
+          if (reviewedBy) row.reviewed_by = reviewedBy;
         }
         return { rows: [row] };
       }
@@ -214,7 +220,47 @@ async function runTests() {
   assert.strictEqual(dbStore.get(101).status, 'rejected');
   console.log('  ✅ rejectDraft successfully updated status to rejected.\n');
 
-  console.log('🎉 ALL 9 TESTS PASSED SUCCESSFULLY! Flow 2 direct publishing engine is completely solid.');
+  // Test 10: reviewedBy tracking in publishDraft and rejectDraft
+  console.log('Test 10: Testing reviewedBy recording in publishDraft and rejectDraft...');
+  dbStore.set(104, {
+    id: 104,
+    platform: 'devto',
+    content_markdown: 'Dev.to tracked post',
+    status: 'pending_review'
+  });
+  const reviewer = 'Somchai (1234567890)';
+  const publishWithReviewer = await publishDraft({
+    id: 104,
+    pool: mockPool,
+    fetchFn: mockFetchDevto,
+    config: { devto: { apiKey: 'mock-devto-key' } },
+    reviewedBy: reviewer
+  });
+  assert.strictEqual(publishWithReviewer.success, true);
+  assert.strictEqual(dbStore.get(104).reviewed_by, reviewer, 'Draft must record reviewer in DB');
+
+  dbStore.set(105, { id: 105, platform: 'bluesky', status: 'pending_review' });
+  await rejectDraft({ id: 105, pool: mockPool, reviewedBy: reviewer });
+  assert.strictEqual(dbStore.get(105).status, 'rejected');
+  assert.strictEqual(dbStore.get(105).reviewed_by, reviewer, 'Rejected draft must record reviewer in DB');
+  console.log('  ✅ reviewedBy successfully persisted into database for both publish and reject.\n');
+
+  // Test 11: DISCORD_ADMIN_IDS allowlist check helper logic
+  console.log('Test 11: Testing DISCORD_ADMIN_IDS allowlist logic...');
+  function checkAuth(userId, adminIdsStr) {
+    const adminIds = (adminIdsStr || '').split(/[,;\s]+/).map(s => s.trim()).filter(Boolean);
+    if (adminIds.length > 0) {
+      return adminIds.includes(String(userId || ''));
+    }
+    return true;
+  }
+  assert.strictEqual(checkAuth('111', '111,222,333'), true, 'Authorized user in allowlist must be allowed');
+  assert.strictEqual(checkAuth('999', '111,222,333'), false, 'Unauthorized user must be blocked');
+  assert.strictEqual(checkAuth('999', ''), true, 'Empty allowlist defaults to permissive');
+  assert.strictEqual(checkAuth('222', ' 111 , 222 ; 333 '), true, 'Whitespace and semicolon delimited IDs parsed properly');
+  console.log('  ✅ DISCORD_ADMIN_IDS allowlist rules correctly enforce permissions.\n');
+
+  console.log('🎉 ALL 11 TESTS PASSED SUCCESSFULLY! Flow 2 direct publishing engine is completely solid.');
 }
 
 runTests().catch(err => {

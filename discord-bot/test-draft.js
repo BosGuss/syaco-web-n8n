@@ -80,9 +80,11 @@ async function runTests() {
     query: async (sql, params) => {
       if (sql.includes('UPDATE solution_suggestions') && sql.includes("SET status = 'publishing'")) {
         const id = params[0];
+        const reviewedBy = params[1];
         const row = dbStore.get(id);
         if (row && (row.status === 'pending_review' || row.status === 'failed')) {
           row.status = 'publishing';
+          if (reviewedBy) row.reviewed_by = reviewedBy;
           return { rows: [row] };
         }
         return { rows: [] };
@@ -95,10 +97,12 @@ async function runTests() {
       if (sql.includes('UPDATE solution_suggestions') && sql.includes("SET status = 'published_as_draft'")) {
         const pubId = params[0];
         const id = params[1];
+        const reviewedBy = params[2];
         const row = dbStore.get(id);
         if (row) {
           row.status = 'published_as_draft';
           row.published_solution_id = pubId;
+          if (reviewedBy) row.reviewed_by = reviewedBy;
         }
         return { rows: [row] };
       }
@@ -227,7 +231,28 @@ async function runTests() {
   assert.strictEqual(payloadWithOrder.order, 11, 'Payload order must match sequential order');
   console.log('  ✅ Sequential order successfully calculated (10 -> 11).\n');
 
-  console.log('🎉 ALL 7 TESTS PASSED SUCCESSFULLY! The Discord Bot approval/draft engine is completely solid.');
+  // Test 8: reviewedBy tracking on approveAndCreateDraft
+  console.log('Test 8: Testing reviewedBy recording in approveAndCreateDraft...');
+  shouldNetworkFail = false;
+  mockStatus = 201;
+  mockBody = { id: 999, titleEn: 'Tracked Platform', isPublished: false };
+  dbStore.set(4, { ...sampleItem, id: 4, status: 'pending_review' });
+
+  const adminReviewer = 'Alice (1122334455)';
+  const resultReviewer = await approveAndCreateDraft({
+    id: 4,
+    pool: mockPool,
+    fetchFn: mockFetch,
+    apiUrl: 'https://mock.syaco.local/api/solutions',
+    token: 'test-secret-token',
+    reviewedBy: adminReviewer
+  });
+  assert.strictEqual(resultReviewer.success, true);
+  assert.strictEqual(dbStore.get(4).status, 'published_as_draft');
+  assert.strictEqual(dbStore.get(4).reviewed_by, adminReviewer, 'Suggestion must record reviewed_by in DB');
+  console.log('  ✅ reviewedBy successfully persisted into database for solution draft creation.\n');
+
+  console.log('🎉 ALL 8 TESTS PASSED SUCCESSFULLY! The Discord Bot approval/draft engine is completely solid.');
 }
 
 runTests().catch(err => {

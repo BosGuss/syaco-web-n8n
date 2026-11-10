@@ -54,7 +54,20 @@ async function runTest() {
   const seedCheck = await pool.query("SELECT COUNT(*) FROM processed_solutions WHERE status = 'completed'");
   assert(parseInt(seedCheck.rows[0].count) > 0, 'Seeded solutions count must be > 0');
 
-  console.log(`✅ Database schema and seeding verified successfully. (${seedCheck.rows[0].count} seeded solutions found)`);
+  // Verify reviewed_by columns on all 3 review tables
+  const c1 = await pool.query("SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'solution_suggestions' AND column_name = 'reviewed_by'");
+  assert.strictEqual(c1.rows[0].count, '1', 'solution_suggestions must have reviewed_by column');
+
+  const c2 = await pool.query("SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'content_drafts' AND column_name = 'reviewed_by'");
+  assert.strictEqual(c2.rows[0].count, '1', 'content_drafts must have reviewed_by column');
+
+  const c3 = await pool.query("SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'backlink_candidates' AND column_name = 'reviewed_by'");
+  assert.strictEqual(c3.rows[0].count, '1', 'backlink_candidates must have reviewed_by column');
+
+  const c4 = await pool.query("SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'content_drafts' AND column_name = 'reviewed_at'");
+  assert.strictEqual(c4.rows[0].count, '1', 'content_drafts must have reviewed_at column');
+
+  console.log(`✅ Database schema, columns (reviewed_by, reviewed_at), and seeding verified successfully. (${seedCheck.rows[0].count} seeded solutions found)`);
   await pool.end();
 }
 

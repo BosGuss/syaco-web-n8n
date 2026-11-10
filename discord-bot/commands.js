@@ -384,6 +384,15 @@ const commands = [
     ),
 
   new SlashCommandBuilder()
+    .setName('set-admin-ids')
+    .setDescription('ตั้งค่ารายชื่อ Discord User IDs ที่มีสิทธิ์อนุมัติ/เผยแพร่ (คั่นด้วย comma)')
+    .addStringOption(option =>
+      option.setName('ids')
+        .setDescription('เช่น: 1558033226033799209, 1234567890')
+        .setRequired(true)
+    ),
+
+  new SlashCommandBuilder()
     .setName('answer')
     .setDescription('ส่งคำถามจากกระทู้ Pantip, Blognone, Blockdit หรือ Facebook Group ให้ AI ช่วยร่างคำตอบ')
     .addStringOption(option =>
@@ -828,6 +837,13 @@ async function handleCommand(interaction, { pool, client }) {
     const currentChannelId = process.env.DISCORD_CHANNEL_ID;
     const channelDisplay = currentChannelId ? `<#${currentChannelId}> (\`${currentChannelId}\`)` : '⚪ Not Set (พิมพ์ `/set-channel` เพื่อตั้งค่า)';
 
+    // 7. Admin Allowlist
+    const adminRaw = process.env.DISCORD_ADMIN_IDS || '';
+    const adminIds = adminRaw.split(/[,;\s]+/).map(s => s.trim()).filter(Boolean);
+    const adminDisplay = adminIds.length > 0
+      ? `🟢 Enforced (${adminIds.length} users: ${adminIds.map(id => `<@${id}>`).join(', ')})`
+      : '⚪ Not Enforced (ทุกคนสามารถอนุมัติได้ — พิมพ์ `/set-admin-ids` เพื่อจำกัดสิทธิ์)';
+
     const embed = new EmbedBuilder()
       .setTitle('🩺 รายงานสถานะสุขภาพระบบ (System Health)')
       .setColor(0x5865f2)
@@ -837,11 +853,49 @@ async function handleCommand(interaction, { pool, client }) {
         { name: '🦋 Bluesky Account', value: bskyStatus, inline: false },
         { name: '💻 Dev.to Session', value: devtoStatus, inline: false },
         { name: '🤖 Gemini AI', value: geminiStatus, inline: false },
-        { name: '📢 Notification Channel', value: channelDisplay, inline: false }
+        { name: '📢 Notification Channel', value: channelDisplay, inline: false },
+        { name: '🛡️ Admin Allowlist', value: adminDisplay, inline: false }
       )
       .setTimestamp();
 
     return await interaction.editReply({ embeds: [embed] });
+  }
+
+  // คำสั่ง /set-admin-ids (ตั้งค่า Allowlist ผู้มีสิทธิ์กดปุ่มและอนุมัติ)
+  if (commandName === 'set-admin-ids') {
+    await interaction.deferReply({ ephemeral: true });
+    try {
+      const rawIds = interaction.options.getString('ids');
+      const parsedIds = rawIds
+        .split(/[,;\s]+/)
+        .map(id => id.trim())
+        .filter(Boolean);
+
+      const currentAdmins = (process.env.DISCORD_ADMIN_IDS || '').split(/[,;\s]+/).map(s => s.trim()).filter(Boolean);
+      if (currentAdmins.length > 0 && !currentAdmins.includes(interaction.user.id)) {
+        return await interaction.editReply('⛔ คุณไม่มีสิทธิ์แก้ไขรายชื่อ Admin (เฉพาะแอดมินปัจจุบันเท่านั้น)');
+      }
+
+      const newVal = parsedIds.join(',');
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS bot_settings (
+          key TEXT PRIMARY KEY,
+          value TEXT,
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        INSERT INTO bot_settings (key, value, updated_at)
+        VALUES ('DISCORD_ADMIN_IDS', $1, NOW())
+        ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW();
+      `, [newVal]);
+
+      process.env.DISCORD_ADMIN_IDS = newVal;
+      updateEnvFile('DISCORD_ADMIN_IDS', newVal);
+
+      return await interaction.editReply(`✅ **ตั้งค่า DISCORD_ADMIN_IDS สำเร็จ!**\nรายชื่อผู้มีสิทธิ์ (${parsedIds.length} คน):\n${parsedIds.map(id => `• <@${id}> (\`${id}\`)`).join('\n')}\n*(บันทึกลงฐานข้อมูลและมีผลทันที)*`);
+    } catch (err) {
+      console.error('Error in set-admin-ids command:', err);
+      return await interaction.editReply(`⚠️ บันทึกไม่สำเร็จ: ${err.message}`);
+    }
   }
 
   // คำสั่ง /set-channel (ตั้งค่าห้องรับแจ้งเตือน)
