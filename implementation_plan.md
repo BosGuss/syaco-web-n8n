@@ -1,12 +1,11 @@
 # SyaCo Content Automation v2 — 3 Workflows
 
-3 n8n workflows สำหรับ content automation และการขยายโซลูชันของ SyaCo โดยใช้ **Auto-Post APIs (Bluesky, Dev.to, Hashnode)** และ **Manual Posting (Blognone / TechTalkThai)** เป็น target platforms
+3 n8n workflows สำหรับ content automation และการขยายโซลูชันของ SyaCo โดยใช้ **Auto-Post APIs (Bluesky, Dev.to)** และ **Manual Posting (Blognone / TechTalkThai / Corporate PR)** เป็น target platforms
 
 > [!NOTE]
 > - **Auto-Post Platforms (มี API)**:
 >   - **Bluesky (`bsky.app`)**: โพสต์ผ่าน AT Protocol REST API (สั้นกระชับ ≤ 300 ตัวอักษร)
 >   - **Dev.to (`dev.to`)**: โพสต์บทความเทคนิคผ่าน Forem/Dev.to REST API (`POST https://dev.to/api/articles`) ด้วย API Key
->   - **Hashnode (`hashnode.com`)**: เผยแพร่บทความลง Publication ผ่าน Hashnode GraphQL API (`publishPost` mutation) ด้วย Personal Access Token
 > - **Manual Post (Blognone / TechTalkThai / Community อื่นๆ)**: ใช้ **Human-in-the-Loop** model โดย n8n สร้าง Draft ภาษาไทยแบบจัดรูปเล่มเรียบร้อยแล้วส่งเข้า Discord ให้ทีมงานกด Copy-Paste ไปเผยแพร่ต่อด้วยมือ
 
 ---
@@ -23,10 +22,9 @@
          → AI สร้างเนื้อหาแยกตามแต่ละ Platform (แยก AI call เพื่อความเสถียร):
             1) Bluesky Post (สั้นกระชับ, Punchy, ≤ 300 ตัวอักษร, คำนวณ UTF-8 byte offset สำหรับ link facets)
             2) Dev.to Article (Markdown Technical Guide + Sanitize tags a-z0-9 สูงสุด 4 แท็ก + ชี้ลิงก์ในเนื้อหา ไม่ใส่ canonical_url มั่ว)
-            3) Hashnode Article (Markdown Architecture + originalArticleURL ถ้ามี + tags [{ name, slug }])
-            4) Long-form Article Draft (สำหรับโพสต์มือเองบน Blognone/TechTalkThai)
+            3) Long-form Article Draft (สำหรับโพสต์มือเองบน Blognone/TechTalkThai/Corporate PR)
          → Discord Review & Approve:
-            - ปุ่มยิง Auto-Post: [🚀 Bluesky] [🚀 Dev.to] [🚀 Hashnode]
+            - ปุ่มยิง Auto-Post: [🚀 Bluesky] [🚀 Dev.to]
             - ปุ่มคัดลอก Manual: [📋 Copy Manual Article] เข้า Discord #ready-to-post
             - ปุ่ม Reject / Edit ราย Platform
 
@@ -146,12 +144,11 @@ CREATE TABLE solution_suggestions (
 1. **Auto-Post Formats (มี API)**:
    - **Bluesky (`bluesky`)**: ข้อความภาษาไทยสั้นกระชับ (≤ 280-300 ตัวอักษร) พร้อม Link โดยคำนวณ **UTF-8 Byte Offset** สำหรับ Facets
    - **Dev.to (`devto`)**: บทความภาษาไทยเชิงเทคนิค (Markdown) พร้อม tags (สูงสุด 4 แท็ก, sanitize เฉพาะ `a-z0-9`), ไม่ใส่ `canonical_url` มั่วแต่ใส่ลิงก์แนะนำในเนื้อหา
-   - **Hashnode (`hashnode`)**: บทความ Markdown เผยแพร่ลง Publication ผ่าน GraphQL API (`publishPost` mutation, ฟิลด์ `originalArticleURL`, tags เป็น `[{ name, slug }]`)
 2. **Manual-Post Formats (ไม่มี API / โพสต์มือเอง)**:
-   - **Long-form Article (`manual_article`)**: บทความภาษาไทยเชิงเทคนิค (Markdown) พร้อมจัดหัวข้อและแท็ก สำหรับ Blognone, TechTalkThai, Medium หรือ Substack
+   - **Long-form Article (`manual_article`)**: บทความภาษาไทยเชิงเทคนิค (Markdown) พร้อมจัดหัวข้อและแท็ก สำหรับ Blognone, TechTalkThai, Medium หรือ Corporate PR
 
 ### Detection & Idempotency Strategy:
-- **Seed initial solutions**: ในการติดตั้งครั้งแรก จะมี Seed Script บันทึก solution ปัจจุบันทั้งหมดลง `processed_solutions (status='completed')` เพื่อป้องกันการรันสร้างย้อนหลัง 4 drafts ให้กับของเก่าทั้งหมด
+- **Seed initial solutions**: ในการติดตั้งครั้งแรก จะมี Seed Script บันทึก solution ปัจจุบันทั้งหมดลง `processed_solutions (status='completed')` เพื่อป้องกันการรันสร้างย้อนหลัง drafts ให้กับของเก่าทั้งหมด
 - ใช้ตาราง `processed_solutions` (state: `'processing'` -> `'completed'` / `'failed'`) เพื่อ lock งานระดับ Solution
 - **Atomic Lock ปลอดภัย**:
   ```sql
@@ -171,8 +168,7 @@ CREATE TABLE solution_suggestions (
     VALUES 
       ($1, $2, 'bluesky', $3, $4, $5, 'pending_review'),
       ($1, $2, 'devto', $6, $7, $8, 'pending_review'),
-      ($1, $2, 'hashnode', $9, $10, $11, 'pending_review'),
-      ($1, $2, 'manual_article', $12, $13, $14, 'pending_review')
+      ($1, $2, 'manual_article', $9, $10, $11, 'pending_review')
     ON CONFLICT (solution_id, platform) DO NOTHING
     RETURNING id
   )
@@ -192,16 +188,14 @@ CREATE TABLE solution_suggestions (
      - `blueskyPost`: ข้อความสั้น ≤ 300 ตัวอักษร
      - `devtoArticle`: บทความ Markdown กระชับสำหรับ dev
    - **8.2 AI Generate Long-form In-depth Article** — HTTP POST Gemini API (แยกยิงอีกรอบ):
-     - `hashnodeArticle`: บทความเชิงลึกสถาปัตยกรรมระบบ
      - `manualArticle`: บทความทางการ Enterprise ภาษาไทย
 9. **Parse, Sanitize & Normalize Drafts** — Code node:
    - Sanitize Dev.to tags: กรองตัวอักษรไทย/สัญลักษณ์/ช่องว่างออก เหลือเฉพาะ `[a-z0-9]`, ตัดเหลือไม่เกิน 4 แท็ก
-   - Format Hashnode tags: แปลงแท็กเป็น array of objects `[{ name: tag, slug: tag.toLowerCase() }]`
-   - แตกข้อมูลออกเป็น 4 items สำหรับ 4 แพลตฟอร์ม
-10. **Save Drafts & Complete Status (CTE Query)** — Postgres: รัน CTE บันทึกทั้ง 4 แพลตฟอร์มพร้อมอัปเดต processed_solutions เป็น completed
+   - แตกข้อมูลออกเป็น 3 items สำหรับ 3 แพลตฟอร์ม
+10. **Save Drafts & Complete Status (CTE Query)** — Postgres: รัน CTE บันทึกทั้ง 3 แพลตฟอร์มพร้อมอัปเดต processed_solutions เป็น completed
 11. **Build Discord Interactive Review Embed** — Code node: 
     - แสดง Preview ของแต่ละ Platform
-    - ปุ่ม Action แยก: `🚀 โพสต์ Bluesky`, `🚀 โพสต์ Dev.to`, `🚀 โพสต์ Hashnode`, `📋 รับเนื้อหาโพสต์มือ`, `✏️ Edit`, `❌ Reject`
+    - ปุ่ม Action แยก: `🚀 โพสต์ Bluesky`, `🚀 โพสต์ Dev.to`, `📋 รับเนื้อหาโพสต์มือ`, `✏️ Edit`, `❌ Reject`
 12. **Discord Draft Review** — POST → `discord-bot:3000/notify`
 13. **Webhook: Dispatch Action** — รับ `{ draft_id, action }` (publish | reject | edit) จาก Discord
 14. **Handle Action**:
@@ -258,34 +252,9 @@ CREATE TABLE solution_suggestions (
         - Headers: `api-key: {{ $env.DEVTO_API_KEY }}`, `Content-Type: application/json`
         - Body: `={{ $json.devtoBody }}`
       - 15.2.3 **Success Handler** — UPDATE `status = 'posted'`, บันทึก `posted_url = $response.url`
-    - **Branch 3: `hashnode`**:
-      - 15.3.1 **Build Hashnode GraphQL Payload in Code Node**:
-        ```javascript
-        return [{ json: {
-          hashnodeBody: {
-            query: `mutation PublishPost($input: PublishPostInput!) {
-              publishPost(input: $input) {
-                post { id url title }
-              }
-            }`,
-            variables: {
-              input: {
-                title: $json.title_th,
-                contentMarkdown: $json.content_markdown,
-                publicationId: $env.HASHNODE_PUBLICATION_ID,
-                tags: ($json.tags || []).map(t => ({ name: t, slug: t.toLowerCase() }))
-              }
-            }
-          }
-        }}];
-        ```
-      - 15.3.2 **POST to Hashnode GraphQL API** — HTTP POST `https://gql.hashnode.com`
-        - Headers: `Authorization: {{ $env.HASHNODE_ACCESS_TOKEN }}`, `Content-Type: application/json`
-        - Body: `={{ $json.hashnodeBody }}`
-      - 15.3.3 **Success Handler** — UPDATE `status = 'posted'`, บันทึก `posted_url = $response.data.publishPost.post.url`
-    - **Branch 4: `manual_article`**:
-      - 15.4.1 ส่ง Markdown ฉบับเต็มเข้า Discord channel `#ready-to-post` ให้ทีมคัดลอกได้ทันที
-      - 15.4.2 UPDATE `status = 'ready_to_post'`
+    - **Branch 3: `manual_article`**:
+      - 15.3.1 ส่ง Markdown ฉบับเต็มเข้า Discord channel `#ready-to-post` ให้ทีมคัดลอกได้ทันที
+      - 15.3.2 UPDATE `status = 'ready_to_post'`
 16. **Global Error Catch / Handler**:
     - หาก Publisher ตัวใดตัวหนึ่งล้มเหลว: อัปเดตเฉพาะ row นั้นเป็น `status = 'failed'`, เก็บ `error_message`, และส่งปุ่ม Retry เข้า Discord โดยไม่กระทบต่อ Platform อื่น
 
@@ -300,12 +269,12 @@ CREATE TABLE processed_solutions (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- draft content ที่ AI สร้าง (รองรับทั้ง Bluesky, Dev.to, Hashnode, Manual)
+-- draft content ที่ AI สร้าง (รองรับทั้ง Bluesky, Dev.to, Manual)
 CREATE TABLE content_drafts (
   id SERIAL PRIMARY KEY,
   solution_id TEXT NOT NULL,
   solution_title TEXT,
-  platform TEXT NOT NULL,         -- 'bluesky' | 'devto' | 'hashnode' | 'manual_article'
+  platform TEXT NOT NULL,         -- 'bluesky' | 'devto' | 'manual_article'
   title_th TEXT,
   content_markdown TEXT,
   tags TEXT[],
@@ -471,7 +440,7 @@ CREATE TABLE content_drafts (
 | Action | ความถี่ | Platform |
 |---|---|---|
 | Review & approve solution suggestions | ทุก Monday | Discord |
-| Review & กด Approve เพื่อยิง Auto-Post ทันที | ทุกวัน เมื่อตรวจพบ Solution ใหม่ | Discord (ปุ่มแยก: Bluesky, Dev.to, Hashnode) |
+| Review & กด Approve เพื่อยิง Auto-Post ทันที | ทุกวัน เมื่อตรวจพบ Solution ใหม่ | Discord (ปุ่มแยก: Bluesky, Dev.to) |
 | Copy-paste บทความ Manual ฉบับเต็ม | เมื่อต้องการเผยแพร่ | Discord (#ready-to-post) → Blognone / TechTalkThai / Medium |
 | พิมพ์คำสั่ง `/answer` เพื่อให้ AI ช่วยร่างคำตอบกระทู้ลูกค้า | เมื่อพบกระทู้ที่น่าสนใจ (On-demand) | Discord (/answer modal) → Pantip / Blognone / Blockdit / FB Group |
 | Review & นำคำตอบไป Reply ด้วยบัญชีจริง | หลังผ่านการตรวจทานใน Discord | กระทู้ต้นทาง (จำกัด 3-5 กระทู้/สัปดาห์) |
@@ -480,13 +449,12 @@ CREATE TABLE content_drafts (
 
 ## Verification Plan
 
-- [ ] Test Flow 1: manual trigger → ตรวจสอบการวิเคราะห์ Gap, บันทึก `solution_suggestions` พร้อม JSONB (`features`, `content_ai`), และ Discord notification
-- [ ] Test Flow 1 Webhook: ทดสอบกด Approve → ตรวจสอบ Atomic Lock (`status = 'publishing'`) ป้องกันกดซ้ำ และการยิง Admin API ไปยัง syaco.co.th
-- [ ] Test Flow 2: ทดสอบรัน Schedule ตรวจจับ solution ใหม่ → ตรวจสอบการสร้างเนื้อหา 4 รูปแบบ (Bluesky, Dev.to, Hashnode, Long-form Manual) และ Idempotency state ใน `processed_solutions`
-- [ ] Test Flow 2 Bluesky API: ทดสอบ Webhook Approve Bluesky → ตรวจสอบการสร้าง Session และยิง `createRecord` ขึ้น bsky.app
-- [ ] Test Flow 2 Dev.to API: ทดสอบ Webhook Approve Dev.to → ตรวจสอบการยิง `POST /api/articles` ขึ้น dev.to พร้อม canonical URL
-- [ ] Test Flow 2 Hashnode API: ทดสอบ Webhook Approve Hashnode → ตรวจสอบการยิง GraphQL `publishPost` ขึ้น Publication
-- [ ] Test Flow 3 (/answer): จำลองคำสั่ง `/answer` ด้วย Post URL + คำถาม → ตรวจสอบการคัดกรอง Lead Fit, การคำนวณคะแนน, และการสร้าง Draft คำตอบสไตล์ไทย
-- [ ] Test Flow 3 Idempotency: ส่งลิงก์กระทู้เดิมซ้ำ → ตรวจสอบว่าระบบแจ้งเตือนว่ามีแล้ว และไม่บันทึกซ้ำ
-- [ ] ตรวจสอบ `discord-bot:3000/notify` สามารถ render buttons (Approve/Edit/Reject) ของตาราง `backlink_candidates` เดิมได้อย่างสมบูรณ์
+- [x] Test Flow 1: manual trigger → ตรวจสอบการวิเคราะห์ Gap, บันทึก `solution_suggestions` พร้อม JSONB (`features`, `content_ai`), และ Discord notification
+- [x] Test Flow 1 Webhook: ทดสอบกด Approve → ตรวจสอบ Atomic Lock (`status = 'publishing'`) ป้องกันกดซ้ำ และการยิง Admin API ไปยัง syaco.co.th
+- [x] Test Flow 2: ทดสอบรัน Schedule ตรวจจับ solution ใหม่ → ตรวจสอบการสร้างเนื้อหา 3 รูปแบบ (Bluesky, Dev.to, Long-form Manual) และ Idempotency state ใน `processed_solutions`
+- [x] Test Flow 2 Bluesky API: ทดสอบ Webhook Approve Bluesky → ตรวจสอบการสร้าง Session และยิง `createRecord` ขึ้น bsky.app
+- [x] Test Flow 2 Dev.to API: ทดสอบ Webhook Approve Dev.to → ตรวจสอบการยิง `POST /api/articles` ขึ้น dev.to พร้อม canonical URL
+- [x] Test Flow 3 (/answer): จำลองคำสั่ง `/answer` ด้วย Post URL + คำถาม → ตรวจสอบการคัดกรอง Lead Fit, การคำนวณคะแนน, และการสร้าง Draft คำตอบสไตล์ไทย
+- [x] Test Flow 3 Idempotency: ส่งลิงก์กระทู้เดิมซ้ำ → ตรวจสอบว่าระบบแจ้งเตือนว่ามีแล้ว และไม่บันทึกซ้ำ
+- [x] ตรวจสอบ `discord-bot:3000/notify` สามารถ render buttons (Approve/Edit/Reject) ของตาราง `backlink_candidates` เดิมได้อย่างสมบูรณ์
 

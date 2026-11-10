@@ -680,8 +680,6 @@ app.post('/notify', async (req, res) => {
           actionBtn = new ButtonBuilder().setCustomId(`flow2_publish_${d.id}`).setLabel('🚀 โพสต์ Bluesky').setStyle(ButtonStyle.Primary);
         } else if (d.platform === 'devto') {
           actionBtn = new ButtonBuilder().setCustomId(`flow2_publish_${d.id}`).setLabel('🚀 โพสต์ Dev.to').setStyle(ButtonStyle.Primary);
-        } else if (d.platform === 'hashnode') {
-          actionBtn = new ButtonBuilder().setCustomId(`flow2_publish_${d.id}`).setLabel('🚀 โพสต์ Hashnode').setStyle(ButtonStyle.Primary);
         } else {
           actionBtn = new ButtonBuilder().setCustomId(`flow2_copy_${d.id}`).setLabel('📋 ดูเนื้อหาบทความ').setStyle(ButtonStyle.Secondary);
         }

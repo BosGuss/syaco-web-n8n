@@ -4,7 +4,6 @@ const {
   sanitizeDevtoTags,
   publishToBluesky,
   publishToDevto,
-  publishToHashnode,
   publishDraft,
   rejectDraft
 } = require('./flow2-publisher');
@@ -85,37 +84,8 @@ async function runTests() {
   assert.strictEqual(devtoResult.postedUrl, 'https://dev.to/syaco/automated-data-pipelines-998877');
   console.log('  ✅ publishToDevto successfully sent article payload.\n');
 
-  // Test 5: publishToHashnode with simulated endpoint
-  console.log('Test 5: Testing publishToHashnode...');
-  const mockFetchHashnode = async (url, options) => {
-    assert.strictEqual(options.headers['Authorization'], 'mock-hashnode-token');
-    return {
-      ok: true,
-      json: async () => ({
-        data: {
-          publishPost: {
-            post: {
-              id: 'hashnode-post-1',
-              url: 'https://blog.syaco.co.th/automated-data-pipelines',
-              title: 'โซลูชัน Data Pipeline'
-            }
-          }
-        }
-      })
-    };
-  };
-
-  const hashnodeResult = await publishToHashnode({
-    draft: { title_th: 'โซลูชัน Data Pipeline', content_markdown: '# Content', tags: ['cloud'] },
-    fetchFn: mockFetchHashnode,
-    token: 'mock-hashnode-token',
-    publicationId: 'pub123'
-  });
-  assert.strictEqual(hashnodeResult.postedUrl, 'https://blog.syaco.co.th/automated-data-pipelines');
-  console.log('  ✅ publishToHashnode successfully executed GraphQL mutation.\n');
-
-  // Test 6: In-memory mock database for publishDraft & rejectDraft
-  console.log('Test 6: Testing publishDraft with atomic DB locking...');
+  // Test 5: In-memory mock database for publishDraft & rejectDraft
+  console.log('Test 5: Testing publishDraft with atomic DB locking...');
   const dbStore = new Map();
   dbStore.set(101, {
     id: 101,
@@ -199,8 +169,8 @@ async function runTests() {
   assert.strictEqual(dbStore.get(101).status, 'posted');
   console.log('  ✅ publishDraft successfully transitioned draft status to posted.\n');
 
-  // Test 7: Idempotency conflict
-  console.log('Test 7: Testing conflict on already posted draft...');
+  // Test 6: Idempotency conflict
+  console.log('Test 6: Testing conflict on already posted draft...');
   const publishConflict = await publishDraft({
     id: 102,
     pool: mockPool,
@@ -210,8 +180,8 @@ async function runTests() {
   assert.strictEqual(publishConflict.code, 'ALREADY_PROCESSED');
   console.log(`  ✅ Idempotency enforced: ${publishConflict.message}\n`);
 
-  // Test 8: Non-existent ID
-  console.log('Test 8: Testing non-existent draft ID...');
+  // Test 7: Non-existent ID
+  console.log('Test 7: Testing non-existent draft ID...');
   const publishNotFound = await publishDraft({
     id: 9999,
     pool: mockPool,
@@ -221,8 +191,8 @@ async function runTests() {
   assert.strictEqual(publishNotFound.code, 'NOT_FOUND');
   console.log(`  ✅ NOT_FOUND caught cleanly: ${publishNotFound.message}\n`);
 
-  // Test 9: Failure handling
-  console.log('Test 9: Testing failure handling when API call fails...');
+  // Test 8: Failure handling
+  console.log('Test 8: Testing failure handling when API call fails...');
   const mockFetchFailing = async () => {
     throw new Error('Dev.to server unavailable 503');
   };
@@ -237,14 +207,14 @@ async function runTests() {
   assert.strictEqual(publishFailed.error, 'Dev.to server unavailable 503');
   console.log('  ✅ API failure caught cleanly and DB updated to failed.\n');
 
-  // Test 10: rejectDraft
-  console.log('Test 10: Testing rejectDraft...');
+  // Test 9: rejectDraft
+  console.log('Test 9: Testing rejectDraft...');
   const rejectRes = await rejectDraft({ id: 101, pool: mockPool });
   assert.strictEqual(rejectRes.success, true);
   assert.strictEqual(dbStore.get(101).status, 'rejected');
   console.log('  ✅ rejectDraft successfully updated status to rejected.\n');
 
-  console.log('🎉 ALL 10 TESTS PASSED SUCCESSFULLY! Flow 2 direct publishing engine is completely solid.');
+  console.log('🎉 ALL 9 TESTS PASSED SUCCESSFULLY! Flow 2 direct publishing engine is completely solid.');
 }
 
 runTests().catch(err => {

@@ -9,7 +9,7 @@
 ```
 workflows/
 ├── flow1-solution-discovery.json        # Flow 1: ค้นหาไอเดียโซลูชันใหม่จาก Trend เทคโนโลยี
-├── flow2-content-publisher.json         # Flow 2: สร้างและเตรียมร่างคอนเทนต์ 4 แพลตฟอร์ม
+├── flow2-content-publisher.json         # Flow 2: สร้างและเตรียมร่างคอนเทนต์ 3 แพลตฟอร์ม
 ├── flow3-community-lead-assistant.json  # Flow 3: ระบบคัดกรอง Lead และร่างคำตอบสำหรับ Community
 ├── README.md                            # คู่มือและเอกสารกำกับโฟลเดอร์ workflows
 └── archive/                             # เวิร์กโฟลว์เวอร์ชันเก่า / ย้ายระบบ
@@ -49,7 +49,7 @@ workflows/
   4. ล็อกสถานะโซลูชันเป็น `processing`
   5. เรียก Gemini AI 2 รอบคู่ขนาน:
      * **Call A:** Bluesky Post (ภาษาไทย ≤300 ตัวอักษร) + Dev.to Technical Article
-     * **Call B:** Hashnode In-depth Engineering Guide + Manual Long-form Article
+     * **Call B:** Manual Long-form Article (บทความเชิงลึกสำหรับสื่อ/บล็อกองค์กร)
   6. Sanitize แท็ก และบันทึกร่างคอนเทนต์ลงตาราง `content_drafts` (สถานะ `draft`)
   7. ส่ง Card พร้อมปุ่มโพสต์เข้า Discord Channel
 * **การเผยแพร่คอนเทนต์ (Option B):**

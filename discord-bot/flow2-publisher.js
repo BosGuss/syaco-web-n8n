@@ -3,7 +3,6 @@
  * Handles direct social media publishing for Flow 2 content drafts:
  * - Bluesky (AT Protocol session & link facet calculation)
  * - Dev.to (REST API)
- * - Hashnode (GraphQL API)
  * - Manual Article (Ready to publish announcement)
  * Includes PostgreSQL atomic locking and error state tracking.
  */
@@ -133,64 +132,6 @@ async function publishToDevto({
   return { postedUrl, id: data.id };
 }
 
-async function publishToHashnode({
-  draft,
-  fetchFn = globalThis.fetch,
-  token = process.env.HASHNODE_ACCESS_TOKEN,
-  publicationId = process.env.HASHNODE_PUBLICATION_ID
-}) {
-  if (!token) {
-    throw new Error('HASHNODE_ACCESS_TOKEN is not set in environment or bot settings');
-  }
-
-  const title = (draft.title_th || draft.title_en || 'SyaCo Enterprise Architecture').trim();
-  const tags = (draft.tags || ['tech']).map(t => ({
-    name: String(t),
-    slug: String(t).toLowerCase().replace(/[^a-z0-9]/g, '')
-  }));
-
-  const query = `mutation PublishPost($input: PublishPostInput!) {
-    publishPost(input: $input) {
-      post { id url title }
-    }
-  }`;
-
-  const res = await fetchFn('https://gql.hashnode.com', {
-    method: 'POST',
-    headers: {
-      'Authorization': token,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      query,
-      variables: {
-        input: {
-          title,
-          contentMarkdown: draft.content_markdown || '',
-          publicationId: publicationId || 'dummy_publication_id',
-          tags
-        }
-      }
-    }),
-    signal: AbortSignal.timeout(15000)
-  });
-
-  if (!res.ok) {
-    const errText = await res.text().catch(() => '');
-    throw new Error(`Hashnode API failed (HTTP ${res.status}): ${errText}`);
-  }
-
-  const data = await res.json();
-  if (data.errors && data.errors.length > 0) {
-    throw new Error(`Hashnode error: ${data.errors.map(e => e.message).join('; ')}`);
-  }
-
-  const post = data.data?.publishPost?.post;
-  const postedUrl = post?.url || 'https://hashnode.com';
-
-  return { postedUrl, post };
-}
-
 async function publishDraft({
   id,
   pool,
@@ -247,8 +188,6 @@ async function publishDraft({
       result = await publishToBluesky({ draft, fetchFn, ...config.bluesky });
     } else if (platform === 'devto') {
       result = await publishToDevto({ draft, fetchFn, ...config.devto });
-    } else if (platform === 'hashnode') {
-      result = await publishToHashnode({ draft, fetchFn, ...config.hashnode });
     } else if (platform === 'manual_article' || platform === 'manual') {
       // Manual Ready
       if (client && channelId) {
@@ -330,7 +269,6 @@ module.exports = {
   computeBlueskyFacet,
   publishToBluesky,
   publishToDevto,
-  publishToHashnode,
   publishDraft,
   rejectDraft
 };

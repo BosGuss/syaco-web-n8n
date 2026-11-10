@@ -40,11 +40,9 @@ async function verify() {
   console.log('Starting End-to-End Verification...');
   const pool = await getPool();
 
-  // 1. Verify SyaCo API Auth & Drafts Endpoint
+  // 1. Verify SyaCo API Drafts Endpoint
   console.log('1. Checking SyaCo Solutions API...');
-  const res = await fetch('https://www.syaco.co.th/api/solutions?all=true', {
-    headers: { Authorization: `Bearer ${process.env.SYACO_API_TOKEN || 'sya_perm_79279d93e026ed7638b9065af33c5b78bff1c5fdfd62e3ecbf12a707bcd97b71'}` }
-  });
+  const res = await fetch('https://www.syaco.co.th/api/solutions');
   assert.strictEqual(res.status, 200, 'SyaCo API must respond with 200');
   const sols = await res.json();
   console.log(`   Found ${sols.length} solutions on SyaCo API.`);
