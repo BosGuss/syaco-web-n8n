@@ -716,15 +716,36 @@ app.post('/notify', async (req, res) => {
   try {
     const body = req.body;
 
-    let channelId = process.env.DISCORD_CHANNEL_ID;
+    let channelId = null;
+    try {
+      const { rows } = await pool.query("SELECT value FROM bot_settings WHERE key = 'DISCORD_CHANNEL_ID'");
+      if (rows.length && rows[0].value && rows[0].value !== '123456789012345678') {
+        channelId = rows[0].value;
+      }
+    } catch (_) {}
+
     if (!channelId) {
-      try {
-        const { rows } = await pool.query("SELECT value FROM bot_settings WHERE key = 'DISCORD_CHANNEL_ID'");
-        if (rows.length && rows[0].value) {
-          channelId = rows[0].value;
+      const envChannel = (process.env.DISCORD_CHANNEL_ID || '').trim();
+      if (envChannel && envChannel !== '123456789012345678') {
+        channelId = envChannel;
+      }
+    }
+
+    // Fallback: If still not configured, pick the first available text channel in connected guild
+    if (!channelId && client.guilds.cache.size > 0) {
+      for (const guild of client.guilds.cache.values()) {
+        const defaultChannel = guild.channels.cache.find(c => c.isTextBased() && c.name !== 'command');
+        if (defaultChannel) {
+          channelId = defaultChannel.id;
           process.env.DISCORD_CHANNEL_ID = channelId;
+          await pool.query(
+            "INSERT INTO bot_settings (key, value, updated_at) VALUES ('DISCORD_CHANNEL_ID', $1, NOW()) ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()",
+            [channelId]
+          ).catch(() => {});
+          console.log(`[Notify] Auto-selected Discord channel #${defaultChannel.name} (${channelId})`);
+          break;
         }
-      } catch (_) {}
+      }
     }
 
     if (!channelId) {
