@@ -375,23 +375,38 @@ client.on('interactionCreate', async (interaction) => {
           });
           if (result.success) {
             const isDraft = result.isDraft || result.status === 'ready_to_post';
-            const actionTitle = isDraft ? '📝 บันทึกแบบร่าง (Draft) สำเร็จแล้ว!' : '🚀 เผยแพร่โพสต์สำเร็จ!';
+            const actionTitle = isDraft ? 'บันทึกเป็นแบบร่าง (Draft) สำเร็จแล้ว!' : 'เผยแพร่โพสต์สำเร็จ!';
+            const platformName = (result.platform || 'Platform').toUpperCase();
             const linkDisplay = result.postedUrl
               ? (isDraft && result.platform === 'devto'
                   ? `[เปิดดูแบบร่างและกด Publish บน Dev.to Dashboard](${result.postedUrl})`
                   : `[ดูโพสต์ที่เผยแพร่แล้ว](${result.postedUrl})`)
-              : 'พร้อมเผยแพร่แล้ว';
+              : 'พร้อมใช้งานแล้ว';
             const noteText = isDraft && result.platform === 'devto'
               ? '\n💡 *หมายเหตุ: สร้างเป็นแบบร่าง (Draft) เพื่อป้องกันไม่ให้ระบบ Anti-Spam ของ Dev.to บล็อกบัญชีใหม่ ทีมงานสามารถตรวจทานและกด Publish บนเว็บได้เลย*'
               : '';
 
+            const doneEmbed = new EmbedBuilder()
+              .setTitle(`✅ ${actionTitle} [${platformName}]`)
+              .setColor(0x10b981)
+              .setDescription(`👤 **ดำเนินการโดย:** \`${reviewedBy}\`\n🔗 **ลิงก์:** ${linkDisplay}${noteText}`)
+              .setFooter({ text: `Draft ID: #${id} • สำเร็จ` })
+              .setTimestamp();
+
             await interaction.editReply({
-              content: `${actionTitle} (${(result.platform || 'Platform').toUpperCase()})\n👤 **ดำเนินการโดย:** \`${reviewedBy}\`\n🔗 ${linkDisplay}${noteText}`,
+              embeds: [doneEmbed],
               components: []
             });
           } else {
+            const failEmbed = new EmbedBuilder()
+              .setTitle(`⚠️ เผยแพร่ไม่สำเร็จ [${(result.platform || '').toUpperCase()}]`)
+              .setColor(0xf59e0b)
+              .setDescription(`ข้อผิดพลาด: ${result.error || result.message || 'Unknown error'}`)
+              .setFooter({ text: `Draft ID: #${id}` })
+              .setTimestamp();
+
             await interaction.editReply({
-              content: `⚠️ เผยแพร่ไม่สำเร็จ: ${result.error || result.message || 'Unknown error'}`,
+              embeds: [failEmbed],
               components: []
             });
           }
@@ -408,8 +423,16 @@ client.on('interactionCreate', async (interaction) => {
         const id = interaction.customId.replace('flow2_reject_', '');
         const reviewedBy = formatReviewedBy(interaction.user);
         await rejectDraft({ id: parseInt(id), pool, reviewedBy });
+
+        const rejectEmbed = new EmbedBuilder()
+          .setTitle('❌ ปฏิเสธ Draft นี้แล้ว')
+          .setColor(0xef4444)
+          .setDescription(`👤 **ปฏิเสธโดย:** \`${reviewedBy}\`\nDraft ID: \`#${id}\` จะไม่ถูกเผยแพร่`)
+          .setFooter({ text: `Draft ID: #${id} • ปฏิเสธ` })
+          .setTimestamp();
+
         await interaction.update({
-          content: `❌ **ปฏิเสธ Draft นี้แล้ว** (ID: #${id})\n👤 **ปฏิเสธโดย:** \`${reviewedBy}\``,
+          embeds: [rejectEmbed],
           components: []
         });
         return;
@@ -417,13 +440,14 @@ client.on('interactionCreate', async (interaction) => {
 
       if (interaction.customId.startsWith('flow2_copy_')) {
         const id = interaction.customId.replace('flow2_copy_', '');
-        const { rows } = await pool.query('SELECT title_th, content_markdown, tags FROM content_drafts WHERE id = $1', [parseInt(id)]);
+        const { rows } = await pool.query('SELECT title_th, content_markdown, tags, platform FROM content_drafts WHERE id = $1', [parseInt(id)]);
         if (!rows.length) {
           return await interaction.reply({ content: 'ไม่พบข้อมูลบทความ', ephemeral: true });
         }
         const draft = rows[0];
         const tagsStr = (draft.tags || []).join(', ') || '-';
-        const header = `📋 **บทความสำหรับนำไปเผยแพร่ (Manual Post)**\n\n📌 **ชื่อบทความ:** ${draft.title_th}\n🏷️ **แท็ก:** \`${tagsStr}\`\n\n\`\`\`markdown\n`;
+        const label = draft.platform === 'devto' ? 'Dev.to Technical Article' : 'Manual Enterprise Article';
+        const header = `📋 **เนื้อหาบทความฉบับเต็ม (${label})**\n\n📌 **ชื่อบทความ:** ${draft.title_th}\n🏷️ **แท็ก:** \`${tagsStr}\`\n\n\`\`\`markdown\n`;
         const footer = `\n\`\`\``;
         const maxBody = Math.max(100, 1950 - header.length - footer.length);
         const text = (draft.content_markdown || '').length > maxBody
@@ -747,31 +771,84 @@ app.post('/notify', async (req, res) => {
 
       for (const d of rows) {
         const cut = (str, len) => (String(str || '').length > len ? str.slice(0, len - 3) + '...' : str || '-');
-        const embed = new EmbedBuilder()
-          .setTitle(`📢 [${d.platform.toUpperCase()}] Draft สำหรับ: ${body.solution_title || 'Solution'}`)
-          .setColor(d.platform === 'bluesky' ? 0x0085ff : (d.platform === 'devto' ? 0x0a0a0a : 0x2563eb))
-          .setDescription(cut(d.content_markdown, 1500))
-          .addFields(
-            { name: 'Platform', value: d.platform, inline: true },
-            { name: 'Tags', value: (d.tags || []).join(', ') || '-', inline: true }
-          )
-          .setTimestamp();
+        const tagsFormatted = (d.tags || []).length > 0 ? (d.tags || []).map(t => `\`${t}\``).join(' ') : '`-`';
+        const solutionTitle = body.solution_title || d.title_th || 'Enterprise Solution';
 
-        let actionBtn;
+        let embed;
+        let actionRow;
+
         if (d.platform === 'bluesky') {
-          actionBtn = new ButtonBuilder().setCustomId(`flow2_publish_${d.id}`).setLabel('🚀 โพสต์ Bluesky').setStyle(ButtonStyle.Primary);
+          // 🦋 Bluesky: Short Social Micro-Post (Live Post)
+          const text = d.content_markdown || '';
+          const charCount = text.length;
+          const byteCount = Buffer.byteLength(text, 'utf8');
+
+          embed = new EmbedBuilder()
+            .setTitle(`🦋 [Bluesky] โพสต์สั้นโซเชียล (Live Auto-Post)`)
+            .setColor(0x0085ff)
+            .setDescription(`>>> ${text}`)
+            .addFields(
+              { name: '📦 โซลูชันเป้าหมาย', value: solutionTitle, inline: true },
+              { name: '📊 ความยาว', value: `${charCount} ตัวอักษร (${byteCount} bytes / สูงสุด 300)`, inline: true },
+              { name: '🏷️ แท็ก', value: tagsFormatted, inline: true },
+              { name: '⚡ การทำงาน', value: 'อนุมัติแล้วจะยิงโพสต์ขึ้นหน้าฟีด Bluesky ทันที', inline: false }
+            )
+            .setFooter({ text: `Draft ID: #${d.id} • สถานะ: รออนุมัติ (Pending Review)` })
+            .setTimestamp();
+
+          actionRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId(`flow2_publish_${d.id}`).setLabel('🚀 เผยแพร่สดบน Bluesky').setStyle(ButtonStyle.Primary),
+            new ButtonBuilder().setCustomId(`flow2_reject_${d.id}`).setLabel('❌ ปฏิเสธ').setStyle(ButtonStyle.Danger)
+          );
+
         } else if (d.platform === 'devto') {
-          actionBtn = new ButtonBuilder().setCustomId(`flow2_publish_${d.id}`).setLabel('🚀 โพสต์ Dev.to').setStyle(ButtonStyle.Primary);
+          // 📝 Dev.to: Technical Guide (Draft Mode)
+          const previewText = cut(d.content_markdown, 380);
+
+          embed = new EmbedBuilder()
+            .setTitle(`📝 [Dev.to] บทความเทคนิค (Draft Mode)`)
+            .setColor(0x0a0a0a)
+            .setDescription(`📌 **ชื่อบทความ:** ${d.title_th || solutionTitle}\n🛡️ **โหมดความปลอดภัย:** ส่งเข้า **แบบร่าง (Unpublished Draft)** บน Dev.to`)
+            .addFields(
+              { name: '📦 โซลูชันเป้าหมาย', value: solutionTitle, inline: true },
+              { name: '🏷️ แท็ก', value: tagsFormatted, inline: true },
+              { name: '📄 ตัวอย่างเนื้อหา (Preview)', value: `\`\`\`markdown\n${previewText}\n\`\`\``, inline: false },
+              { name: '💡 ขั้นตอนแนะนำ', value: 'เมื่อกดยืนยัน บทความจะถูกส่งเข้าหน้า Drafts บน Dev.to ทีมงานสามารถคลิกลิงก์ไปตรวจเช็กฟอร์แมตและกด Publish บนเว็บ Dev.to ได้อย่างปลอดภัย ไม่ถูกระบบ Anti-Spam แบน', inline: false }
+            )
+            .setFooter({ text: `Draft ID: #${d.id} • บันทึกเป็นแบบร่าง (Draft Only)` })
+            .setTimestamp();
+
+          actionRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId(`flow2_publish_${d.id}`).setLabel('📝 ส่งเข้า Draft บน Dev.to').setStyle(ButtonStyle.Primary),
+            new ButtonBuilder().setCustomId(`flow2_copy_${d.id}`).setLabel('📋 คัดลอก Markdown เต็ม').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId(`flow2_reject_${d.id}`).setLabel('❌ ปฏิเสธ').setStyle(ButtonStyle.Danger)
+          );
+
         } else {
-          actionBtn = new ButtonBuilder().setCustomId(`flow2_copy_${d.id}`).setLabel('📋 ดูเนื้อหาบทความ').setStyle(ButtonStyle.Secondary);
+          // 📰 Manual: Long-Form Enterprise Article
+          const previewText = cut(d.content_markdown, 380);
+
+          embed = new EmbedBuilder()
+            .setTitle(`📰 [บทความยาว] Manual Enterprise Article`)
+            .setColor(0x6366f1)
+            .setDescription(`📌 **ชื่อบทความ:** ${d.title_th || solutionTitle}\n🎯 **แพลตฟอร์มแนะนำ:** Blognone, TechTalkThai, สื่อไอที, เว็บไซต์องค์กร`)
+            .addFields(
+              { name: '📦 โซลูชันเป้าหมาย', value: solutionTitle, inline: true },
+              { name: '🏷️ แท็ก', value: tagsFormatted, inline: true },
+              { name: '📄 ตัวอย่างเนื้อหา (Preview)', value: `\`\`\`markdown\n${previewText}\n\`\`\``, inline: false },
+              { name: '💡 การทำงาน', value: 'กดปุ่ม **"คัดลอกบทความเต็ม"** เพื่อนำ Markdown ไปโพสต์ หรือกด **"ทำเครื่องหมายพร้อมใช้งาน"** เพื่อบันทึกสถานะในระบบ', inline: false }
+            )
+            .setFooter({ text: `Draft ID: #${d.id} • สำหรับคัดลอกไปเผยแพร่ด้วยตนเอง` })
+            .setTimestamp();
+
+          actionRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId(`flow2_copy_${d.id}`).setLabel('📋 คัดลอกบทความเต็ม').setStyle(ButtonStyle.Primary),
+            new ButtonBuilder().setCustomId(`flow2_publish_${d.id}`).setLabel('✅ ทำเครื่องหมายพร้อมใช้งาน').setStyle(ButtonStyle.Success),
+            new ButtonBuilder().setCustomId(`flow2_reject_${d.id}`).setLabel('❌ ปฏิเสธ').setStyle(ButtonStyle.Danger)
+          );
         }
 
-        const row = new ActionRowBuilder().addComponents(
-          actionBtn,
-          new ButtonBuilder().setCustomId(`flow2_reject_${d.id}`).setLabel('❌ ปฏิเสธ').setStyle(ButtonStyle.Danger)
-        );
-
-        await channel.send({ embeds: [embed], components: [row] });
+        await channel.send({ embeds: [embed], components: [actionRow] });
       }
       return res.json({ ok: true, type: 'flow2_drafts', count: rows.length });
     }
