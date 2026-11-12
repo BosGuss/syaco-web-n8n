@@ -284,38 +284,34 @@ async function registerCommands(client) {
   const serverId = process.env.DISCORD_SERVER_ID;
 
   try {
-    // 1. ลงทะเบียนสำหรับ Server ID ที่ระบุใน .env (ถ้ามี)
-    if (serverId) {
-      await rest.put(
-        Routes.applicationGuildCommands(client.user.id, serverId),
-        { body: commandData }
-      );
-      console.log(`✅ [Commands] ลงทะเบียน Guild Slash Commands เข้า Server ID: ${serverId} สำเร็จ!`);
-    }
+    // 1. ล้าง Global Slash Commands ทิ้งทั้งหมด (เพื่อไม่ให้แสดงคำสั่งซ้ำ 2 อันใน Discord)
+    await rest.put(
+      Routes.applicationCommands(client.user.id),
+      { body: [] }
+    );
+    console.log('🧹 [Commands] ล้าง Global Slash Commands เรียบร้อย (ป้องกันคำสั่งซ้ำ)');
 
-    // 2. ลงทะเบียนให้ทุก Server ที่บอทเข้าร่วมอยู่ในขณะนี้อัตโนมัติทันที
+    // 2. รวบรวม Server ID ทั้งหมดที่บอทเข้าร่วม
+    const targetGuilds = new Set();
+    if (serverId) targetGuilds.add(serverId);
     if (client.guilds && client.guilds.cache.size > 0) {
-      for (const [gId, guild] of client.guilds.cache) {
-        if (gId !== serverId) {
-          try {
-            await rest.put(
-              Routes.applicationGuildCommands(client.user.id, gId),
-              { body: commandData }
-            );
-            console.log(`✅ [Commands] อัปเดต Slash Commands ให้ Server "${guild.name}" (${gId}) สำเร็จ!`);
-          } catch (gErr) {
-            console.warn(`[Commands] ข้าม Server "${guild.name}":`, gErr.message);
-          }
-        }
+      for (const gId of client.guilds.cache.keys()) {
+        targetGuilds.add(gId);
       }
     }
 
-    // 3. ลงทะเบียนแบบ Global ด้วย เพื่อให้ Server ใหม่ที่เชิญบอทเข้ามองเห็นคำสั่งได้ทันที
-    await rest.put(
-      Routes.applicationCommands(client.user.id),
-      { body: commandData }
-    );
-    console.log('✅ [Commands] ลงทะเบียน Global Slash Commands สำเร็จ!');
+    // 3. ลงทะเบียนเฉพาะ Guild Commands (อัปเดตทันที ไม่ดีเลย์ และไม่ซ้ำ)
+    for (const gId of targetGuilds) {
+      try {
+        await rest.put(
+          Routes.applicationGuildCommands(client.user.id, gId),
+          { body: commandData }
+        );
+        console.log(`✅ [Commands] ลงทะเบียน Guild Slash Commands เข้า Server ID: ${gId} สำเร็จ!`);
+      } catch (gErr) {
+        console.warn(`[Commands] ข้าม Server ID "${gId}":`, gErr.message);
+      }
+    }
   } catch (error) {
     console.error('❌ [Commands] เกิดข้อผิดพลาดในการลงทะเบียน Commands:', error);
   }
@@ -779,21 +775,6 @@ async function handleCommand(interaction, { pool, client }) {
         VALUES ('DISCORD_CHANNEL_ID', $1, NOW())
         ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW();
       `, [targetChannel.id]);
-
-      if (interaction.guildId) {
-        await pool.query(`
-          CREATE TABLE IF NOT EXISTS guild_channels (
-            guild_id TEXT PRIMARY KEY,
-            channel_id TEXT NOT NULL,
-            updated_at TIMESTAMPTZ DEFAULT NOW()
-          );
-        `);
-        await pool.query(`
-          INSERT INTO guild_channels (guild_id, channel_id, updated_at)
-          VALUES ($1, $2, NOW())
-          ON CONFLICT (guild_id) DO UPDATE SET channel_id = $2, updated_at = NOW();
-        `, [interaction.guildId, targetChannel.id]);
-      }
 
       process.env.DISCORD_CHANNEL_ID = targetChannel.id;
       updateEnvFile('DISCORD_CHANNEL_ID', targetChannel.id);
