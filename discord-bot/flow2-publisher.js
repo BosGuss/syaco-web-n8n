@@ -104,6 +104,9 @@ async function publishToDevto({
   const tags = sanitizeDevtoTags(draft.tags || ['architecture', 'tech']);
   const title = (draft.title_th || draft.title_en || 'SyaCo Enterprise Solution').trim();
 
+  // Safe mode: default to draft (published: false) to prevent automated account flagging / spam-ban on Dev.to
+  const published = process.env.DEVTO_PUBLISH_LIVE === 'true';
+
   const res = await fetchFn('https://dev.to/api/articles', {
     method: 'POST',
     headers: {
@@ -114,7 +117,7 @@ async function publishToDevto({
       article: {
         title,
         body_markdown: draft.content_markdown || '',
-        published: true,
+        published,
         tags
       }
     }),
@@ -123,13 +126,16 @@ async function publishToDevto({
 
   if (!res.ok) {
     const errText = await res.text().catch(() => '');
+    if (res.status === 401 || res.status === 403) {
+      throw new Error(`Dev.to API failed (HTTP ${res.status}): Account may be flagged or API key invalid. Details: ${errText}`);
+    }
     throw new Error(`Dev.to API failed (HTTP ${res.status}): ${errText}`);
   }
 
   const data = await res.json();
   const postedUrl = data.url || (data.id ? `https://dev.to/${data.id}` : 'https://dev.to');
 
-  return { postedUrl, id: data.id };
+  return { postedUrl, id: data.id, isDraft: !published };
 }
 
 async function publishDraft({

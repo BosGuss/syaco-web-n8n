@@ -374,8 +374,19 @@ client.on('interactionCreate', async (interaction) => {
             reviewedBy
           });
           if (result.success) {
+            const isDraft = result.isDraft || result.status === 'ready_to_post';
+            const actionTitle = isDraft ? '📝 บันทึกแบบร่าง (Draft) สำเร็จแล้ว!' : '🚀 เผยแพร่โพสต์สำเร็จ!';
+            const linkDisplay = result.postedUrl
+              ? (isDraft && result.platform === 'devto'
+                  ? `[เปิดดูแบบร่างและกด Publish บน Dev.to Dashboard](${result.postedUrl})`
+                  : `[ดูโพสต์ที่เผยแพร่แล้ว](${result.postedUrl})`)
+              : 'พร้อมเผยแพร่แล้ว';
+            const noteText = isDraft && result.platform === 'devto'
+              ? '\n💡 *หมายเหตุ: สร้างเป็นแบบร่าง (Draft) เพื่อป้องกันไม่ให้ระบบ Anti-Spam ของ Dev.to บล็อกบัญชีใหม่ ทีมงานสามารถตรวจทานและกด Publish บนเว็บได้เลย*'
+              : '';
+
             await interaction.editReply({
-              content: `🚀 **เผยแพร่โพสต์สำเร็จ!** (${(result.platform || 'Platform').toUpperCase()})\n👤 **เผยแพร่โดย:** \`${reviewedBy}\`\n🔗 ${result.postedUrl ? `[ดูโพสต์ที่เผยแพร่แล้ว](${result.postedUrl})` : 'พร้อมเผยแพร่แล้ว'}`,
+              content: `${actionTitle} (${(result.platform || 'Platform').toUpperCase()})\n👤 **ดำเนินการโดย:** \`${reviewedBy}\`\n🔗 ${linkDisplay}${noteText}`,
               components: []
             });
           } else {
