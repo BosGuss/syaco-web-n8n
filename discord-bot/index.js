@@ -321,7 +321,6 @@ function buildFlow2Card(d, fallbackSolutionTitle) {
     actionRow = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId(`flow2_publish_${d.id}`).setLabel('📝 ส่งเข้า Draft บน Dev.to').setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId(`flow2_edit_${d.id}`).setLabel('✏️ แก้ไขเนื้อหา').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`flow2_copy_${d.id}`).setLabel('📋 คัดลอก Markdown').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId(`flow2_reject_${d.id}`).setLabel('❌ ปฏิเสธ').setStyle(ButtonStyle.Danger)
     );
 
