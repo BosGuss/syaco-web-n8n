@@ -12,7 +12,7 @@ const {
 const express = require('express');
 const { Pool } = require('pg');
 const { approveAndCreateDraft } = require('./solution-draft');
-const { publishDraft, rejectDraft } = require('./flow2-publisher');
+const { sanitizeDevtoTags, publishDraft, rejectDraft } = require('./flow2-publisher');
 
 // Database Connection
 const pool = new Pool({
@@ -268,6 +268,91 @@ function formatReviewedBy(user) {
   return `${name} (${user.id})`;
 }
 
+function buildFlow2Card(d, fallbackSolutionTitle) {
+  const cut = (str, len) => (String(str || '').length > len ? str.slice(0, len - 3) + '...' : str || '-');
+  const tagsFormatted = (d.tags || []).length > 0 ? (d.tags || []).map(t => `\`${t}\``).join(' ') : '`-`';
+  const solutionTitle = fallbackSolutionTitle || d.solution_title || d.title_th || 'Enterprise Solution';
+
+  let embed;
+  let actionRow;
+
+  if (d.platform === 'bluesky') {
+    // 🦋 Bluesky: Short Social Micro-Post (Live Post)
+    const text = d.content_markdown || '';
+    const charCount = text.length;
+    const byteCount = Buffer.byteLength(text, 'utf8');
+
+    embed = new EmbedBuilder()
+      .setTitle(`🦋 [Bluesky] โพสต์สั้นโซเชียล (Live Auto-Post)`)
+      .setColor(0x0085ff)
+      .setDescription(`>>> ${text}`)
+      .addFields(
+        { name: '📦 โซลูชันเป้าหมาย', value: solutionTitle, inline: true },
+        { name: '📊 ความยาว', value: `${charCount} ตัวอักษร (${byteCount} bytes / สูงสุด 300)`, inline: true },
+        { name: '🏷️ แท็ก', value: tagsFormatted, inline: true },
+        { name: '⚡ การทำงาน', value: 'อนุมัติแล้วจะยิงโพสต์ขึ้นหน้าฟีด Bluesky ทันที', inline: false }
+      )
+      .setFooter({ text: `Draft ID: #${d.id} • สถานะ: ${d.status || 'รออนุมัติ'}` })
+      .setTimestamp();
+
+    actionRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`flow2_publish_${d.id}`).setLabel('🚀 เผยแพร่สดบน Bluesky').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId(`flow2_edit_${d.id}`).setLabel('✏️ แก้ไขข้อความ').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`flow2_reject_${d.id}`).setLabel('❌ ปฏิเสธ').setStyle(ButtonStyle.Danger)
+    );
+
+  } else if (d.platform === 'devto') {
+    // 📝 Dev.to: Technical Guide (Draft Mode)
+    const previewText = cut(d.content_markdown, 380);
+
+    embed = new EmbedBuilder()
+      .setTitle(`📝 [Dev.to] บทความเทคนิค (Draft Mode)`)
+      .setColor(0x0a0a0a)
+      .setDescription(`📌 **ชื่อบทความ:** ${d.title_th || solutionTitle}\n🛡️ **โหมดความปลอดภัย:** ส่งเข้า **แบบร่าง (Unpublished Draft)** บน Dev.to`)
+      .addFields(
+        { name: '📦 โซลูชันเป้าหมาย', value: solutionTitle, inline: true },
+        { name: '🏷️ แท็ก', value: tagsFormatted, inline: true },
+        { name: '📄 ตัวอย่างเนื้อหา (Preview)', value: `\`\`\`markdown\n${previewText}\n\`\`\``, inline: false },
+        { name: '💡 ขั้นตอนแนะนำ', value: 'เมื่อกดยืนยัน บทความจะถูกส่งเข้าหน้า Drafts บน Dev.to ทีมงานสามารถคลิกลิงก์ไปตรวจเช็กฟอร์แมตและกด Publish บนเว็บ Dev.to ได้อย่างปลอดภัย ไม่ถูกระบบ Anti-Spam แบน', inline: false }
+      )
+      .setFooter({ text: `Draft ID: #${d.id} • สถานะ: ${d.status || 'บันทึกเป็นแบบร่าง'}` })
+      .setTimestamp();
+
+    actionRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`flow2_publish_${d.id}`).setLabel('📝 ส่งเข้า Draft บน Dev.to').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId(`flow2_edit_${d.id}`).setLabel('✏️ แก้ไขเนื้อหา').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`flow2_copy_${d.id}`).setLabel('📋 คัดลอก Markdown').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`flow2_reject_${d.id}`).setLabel('❌ ปฏิเสธ').setStyle(ButtonStyle.Danger)
+    );
+
+  } else {
+    // 📰 Manual: Long-Form Enterprise Article
+    const previewText = cut(d.content_markdown, 380);
+
+    embed = new EmbedBuilder()
+      .setTitle(`📰 [บทความยาว] Manual Enterprise Article`)
+      .setColor(0x6366f1)
+      .setDescription(`📌 **ชื่อบทความ:** ${d.title_th || solutionTitle}\n🎯 **แพลตฟอร์มแนะนำ:** Blognone, TechTalkThai, สื่อไอที, เว็บไซต์องค์กร`)
+      .addFields(
+        { name: '📦 โซลูชันเป้าหมาย', value: solutionTitle, inline: true },
+        { name: '🏷️ แท็ก', value: tagsFormatted, inline: true },
+        { name: '📄 ตัวอย่างเนื้อหา (Preview)', value: `\`\`\`markdown\n${previewText}\n\`\`\``, inline: false },
+        { name: '💡 การทำงาน', value: 'กดปุ่ม **"คัดลอกบทความเต็ม"** เพื่อนำ Markdown ไปโพสต์ หรือกด **"ทำเครื่องหมายพร้อมใช้งาน"** เพื่อบันทึกสถานะในระบบ', inline: false }
+      )
+      .setFooter({ text: `Draft ID: #${d.id} • สถานะ: ${d.status || 'สำหรับคัดลอกไปเผยแพร่ด้วยตนเอง'}` })
+      .setTimestamp();
+
+    actionRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`flow2_copy_${d.id}`).setLabel('📋 คัดลอกบทความเต็ม').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId(`flow2_edit_${d.id}`).setLabel('✏️ แก้ไขเนื้อหา').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`flow2_publish_${d.id}`).setLabel('✅ ทำเครื่องหมายพร้อมใช้งาน').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId(`flow2_reject_${d.id}`).setLabel('❌ ปฏิเสธ').setStyle(ButtonStyle.Danger)
+    );
+  }
+
+  return { embed, actionRow };
+}
+
 async function loadBotSettings() {
   try {
     await pool.query(`
@@ -289,126 +374,20 @@ async function loadBotSettings() {
   }
 }
 
-// Auto-setup channel for any guild (existing or newly joined)
-async function autoSetupGuildChannel(guild) {
-  try {
-    // 1. Check if dedicated channel already exists
-    let target = guild.channels.cache.find(c =>
-      c.isTextBased() && (c.name.includes('syaco') || c.name.includes('alert') || c.name.includes('content'))
-    );
-
-    // 2. If not found, try to auto-create dedicated channel if bot has permission
-    if (!target) {
-      const me = guild.members.me || (await guild.members.fetchMe().catch(() => null));
-      if (me && me.permissions.has('ManageChannels')) {
-        try {
-          target = await guild.channels.create({
-            name: '📢│syaco-alerts',
-            topic: 'ช่องรับการแจ้งเตือนและการ์ดอนุมัติคอนเทนต์ SyaCo Automation',
-            reason: 'Auto-created notification channel for SyaCo Content Automation'
-          });
-          console.log(`[Bot] Auto-created channel #${target.name} in guild "${guild.name}"`);
-        } catch (createErr) {
-          console.warn(`[Bot] Could not auto-create channel in "${guild.name}":`, createErr.message);
-        }
-      }
-    }
-
-    // 3. Fallback: Use system channel or first writable text channel
-    if (!target) {
-      const me = guild.members.me || (await guild.members.fetchMe().catch(() => null));
-      if (guild.systemChannel && (!me || guild.systemChannel.permissionsFor(me)?.has('SendMessages'))) {
-        target = guild.systemChannel;
-      } else {
-        target = guild.channels.cache.find(c =>
-          c.isTextBased() && (!me || c.permissionsFor(me)?.has('SendMessages'))
-        );
-      }
-    }
-
-    if (target) {
-      // Save per-guild channel mapping into DB
-      await pool.query(`
-        CREATE TABLE IF NOT EXISTS guild_channels (
-          guild_id TEXT PRIMARY KEY,
-          channel_id TEXT NOT NULL,
-          updated_at TIMESTAMPTZ DEFAULT NOW()
-        );
-      `);
-      await pool.query(
-        `INSERT INTO guild_channels (guild_id, channel_id, updated_at)
-         VALUES ($1, $2, NOW())
-         ON CONFLICT (guild_id) DO UPDATE SET channel_id = $2, updated_at = NOW();`,
-        [guild.id, target.id]
-      );
-
-      // Also set default DISCORD_CHANNEL_ID in bot_settings
-      await pool.query(
-        `INSERT INTO bot_settings (key, value, updated_at)
-         VALUES ('DISCORD_CHANNEL_ID', $1, NOW())
-         ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW();`,
-        [target.id]
-      );
-      process.env.DISCORD_CHANNEL_ID = target.id;
-
-      // Send Welcome Embed
-      const welcomeEmbed = new EmbedBuilder()
-        .setTitle('🎉 SyaCo Automation Bot เชื่อมต่อกับเซิร์ฟเวอร์เรียบร้อย!')
-        .setColor(0x57f287)
-        .setDescription(`ยินดีต้อนรับสู่ระบบ **SyaCo Content & Lead Automation**\n\nระบบได้ตั้งค่าช่อง <#${target.id}> เป็นช่องรับการแจ้งเตือนและการ์ดอนุมัติให้อัตโนมัติแล้วครับ!`)
-        .addFields(
-          { name: '📢 ฟังก์ชันอัตโนมัติ', value: '• **Flow 1:** ไอเดียค้นพบโซลูชันใหม่จากเว็บ SyaCo\n• **Flow 2:** ร่างคอนเทนต์ Bluesky, Dev.to, และบทความยาว\n• **Flow 3:** คัดกรองกระทู้ Pantip/Blognone และร่างคำตอบหาลูกค้า', inline: false },
-          { name: '⚙️ การปรับแต่ง', value: 'หากต้องการย้ายไปช่องอื่น สามารถพิมพ์คำสั่ง `/set-channel` ได้ตลอดเวลา', inline: false }
-        )
-        .setTimestamp();
-
-      await target.send({ embeds: [welcomeEmbed] }).catch(() => {});
-      console.log(`[Bot] Auto-configured channel #${target.name} (${target.id}) for guild "${guild.name}"`);
-      return target;
-    }
-  } catch (err) {
-    console.error(`[Bot] Error in autoSetupGuildChannel for "${guild.name}":`, err.message);
-  }
-  return null;
-}
-
 client.once('ready', async () => {
   console.log(`Discord bot logged in as ${client.user.tag}`);
   await loadBotSettings();
   await registerCommands(client);
-
-  // Auto-setup channel for any connected guilds that don't have one yet
-  try {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS guild_channels (
-        guild_id TEXT PRIMARY KEY,
-        channel_id TEXT NOT NULL,
-        updated_at TIMESTAMPTZ DEFAULT NOW()
-      );
-    `);
-    for (const guild of client.guilds.cache.values()) {
-      const { rows } = await pool.query(
-        "SELECT channel_id FROM guild_channels WHERE guild_id = $1",
-        [guild.id]
-      ).catch(() => ({ rows: [] }));
-      if (!rows.length) {
-        await autoSetupGuildChannel(guild);
-      }
-    }
-  } catch (err) {
-    console.warn('[Bot] Guild channel check on ready warning:', err.message);
-  }
 });
 
-// เมื่อบอทได้รับเชิญเข้า Server ใหม่ ให้ลงทะเบียนคำสั่งและสร้าง/ตั้งค่าช่องแจ้งเตือนอัตโนมัติทันที
+// เมื่อบอทได้รับเชิญเข้า Server ใหม่ ให้ลงทะเบียน Slash Commands ทันที
 client.on('guildCreate', async (guild) => {
   console.log(`[Bot] ได้รับเชิญเข้า Server ใหม่: "${guild.name}" (${guild.id})`);
   try {
     await registerCommands(client);
-    await autoSetupGuildChannel(guild);
-    console.log(`✅ [Bot] ติดตั้งช่องแจ้งเตือนและคำสั่งสำหรับ Server ใหม่ "${guild.name}" สำเร็จอัตโนมัติ!`);
+    console.log(`✅ [Bot] อัปเดตคำสั่งสำหรับ Server ใหม่ "${guild.name}" สำเร็จอัตโนมัติ!`);
   } catch (err) {
-    console.error(`[Bot] ไม่สามารถติดตั้งช่องหรือคำสั่งสำหรับ Server ใหม่:`, err);
+    console.error(`[Bot] ไม่สามารถลงทะเบียนคำสั่งสำหรับ Server ใหม่:`, err);
   }
 });
 
@@ -539,6 +518,87 @@ client.on('interactionCreate', async (interaction) => {
         return;
       }
 
+      if (interaction.customId.startsWith('flow2_edit_')) {
+        const id = parseInt(interaction.customId.replace('flow2_edit_', ''), 10);
+        const { rows } = await pool.query(
+          'SELECT id, platform, title_th, content_markdown, tags, status FROM content_drafts WHERE id = $1',
+          [id]
+        );
+
+        if (!rows.length) {
+          return await interaction.reply({ content: '❌ ไม่พบข้อมูล Draft นี้', ephemeral: true });
+        }
+
+        const draft = rows[0];
+        if (draft.status === 'posted') {
+          return await interaction.reply({
+            content: `⚠️ Draft ID: #${id} มีสถานะเป็น 'posted' แล้ว ไม่สามารถแก้ไขได้`,
+            ephemeral: true
+          });
+        }
+
+        const modal = new ModalBuilder()
+          .setCustomId(`modal_flow2_edit_${id}`)
+          .setTitle(`✏️ แก้ไข Draft #${id} (${draft.platform})`.slice(0, 45));
+
+        const isBluesky = draft.platform === 'bluesky';
+
+        if (isBluesky) {
+          const contentInput = new TextInputBuilder()
+            .setCustomId('content_markdown')
+            .setLabel('ข้อความโพสต์ Bluesky (ไม่เกิน 300 ตัวอักษร)')
+            .setStyle(TextInputStyle.Paragraph)
+            .setValue((draft.content_markdown || '').slice(0, 300))
+            .setMaxLength(300)
+            .setRequired(true);
+
+          const tagsInput = new TextInputBuilder()
+            .setCustomId('tags')
+            .setLabel('แท็ก (คั่นด้วย comma เช่น syaco, tech)')
+            .setStyle(TextInputStyle.Short)
+            .setValue((draft.tags || []).join(', '))
+            .setMaxLength(100)
+            .setRequired(false);
+
+          modal.addComponents(
+            new ActionRowBuilder().addComponents(contentInput),
+            new ActionRowBuilder().addComponents(tagsInput)
+          );
+        } else {
+          const titleInput = new TextInputBuilder()
+            .setCustomId('title')
+            .setLabel('ชื่อบทความ / หัวข้อ (Title)')
+            .setStyle(TextInputStyle.Short)
+            .setValue((draft.title_th || '').slice(0, 100))
+            .setMaxLength(100)
+            .setRequired(true);
+
+          const contentInput = new TextInputBuilder()
+            .setCustomId('content_markdown')
+            .setLabel('เนื้อหาบทความ (Markdown)')
+            .setStyle(TextInputStyle.Paragraph)
+            .setValue((draft.content_markdown || '').slice(0, 4000))
+            .setMaxLength(4000)
+            .setRequired(true);
+
+          const tagsInput = new TextInputBuilder()
+            .setCustomId('tags')
+            .setLabel('แท็ก (คั่นด้วย comma เช่น tech, devops)')
+            .setStyle(TextInputStyle.Short)
+            .setValue((draft.tags || []).join(', '))
+            .setMaxLength(100)
+            .setRequired(false);
+
+          modal.addComponents(
+            new ActionRowBuilder().addComponents(titleInput),
+            new ActionRowBuilder().addComponents(contentInput),
+            new ActionRowBuilder().addComponents(tagsInput)
+          );
+        }
+
+        return await interaction.showModal(modal);
+      }
+
       if (interaction.customId.startsWith('flow2_copy_')) {
         const id = interaction.customId.replace('flow2_copy_', '');
         const { rows } = await pool.query('SELECT title_th, content_markdown, tags, platform FROM content_drafts WHERE id = $1', [parseInt(id)]);
@@ -629,6 +689,74 @@ client.on('interactionCreate', async (interaction) => {
         const rawCookie = interaction.fields.getTextInputValue('cookie_value');
         await interaction.deferReply({ ephemeral: true });
         return await saveAndVerifyDevtoCookie(interaction, rawCookie, pool);
+      }
+
+      if (interaction.customId.startsWith('modal_flow2_edit_')) {
+        const id = parseInt(interaction.customId.replace('modal_flow2_edit_', ''), 10);
+        const { rows: existingRows } = await pool.query(
+          'SELECT id, platform, solution_id, solution_title FROM content_drafts WHERE id = $1',
+          [id]
+        );
+
+        if (!existingRows.length) {
+          return await interaction.reply({ content: '❌ ไม่พบข้อมูล Draft ในระบบ', ephemeral: true });
+        }
+
+        const current = existingRows[0];
+        const isBluesky = current.platform === 'bluesky';
+        const newTitle = isBluesky
+          ? null
+          : interaction.fields.getTextInputValue('title').trim();
+        const newContent = interaction.fields.getTextInputValue('content_markdown').trim();
+        const rawTags = interaction.fields.getTextInputValue('tags');
+        let newTags = [];
+
+        if (rawTags) {
+          newTags = rawTags
+            .split(/[,;\s]+/)
+            .map(t => t.trim().toLowerCase().replace(/[^a-z0-9ก-๙]/g, ''))
+            .filter(Boolean);
+        }
+
+        if (current.platform === 'devto') {
+          newTags = sanitizeDevtoTags(newTags);
+        }
+
+        const reviewedBy = formatReviewedBy(interaction.user);
+
+        const updateRes = await pool.query(
+          `UPDATE content_drafts
+           SET title_th = COALESCE($1, title_th),
+               content_markdown = $2,
+               tags = $3,
+               reviewed_at = NOW(),
+               reviewed_by = $4,
+               error_message = NULL
+           WHERE id = $5 AND status IN ('pending_review', 'failed')
+           RETURNING *;`,
+          [newTitle, newContent, newTags, reviewedBy, id]
+        );
+
+        if (!updateRes.rows.length) {
+          return await interaction.reply({
+            content: '⚠️ ไม่สามารถบันทึกได้ อาจเนื่องจาก Draft นี้มีสถานะไม่พร้อมแก้ไข',
+            ephemeral: true
+          });
+        }
+
+        const updatedDraft = updateRes.rows[0];
+        const { embed, actionRow } = buildFlow2Card(updatedDraft, current.solution_title);
+
+        await interaction.update({
+          embeds: [embed],
+          components: [actionRow]
+        });
+
+        await interaction.followUp({
+          content: `✅ **แก้ไขเนื้อหา Draft #${id} (${updatedDraft.platform.toUpperCase()}) สำเร็จแล้ว!** โดย \`${reviewedBy}\``,
+          ephemeral: true
+        });
+        return;
       }
 
       if (interaction.customId.startsWith('modal_answer_')) {
@@ -809,63 +937,6 @@ async function handleApproval(interaction, candidateId, overrideAnswer = null) {
   }
 }
 
-// Target Channel Resolver: Supports Multi-Guild & Automatic Discovery
-async function getTargetChannels() {
-  const channels = [];
-  const seenIds = new Set();
-
-  // 1. Try per-guild channels from database
-  try {
-    const { rows: guildRows } = await pool.query("SELECT channel_id FROM guild_channels");
-    for (const r of guildRows) {
-      if (r.channel_id && !seenIds.has(r.channel_id)) {
-        const ch = await client.channels.fetch(r.channel_id).catch(() => null);
-        if (ch && ch.isTextBased()) {
-          channels.push(ch);
-          seenIds.add(r.channel_id);
-        }
-      }
-    }
-  } catch (_) {}
-
-  // 2. If no per-guild channel, try default DISCORD_CHANNEL_ID
-  if (channels.length === 0) {
-    let defaultId = null;
-    try {
-      const { rows } = await pool.query("SELECT value FROM bot_settings WHERE key = 'DISCORD_CHANNEL_ID'");
-      if (rows.length && rows[0].value && rows[0].value !== '123456789012345678') {
-        defaultId = rows[0].value;
-      }
-    } catch (_) {}
-
-    if (!defaultId) {
-      const envChannel = (process.env.DISCORD_CHANNEL_ID || '').trim();
-      if (envChannel && envChannel !== '123456789012345678') defaultId = envChannel;
-    }
-
-    if (defaultId && !seenIds.has(defaultId)) {
-      const ch = await client.channels.fetch(defaultId).catch(() => null);
-      if (ch && ch.isTextBased()) {
-        channels.push(ch);
-        seenIds.add(defaultId);
-      }
-    }
-  }
-
-  // 3. Fallback: Auto-setup or auto-find channel for each connected guild
-  if (channels.length === 0 && client.guilds.cache.size > 0) {
-    for (const guild of client.guilds.cache.values()) {
-      const ch = await autoSetupGuildChannel(guild);
-      if (ch && !seenIds.has(ch.id)) {
-        channels.push(ch);
-        seenIds.add(ch.id);
-      }
-    }
-  }
-
-  return channels;
-}
-
 // Internal Express Server for n8n Flow 1, 2, 3 notifications
 const app = express();
 app.use(express.json());
@@ -873,23 +944,47 @@ app.use(express.json());
 app.post('/notify', async (req, res) => {
   try {
     const body = req.body;
-    const targetChannels = await getTargetChannels();
-    if (!targetChannels.length) {
-      return res.status(500).json({ error: 'No active Discord channels found for notifications.' });
+
+    let channelId = null;
+    try {
+      const { rows } = await pool.query("SELECT value FROM bot_settings WHERE key = 'DISCORD_CHANNEL_ID'");
+      if (rows.length && rows[0].value && rows[0].value !== '123456789012345678') {
+        channelId = rows[0].value;
+      }
+    } catch (_) {}
+
+    if (!channelId) {
+      const envChannel = (process.env.DISCORD_CHANNEL_ID || '').trim();
+      if (envChannel && envChannel !== '123456789012345678') {
+        channelId = envChannel;
+      }
     }
 
-    const broadcast = async (payload) => {
-      const results = [];
-      for (const ch of targetChannels) {
-        try {
-          const m = await ch.send(payload);
-          results.push({ channel: ch.id, messageId: m.id });
-        } catch (err) {
-          console.warn(`[Notify] Failed to send to #${ch.name || ch.id}:`, err.message);
+    // Fallback: If still not configured, pick the first available text channel in connected guild
+    if (!channelId && client.guilds.cache.size > 0) {
+      for (const guild of client.guilds.cache.values()) {
+        const defaultChannel = guild.channels.cache.find(c => c.isTextBased() && c.name !== 'command');
+        if (defaultChannel) {
+          channelId = defaultChannel.id;
+          process.env.DISCORD_CHANNEL_ID = channelId;
+          await pool.query(
+            "INSERT INTO bot_settings (key, value, updated_at) VALUES ('DISCORD_CHANNEL_ID', $1, NOW()) ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()",
+            [channelId]
+          ).catch(() => {});
+          console.log(`[Notify] Auto-selected Discord channel #${defaultChannel.name} (${channelId})`);
+          break;
         }
       }
-      return results;
-    };
+    }
+
+    if (!channelId) {
+      return res.status(500).json({ error: 'DISCORD_CHANNEL_ID is not configured. Please run /set-channel in Discord.' });
+    }
+
+    const channel = await client.channels.fetch(channelId);
+    if (!channel) {
+      return res.status(500).json({ error: 'Discord Channel not found' });
+    }
 
     // 1. Flow 1: New Proposed Adjacent Solution
     if (body.type === 'flow1_suggestion' && body.suggestion) {
@@ -910,8 +1005,8 @@ app.post('/notify', async (req, res) => {
         new ButtonBuilder().setCustomId(`flow1_reject_${s.id}`).setLabel('❌ ปฏิเสธ').setStyle(ButtonStyle.Danger)
       );
 
-      await broadcast({ embeds: [embed], components: [row] });
-      return res.json({ ok: true, type: 'flow1_suggestion', id: s.id, broadcastCount: targetChannels.length });
+      await channel.send({ embeds: [embed], components: [row] });
+      return res.json({ ok: true, type: 'flow1_suggestion', id: s.id });
     }
 
     // 2. Flow 2: Multi-Platform Drafts Notification
@@ -925,87 +1020,10 @@ app.post('/notify', async (req, res) => {
       }
 
       for (const d of rows) {
-        const cut = (str, len) => (String(str || '').length > len ? str.slice(0, len - 3) + '...' : str || '-');
-        const tagsFormatted = (d.tags || []).length > 0 ? (d.tags || []).map(t => `\`${t}\``).join(' ') : '`-`';
-        const solutionTitle = body.solution_title || d.title_th || 'Enterprise Solution';
-
-        let embed;
-        let actionRow;
-
-        if (d.platform === 'bluesky') {
-          // 🦋 Bluesky: Short Social Micro-Post (Live Post)
-          const text = d.content_markdown || '';
-          const charCount = text.length;
-          const byteCount = Buffer.byteLength(text, 'utf8');
-
-          embed = new EmbedBuilder()
-            .setTitle(`🦋 [Bluesky] โพสต์สั้นโซเชียล (Live Auto-Post)`)
-            .setColor(0x0085ff)
-            .setDescription(`>>> ${text}`)
-            .addFields(
-              { name: '📦 โซลูชันเป้าหมาย', value: solutionTitle, inline: true },
-              { name: '📊 ความยาว', value: `${charCount} ตัวอักษร (${byteCount} bytes / สูงสุด 300)`, inline: true },
-              { name: '🏷️ แท็ก', value: tagsFormatted, inline: true },
-              { name: '⚡ การทำงาน', value: 'อนุมัติแล้วจะยิงโพสต์ขึ้นหน้าฟีด Bluesky ทันที', inline: false }
-            )
-            .setFooter({ text: `Draft ID: #${d.id} • สถานะ: รออนุมัติ (Pending Review)` })
-            .setTimestamp();
-
-          actionRow = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId(`flow2_publish_${d.id}`).setLabel('🚀 เผยแพร่สดบน Bluesky').setStyle(ButtonStyle.Primary),
-            new ButtonBuilder().setCustomId(`flow2_reject_${d.id}`).setLabel('❌ ปฏิเสธ').setStyle(ButtonStyle.Danger)
-          );
-
-        } else if (d.platform === 'devto') {
-          // 📝 Dev.to: Technical Guide (Draft Mode)
-          const previewText = cut(d.content_markdown, 380);
-
-          embed = new EmbedBuilder()
-            .setTitle(`📝 [Dev.to] บทความเทคนิค (Draft Mode)`)
-            .setColor(0x0a0a0a)
-            .setDescription(`📌 **ชื่อบทความ:** ${d.title_th || solutionTitle}\n🛡️ **โหมดความปลอดภัย:** ส่งเข้า **แบบร่าง (Unpublished Draft)** บน Dev.to`)
-            .addFields(
-              { name: '📦 โซลูชันเป้าหมาย', value: solutionTitle, inline: true },
-              { name: '🏷️ แท็ก', value: tagsFormatted, inline: true },
-              { name: '📄 ตัวอย่างเนื้อหา (Preview)', value: `\`\`\`markdown\n${previewText}\n\`\`\``, inline: false },
-              { name: '💡 ขั้นตอนแนะนำ', value: 'เมื่อกดยืนยัน บทความจะถูกส่งเข้าหน้า Drafts บน Dev.to ทีมงานสามารถคลิกลิงก์ไปตรวจเช็กฟอร์แมตและกด Publish บนเว็บ Dev.to ได้อย่างปลอดภัย ไม่ถูกระบบ Anti-Spam แบน', inline: false }
-            )
-            .setFooter({ text: `Draft ID: #${d.id} • บันทึกเป็นแบบร่าง (Draft Only)` })
-            .setTimestamp();
-
-          actionRow = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId(`flow2_publish_${d.id}`).setLabel('📝 ส่งเข้า Draft บน Dev.to').setStyle(ButtonStyle.Primary),
-            new ButtonBuilder().setCustomId(`flow2_copy_${d.id}`).setLabel('📋 คัดลอก Markdown เต็ม').setStyle(ButtonStyle.Secondary),
-            new ButtonBuilder().setCustomId(`flow2_reject_${d.id}`).setLabel('❌ ปฏิเสธ').setStyle(ButtonStyle.Danger)
-          );
-
-        } else {
-          // 📰 Manual: Long-Form Enterprise Article
-          const previewText = cut(d.content_markdown, 380);
-
-          embed = new EmbedBuilder()
-            .setTitle(`📰 [บทความยาว] Manual Enterprise Article`)
-            .setColor(0x6366f1)
-            .setDescription(`📌 **ชื่อบทความ:** ${d.title_th || solutionTitle}\n🎯 **แพลตฟอร์มแนะนำ:** Blognone, TechTalkThai, สื่อไอที, เว็บไซต์องค์กร`)
-            .addFields(
-              { name: '📦 โซลูชันเป้าหมาย', value: solutionTitle, inline: true },
-              { name: '🏷️ แท็ก', value: tagsFormatted, inline: true },
-              { name: '📄 ตัวอย่างเนื้อหา (Preview)', value: `\`\`\`markdown\n${previewText}\n\`\`\``, inline: false },
-              { name: '💡 การทำงาน', value: 'กดปุ่ม **"คัดลอกบทความเต็ม"** เพื่อนำ Markdown ไปโพสต์ หรือกด **"ทำเครื่องหมายพร้อมใช้งาน"** เพื่อบันทึกสถานะในระบบ', inline: false }
-            )
-            .setFooter({ text: `Draft ID: #${d.id} • สำหรับคัดลอกไปเผยแพร่ด้วยตนเอง` })
-            .setTimestamp();
-
-          actionRow = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId(`flow2_copy_${d.id}`).setLabel('📋 คัดลอกบทความเต็ม').setStyle(ButtonStyle.Primary),
-            new ButtonBuilder().setCustomId(`flow2_publish_${d.id}`).setLabel('✅ ทำเครื่องหมายพร้อมใช้งาน').setStyle(ButtonStyle.Success),
-            new ButtonBuilder().setCustomId(`flow2_reject_${d.id}`).setLabel('❌ ปฏิเสธ').setStyle(ButtonStyle.Danger)
-          );
-        }
-
-        await broadcast({ embeds: [embed], components: [actionRow] });
+        const { embed, actionRow } = buildFlow2Card(d, body.solution_title);
+        await channel.send({ embeds: [embed], components: [actionRow] });
       }
-      return res.json({ ok: true, type: 'flow2_drafts', count: rows.length, broadcastCount: targetChannels.length });
+      return res.json({ ok: true, type: 'flow2_drafts', count: rows.length });
     }
 
     // 3. Flow 2: Manual Ready Announcement
@@ -1013,11 +1031,11 @@ app.post('/notify', async (req, res) => {
       const { rows } = await pool.query('SELECT title_th, content_markdown, tags FROM content_drafts WHERE id = $1', [body.draft_id]);
       if (rows.length) {
         const d = rows[0];
-        await broadcast({
+        await channel.send({
           content: `📝 **MANUAL ARTICLE READY**\n━━━━━━━━━━━━━━━━━━━━━━━\n📌 **ชื่อบทความ:** ${d.title_th}\n🏷️ **แท็ก:** ${(d.tags || []).join(', ')}\n\n\`\`\`markdown\n${d.content_markdown.slice(0, 1800)}\n\`\`\`\n━━━━━━━━━━━━━━━━━━━━━━━\n👉 สามารถคัดลอกไปเผยแพร่ตามแพลตฟอร์มต่างๆ ได้ทันที`
         });
       }
-      return res.json({ ok: true, type: 'manual_ready', broadcastCount: targetChannels.length });
+      return res.json({ ok: true, type: 'manual_ready' });
     }
 
     // 4. Default: Candidate for Flow 3
@@ -1029,8 +1047,8 @@ app.post('/notify', async (req, res) => {
     const embed = createCandidateEmbed(candidate);
     const row = createActionButtons(candidate.id);
 
-    await broadcast({ embeds: [embed], components: [row] });
-    return res.json({ ok: true, id: candidate.id, broadcastCount: targetChannels.length });
+    await channel.send({ embeds: [embed], components: [row] });
+    return res.json({ ok: true, id: candidate.id });
   } catch (err) {
     console.error('Notify endpoint error:', err);
     return res.status(500).json({ error: err.message });
