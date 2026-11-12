@@ -314,12 +314,7 @@ client.on('interactionCreate', async (interaction) => {
     }
 
     if (interaction.isButton()) {
-      if (!isAuthorizedAdmin(interaction.user)) {
-        return await interaction.reply({
-          content: `⛔ **ไม่มีสิทธิ์ดำเนินการ:** เฉพาะผู้ดูแลระบบที่ระบุใน \`DISCORD_ADMIN_IDS\` เท่านั้นที่สามารถกดปุ่มนี้ได้ (ID ของคุณ: \`${interaction.user.id}\`)`,
-          ephemeral: true
-        });
-      }
+      // อนุญาตให้ทุกคนใน Server มีสิทธิ์กดปุ่มได้ โดยระบบจะบันทึกข้อมูลผู้ดำเนินการลงฐานข้อมูลเสมอ
 
       if (interaction.customId.startsWith('flow1_approve_')) {
         const id = interaction.customId.replace('flow1_approve_', '');
@@ -518,13 +513,13 @@ client.on('interactionCreate', async (interaction) => {
     }
 
     if (interaction.isModalSubmit()) {
-      if (!isAuthorizedAdmin(interaction.user)) {
-        return await interaction.reply({
-          content: `⛔ **ไม่มีสิทธิ์ดำเนินการ:** เฉพาะผู้ดูแลระบบที่ระบุใน \`DISCORD_ADMIN_IDS\` เท่านั้นที่สามารถส่งข้อมูลนี้ได้ (ID ของคุณ: \`${interaction.user.id}\`)`,
-          ephemeral: true
-        });
-      }
       if (interaction.customId === 'modal_devto_cookie') {
+        if (!isAuthorizedAdmin(interaction.user)) {
+          return await interaction.reply({
+            content: `⛔ **ไม่มีสิทธิ์ดำเนินการ:** เฉพาะผู้ดูแลระบบที่ระบุใน \`DISCORD_ADMIN_IDS\` เท่านั้นที่สามารถตั้งค่า Cookie ได้ (ID ของคุณ: \`${interaction.user.id}\`)`,
+            ephemeral: true
+          });
+        }
         const rawCookie = interaction.fields.getTextInputValue('cookie_value');
         await interaction.deferReply({ ephemeral: true });
         return await saveAndVerifyDevtoCookie(interaction, rawCookie, pool);
