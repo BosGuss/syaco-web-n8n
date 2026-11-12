@@ -289,20 +289,126 @@ async function loadBotSettings() {
   }
 }
 
+// Auto-setup channel for any guild (existing or newly joined)
+async function autoSetupGuildChannel(guild) {
+  try {
+    // 1. Check if dedicated channel already exists
+    let target = guild.channels.cache.find(c =>
+      c.isTextBased() && (c.name.includes('syaco') || c.name.includes('alert') || c.name.includes('content'))
+    );
+
+    // 2. If not found, try to auto-create dedicated channel if bot has permission
+    if (!target) {
+      const me = guild.members.me || (await guild.members.fetchMe().catch(() => null));
+      if (me && me.permissions.has('ManageChannels')) {
+        try {
+          target = await guild.channels.create({
+            name: '📢│syaco-alerts',
+            topic: 'ช่องรับการแจ้งเตือนและการ์ดอนุมัติคอนเทนต์ SyaCo Automation',
+            reason: 'Auto-created notification channel for SyaCo Content Automation'
+          });
+          console.log(`[Bot] Auto-created channel #${target.name} in guild "${guild.name}"`);
+        } catch (createErr) {
+          console.warn(`[Bot] Could not auto-create channel in "${guild.name}":`, createErr.message);
+        }
+      }
+    }
+
+    // 3. Fallback: Use system channel or first writable text channel
+    if (!target) {
+      const me = guild.members.me || (await guild.members.fetchMe().catch(() => null));
+      if (guild.systemChannel && (!me || guild.systemChannel.permissionsFor(me)?.has('SendMessages'))) {
+        target = guild.systemChannel;
+      } else {
+        target = guild.channels.cache.find(c =>
+          c.isTextBased() && (!me || c.permissionsFor(me)?.has('SendMessages'))
+        );
+      }
+    }
+
+    if (target) {
+      // Save per-guild channel mapping into DB
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS guild_channels (
+          guild_id TEXT PRIMARY KEY,
+          channel_id TEXT NOT NULL,
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+      `);
+      await pool.query(
+        `INSERT INTO guild_channels (guild_id, channel_id, updated_at)
+         VALUES ($1, $2, NOW())
+         ON CONFLICT (guild_id) DO UPDATE SET channel_id = $2, updated_at = NOW();`,
+        [guild.id, target.id]
+      );
+
+      // Also set default DISCORD_CHANNEL_ID in bot_settings
+      await pool.query(
+        `INSERT INTO bot_settings (key, value, updated_at)
+         VALUES ('DISCORD_CHANNEL_ID', $1, NOW())
+         ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW();`,
+        [target.id]
+      );
+      process.env.DISCORD_CHANNEL_ID = target.id;
+
+      // Send Welcome Embed
+      const welcomeEmbed = new EmbedBuilder()
+        .setTitle('🎉 SyaCo Automation Bot เชื่อมต่อกับเซิร์ฟเวอร์เรียบร้อย!')
+        .setColor(0x57f287)
+        .setDescription(`ยินดีต้อนรับสู่ระบบ **SyaCo Content & Lead Automation**\n\nระบบได้ตั้งค่าช่อง <#${target.id}> เป็นช่องรับการแจ้งเตือนและการ์ดอนุมัติให้อัตโนมัติแล้วครับ!`)
+        .addFields(
+          { name: '📢 ฟังก์ชันอัตโนมัติ', value: '• **Flow 1:** ไอเดียค้นพบโซลูชันใหม่จากเว็บ SyaCo\n• **Flow 2:** ร่างคอนเทนต์ Bluesky, Dev.to, และบทความยาว\n• **Flow 3:** คัดกรองกระทู้ Pantip/Blognone และร่างคำตอบหาลูกค้า', inline: false },
+          { name: '⚙️ การปรับแต่ง', value: 'หากต้องการย้ายไปช่องอื่น สามารถพิมพ์คำสั่ง `/set-channel` ได้ตลอดเวลา', inline: false }
+        )
+        .setTimestamp();
+
+      await target.send({ embeds: [welcomeEmbed] }).catch(() => {});
+      console.log(`[Bot] Auto-configured channel #${target.name} (${target.id}) for guild "${guild.name}"`);
+      return target;
+    }
+  } catch (err) {
+    console.error(`[Bot] Error in autoSetupGuildChannel for "${guild.name}":`, err.message);
+  }
+  return null;
+}
+
 client.once('ready', async () => {
   console.log(`Discord bot logged in as ${client.user.tag}`);
   await loadBotSettings();
   await registerCommands(client);
+
+  // Auto-setup channel for any connected guilds that don't have one yet
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS guild_channels (
+        guild_id TEXT PRIMARY KEY,
+        channel_id TEXT NOT NULL,
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+    for (const guild of client.guilds.cache.values()) {
+      const { rows } = await pool.query(
+        "SELECT channel_id FROM guild_channels WHERE guild_id = $1",
+        [guild.id]
+      ).catch(() => ({ rows: [] }));
+      if (!rows.length) {
+        await autoSetupGuildChannel(guild);
+      }
+    }
+  } catch (err) {
+    console.warn('[Bot] Guild channel check on ready warning:', err.message);
+  }
 });
 
-// เมื่อบอทได้รับเชิญเข้า Server ใหม่ ให้ลงทะเบียน Slash Commands ทันที
+// เมื่อบอทได้รับเชิญเข้า Server ใหม่ ให้ลงทะเบียนคำสั่งและสร้าง/ตั้งค่าช่องแจ้งเตือนอัตโนมัติทันที
 client.on('guildCreate', async (guild) => {
   console.log(`[Bot] ได้รับเชิญเข้า Server ใหม่: "${guild.name}" (${guild.id})`);
   try {
     await registerCommands(client);
-    console.log(`✅ [Bot] อัปเดตคำสั่งสำหรับ Server ใหม่ "${guild.name}" สำเร็จอัตโนมัติ!`);
+    await autoSetupGuildChannel(guild);
+    console.log(`✅ [Bot] ติดตั้งช่องแจ้งเตือนและคำสั่งสำหรับ Server ใหม่ "${guild.name}" สำเร็จอัตโนมัติ!`);
   } catch (err) {
-    console.error(`[Bot] ไม่สามารถลงทะเบียนคำสั่งสำหรับ Server ใหม่:`, err);
+    console.error(`[Bot] ไม่สามารถติดตั้งช่องหรือคำสั่งสำหรับ Server ใหม่:`, err);
   }
 });
 
@@ -703,6 +809,63 @@ async function handleApproval(interaction, candidateId, overrideAnswer = null) {
   }
 }
 
+// Target Channel Resolver: Supports Multi-Guild & Automatic Discovery
+async function getTargetChannels() {
+  const channels = [];
+  const seenIds = new Set();
+
+  // 1. Try per-guild channels from database
+  try {
+    const { rows: guildRows } = await pool.query("SELECT channel_id FROM guild_channels");
+    for (const r of guildRows) {
+      if (r.channel_id && !seenIds.has(r.channel_id)) {
+        const ch = await client.channels.fetch(r.channel_id).catch(() => null);
+        if (ch && ch.isTextBased()) {
+          channels.push(ch);
+          seenIds.add(r.channel_id);
+        }
+      }
+    }
+  } catch (_) {}
+
+  // 2. If no per-guild channel, try default DISCORD_CHANNEL_ID
+  if (channels.length === 0) {
+    let defaultId = null;
+    try {
+      const { rows } = await pool.query("SELECT value FROM bot_settings WHERE key = 'DISCORD_CHANNEL_ID'");
+      if (rows.length && rows[0].value && rows[0].value !== '123456789012345678') {
+        defaultId = rows[0].value;
+      }
+    } catch (_) {}
+
+    if (!defaultId) {
+      const envChannel = (process.env.DISCORD_CHANNEL_ID || '').trim();
+      if (envChannel && envChannel !== '123456789012345678') defaultId = envChannel;
+    }
+
+    if (defaultId && !seenIds.has(defaultId)) {
+      const ch = await client.channels.fetch(defaultId).catch(() => null);
+      if (ch && ch.isTextBased()) {
+        channels.push(ch);
+        seenIds.add(defaultId);
+      }
+    }
+  }
+
+  // 3. Fallback: Auto-setup or auto-find channel for each connected guild
+  if (channels.length === 0 && client.guilds.cache.size > 0) {
+    for (const guild of client.guilds.cache.values()) {
+      const ch = await autoSetupGuildChannel(guild);
+      if (ch && !seenIds.has(ch.id)) {
+        channels.push(ch);
+        seenIds.add(ch.id);
+      }
+    }
+  }
+
+  return channels;
+}
+
 // Internal Express Server for n8n Flow 1, 2, 3 notifications
 const app = express();
 app.use(express.json());
@@ -710,47 +873,23 @@ app.use(express.json());
 app.post('/notify', async (req, res) => {
   try {
     const body = req.body;
-
-    let channelId = null;
-    try {
-      const { rows } = await pool.query("SELECT value FROM bot_settings WHERE key = 'DISCORD_CHANNEL_ID'");
-      if (rows.length && rows[0].value && rows[0].value !== '123456789012345678') {
-        channelId = rows[0].value;
-      }
-    } catch (_) {}
-
-    if (!channelId) {
-      const envChannel = (process.env.DISCORD_CHANNEL_ID || '').trim();
-      if (envChannel && envChannel !== '123456789012345678') {
-        channelId = envChannel;
-      }
+    const targetChannels = await getTargetChannels();
+    if (!targetChannels.length) {
+      return res.status(500).json({ error: 'No active Discord channels found for notifications.' });
     }
 
-    // Fallback: If still not configured, pick the first available text channel in connected guild
-    if (!channelId && client.guilds.cache.size > 0) {
-      for (const guild of client.guilds.cache.values()) {
-        const defaultChannel = guild.channels.cache.find(c => c.isTextBased() && c.name !== 'command');
-        if (defaultChannel) {
-          channelId = defaultChannel.id;
-          process.env.DISCORD_CHANNEL_ID = channelId;
-          await pool.query(
-            "INSERT INTO bot_settings (key, value, updated_at) VALUES ('DISCORD_CHANNEL_ID', $1, NOW()) ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()",
-            [channelId]
-          ).catch(() => {});
-          console.log(`[Notify] Auto-selected Discord channel #${defaultChannel.name} (${channelId})`);
-          break;
+    const broadcast = async (payload) => {
+      const results = [];
+      for (const ch of targetChannels) {
+        try {
+          const m = await ch.send(payload);
+          results.push({ channel: ch.id, messageId: m.id });
+        } catch (err) {
+          console.warn(`[Notify] Failed to send to #${ch.name || ch.id}:`, err.message);
         }
       }
-    }
-
-    if (!channelId) {
-      return res.status(500).json({ error: 'DISCORD_CHANNEL_ID is not configured. Please run /set-channel in Discord.' });
-    }
-
-    const channel = await client.channels.fetch(channelId);
-    if (!channel) {
-      return res.status(500).json({ error: 'Discord Channel not found' });
-    }
+      return results;
+    };
 
     // 1. Flow 1: New Proposed Adjacent Solution
     if (body.type === 'flow1_suggestion' && body.suggestion) {
@@ -771,8 +910,8 @@ app.post('/notify', async (req, res) => {
         new ButtonBuilder().setCustomId(`flow1_reject_${s.id}`).setLabel('❌ ปฏิเสธ').setStyle(ButtonStyle.Danger)
       );
 
-      await channel.send({ embeds: [embed], components: [row] });
-      return res.json({ ok: true, type: 'flow1_suggestion', id: s.id });
+      await broadcast({ embeds: [embed], components: [row] });
+      return res.json({ ok: true, type: 'flow1_suggestion', id: s.id, broadcastCount: targetChannels.length });
     }
 
     // 2. Flow 2: Multi-Platform Drafts Notification
@@ -864,9 +1003,9 @@ app.post('/notify', async (req, res) => {
           );
         }
 
-        await channel.send({ embeds: [embed], components: [actionRow] });
+        await broadcast({ embeds: [embed], components: [actionRow] });
       }
-      return res.json({ ok: true, type: 'flow2_drafts', count: rows.length });
+      return res.json({ ok: true, type: 'flow2_drafts', count: rows.length, broadcastCount: targetChannels.length });
     }
 
     // 3. Flow 2: Manual Ready Announcement
@@ -874,11 +1013,11 @@ app.post('/notify', async (req, res) => {
       const { rows } = await pool.query('SELECT title_th, content_markdown, tags FROM content_drafts WHERE id = $1', [body.draft_id]);
       if (rows.length) {
         const d = rows[0];
-        await channel.send({
+        await broadcast({
           content: `📝 **MANUAL ARTICLE READY**\n━━━━━━━━━━━━━━━━━━━━━━━\n📌 **ชื่อบทความ:** ${d.title_th}\n🏷️ **แท็ก:** ${(d.tags || []).join(', ')}\n\n\`\`\`markdown\n${d.content_markdown.slice(0, 1800)}\n\`\`\`\n━━━━━━━━━━━━━━━━━━━━━━━\n👉 สามารถคัดลอกไปเผยแพร่ตามแพลตฟอร์มต่างๆ ได้ทันที`
         });
       }
-      return res.json({ ok: true, type: 'manual_ready' });
+      return res.json({ ok: true, type: 'manual_ready', broadcastCount: targetChannels.length });
     }
 
     // 4. Default: Candidate for Flow 3
@@ -890,8 +1029,8 @@ app.post('/notify', async (req, res) => {
     const embed = createCandidateEmbed(candidate);
     const row = createActionButtons(candidate.id);
 
-    await channel.send({ embeds: [embed], components: [row] });
-    return res.json({ ok: true, id: candidate.id });
+    await broadcast({ embeds: [embed], components: [row] });
+    return res.json({ ok: true, id: candidate.id, broadcastCount: targetChannels.length });
   } catch (err) {
     console.error('Notify endpoint error:', err);
     return res.status(500).json({ error: err.message });

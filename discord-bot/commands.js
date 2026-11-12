@@ -780,6 +780,21 @@ async function handleCommand(interaction, { pool, client }) {
         ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW();
       `, [targetChannel.id]);
 
+      if (interaction.guildId) {
+        await pool.query(`
+          CREATE TABLE IF NOT EXISTS guild_channels (
+            guild_id TEXT PRIMARY KEY,
+            channel_id TEXT NOT NULL,
+            updated_at TIMESTAMPTZ DEFAULT NOW()
+          );
+        `);
+        await pool.query(`
+          INSERT INTO guild_channels (guild_id, channel_id, updated_at)
+          VALUES ($1, $2, NOW())
+          ON CONFLICT (guild_id) DO UPDATE SET channel_id = $2, updated_at = NOW();
+        `, [interaction.guildId, targetChannel.id]);
+      }
+
       process.env.DISCORD_CHANNEL_ID = targetChannel.id;
       updateEnvFile('DISCORD_CHANNEL_ID', targetChannel.id);
 
