@@ -324,7 +324,7 @@ client.on('interactionCreate', async (interaction) => {
           const result = await approveAndCreateDraft({ id, pool, reviewedBy });
           if (result.success) {
             await interaction.editReply({
-              content: `✅ **อนุมัติและสร้าง Draft บน syaco.co.th สำเร็จ!** (Solution ID: \`${result.solutionId}\`)\n👤 **อนุมัติโดย:** \`${reviewedBy}\`\n🔗 https://www.syaco.co.th/solutions (Draft Mode)\nทีมงานสามารถตรวจสอบและใส่ตัวอย่างเพิ่มเติมได้ในระบบหลังบ้าน`,
+              content: `✅ **อนุมัติและสร้าง Draft บน syaco.co.th สำเร็จ!** (Solution ID: \`${result.solutionId}\`)\n👤 **อนุมัติโดย:** \`${reviewedBy}\`\n🔗 https://www.syaco.co.th/admin/solutions\nทีมงานสามารถตรวจสอบและใส่ตัวอย่างเพิ่มเติมได้ในระบบหลังบ้าน`,
               components: []
             });
           } else {
