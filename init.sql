@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS backlink_candidates (
   solution_title   text,
   solution_url     text,
 
-  platform         text,            -- reddit | devto | bluesky | pantip | blognone | blockdit | facebook_group
+  platform         text,            -- reddit | devto | bluesky | pantip | linkedin | facebook | facebook_group | blockdit
   post_title       text,
   post_url         text        NOT NULL,
   search_query     text,

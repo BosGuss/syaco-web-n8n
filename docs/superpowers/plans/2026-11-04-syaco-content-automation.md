@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build 3 production-grade, autonomous n8n workflows and Discord bot enhancements for SyaCo: Flow 1 (Adjacent Solution Discovery to SyaCo Web Drafts), Flow 2 (Multi-Platform Content Creator for Bluesky, Dev.to, Hashnode, and Manual Article), and Flow 3 (Community Lead Assistant answering Pantip, Blognone, Blockdit, and Facebook Group threads via `/answer`).
+**Goal:** Build 3 production-grade, autonomous n8n workflows and Discord bot enhancements for SyaCo: Flow 1 (Adjacent Solution Discovery to SyaCo Web Drafts), Flow 2 (Multi-Platform Content Creator for Bluesky, Dev.to, Hashnode, and Manual Article), and Flow 3 (Community Lead Assistant answering Pantip, LinkedIn, Facebook threads via `/answer`).
 
 **Architecture:** 
 - PostgreSQL acts as the single source of truth and idempotency lock across all 3 independent workflows.
@@ -243,7 +243,7 @@ In `discord-bot/commands.js`, add `answerCommand` in `commands` array:
 ```javascript
 new SlashCommandBuilder()
   .setName('answer')
-  .setDescription('ส่งคำถามจากกระทู้ Pantip, Blognone, Blockdit หรือ Facebook Group ให้ AI ช่วยร่างคำตอบ')
+  .setDescription('ส่งคำถามจากกระทู้ Pantip, LinkedIn, Facebook ให้ AI ช่วยร่างคำตอบ')
   .addStringOption(option =>
     option
       .setName('platform')
@@ -251,9 +251,10 @@ new SlashCommandBuilder()
       .setRequired(true)
       .addChoices(
         { name: 'Pantip', value: 'pantip' },
-        { name: 'Blognone', value: 'blognone' },
-        { name: 'Blockdit', value: 'blockdit' },
-        { name: 'Facebook Group', value: 'facebook_group' }
+        { name: 'LinkedIn', value: 'linkedin' },
+        { name: 'Facebook', value: 'facebook' },
+        { name: 'Facebook Group', value: 'facebook_group' },
+        { name: 'Blockdit', value: 'blockdit' }
       )
   )
 ```
@@ -295,7 +296,7 @@ In `discord-bot/index.js`:
 1. When handling manual approvals in `handleApproval(interaction, candidateId)`:
 ```javascript
   } else {
-    // Reddit, Pantip, Blognone, Blockdit, Facebook -> Manual Workflow
+    // Reddit, Pantip, LinkedIn, Facebook, Blockdit -> Manual Workflow
     await pool.query(
       "UPDATE backlink_candidates SET status = 'manual', answer = $1, reviewed_at = NOW() WHERE id::text = $2",
       [finalAnswer, candidateId]
@@ -779,7 +780,7 @@ Create `workflows/flow3-community-lead-assistant.json`:
    WITH quota AS (
      SELECT COUNT(*) AS weekly_count 
      FROM backlink_candidates 
-     WHERE platform IN ('pantip', 'blognone', 'blockdit', 'facebook_group')
+     WHERE platform IN ('pantip', 'linkedin', 'facebook', 'facebook_group', 'blockdit')
        AND status IN ('pending_review', 'approved', 'manual', 'posted')
        AND created_at >= NOW() - INTERVAL '7 days'
    ),
@@ -802,9 +803,9 @@ Create `workflows/flow3-community-lead-assistant.json`:
    - System Instruction: Evaluate `lead_fit` (HIGH/MEDIUM/LOW), `canAnswer` (boolean), `matchedSolutionId`.
    - Voice tailoring:
      - Pantip: Friendly, respectful, engineering peer.
-     - Blognone: Concise, technical, architectural focus.
+     - LinkedIn: Professional, B2B thought-leadership, enterprise architectural focus.
+     - Facebook: Helpful, practical troubleshooting.
      - Blockdit: Structured, step-by-step problem-solution.
-     - Facebook Group: Helpful, practical troubleshooting.
    - Disclosure rule: Clear disclosure "ผมมาจากทีม SyaCo...", no backlink by default unless directly relevant.
 7. HTTP Request: Gemini API (Structured JSON).
 8. Code Node: `Decision Filter & Format Answer`:
@@ -861,9 +862,9 @@ assert(fb1.includes('story_fbid=987654321'));
 assert(fb1.includes('id=123456789'));
 assert(!fb1.includes('ref=notif'));
 
-// 3. Blognone URL normalizer
-const bn1 = normalizeUrl('https://www.blognone.com/node/139999?fbclid=IwAR2345', 'blognone');
-assert.strictEqual(bn1, 'https://www.blognone.com/node/139999');
+// 3. LinkedIn URL normalizer
+const li1 = normalizeUrl('https://www.linkedin.com/posts/syaco-tech_cloud-data-pipeline-activity-7123456789012345678-abcd?utm_source=share&utm_medium=member_desktop', 'linkedin');
+assert.strictEqual(li1, 'https://www.linkedin.com/posts/syaco-tech_cloud-data-pipeline-activity-7123456789012345678-abcd');
 
 console.log('✅ Flow 3 platform-aware URL normalization tests passed.');
 ```
@@ -976,7 +977,7 @@ async function verify() {
   const qTest = await pool.query(`
     SELECT COUNT(*) AS weekly_count 
     FROM backlink_candidates 
-    WHERE platform IN ('pantip', 'blognone', 'blockdit', 'facebook_group')
+    WHERE platform IN ('pantip', 'linkedin', 'facebook', 'facebook_group', 'blockdit')
       AND status IN ('pending_review', 'approved', 'manual', 'posted')
       AND created_at >= NOW() - INTERVAL '7 days';
   `);

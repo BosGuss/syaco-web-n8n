@@ -345,7 +345,7 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName('answer')
-    .setDescription('ส่งคำถามจากกระทู้ Pantip, Blognone, Blockdit หรือ Facebook Group ให้ AI ช่วยร่างคำตอบ')
+    .setDescription('ส่งคำถามหรือโพสต์จาก Pantip, LinkedIn, Facebook ให้ AI ช่วยร่างคำตอบ')
     .addStringOption(option =>
       option
         .setName('platform')
@@ -353,9 +353,10 @@ const commands = [
         .setRequired(true)
         .addChoices(
           { name: 'Pantip', value: 'pantip' },
-          { name: 'Blognone', value: 'blognone' },
-          { name: 'Blockdit', value: 'blockdit' },
-          { name: 'Facebook Group', value: 'facebook_group' }
+          { name: 'LinkedIn', value: 'linkedin' },
+          { name: 'Facebook', value: 'facebook' },
+          { name: 'Facebook Group', value: 'facebook_group' },
+          { name: 'Blockdit', value: 'blockdit' }
         )
     ),
 
@@ -996,7 +997,7 @@ async function handleCommand(interaction, { pool, client }) {
         { name: '`/pending [limit]`', value: 'ดึงรายการที่รอรีวิวขึ้นมาพร้อมปุ่ม Approve / Edit / Reject' },
         { name: '`/run`', value: 'สั่งเริ่มกระบวนการค้นหา Backlink ใน n8n ทันที' },
         { name: '`/request-idea`', value: 'ขอไอเดียโซลูชันใหม่จาก Flow 1' },
-        { name: '`/answer <platform>`', value: 'ส่งลิงก์กระทู้และคำถามจาก Pantip, Blognone, Blockdit, Facebook ให้ AI ช่วยร่างคำตอบ' },
+        { name: '`/answer <platform>`', value: 'ส่งลิงก์กระทู้หรือโพสต์จาก Pantip, LinkedIn, Facebook ให้ AI ช่วยร่างคำตอบ' },
         { name: '`/set-devto-key`', value: 'อัปเดต API Key ของ Dev.to สำหรับเผยแพร่บทความ (เปิด Modal กรอกข้อมูล)' },
         { name: '`/set-devto-cookie`', value: 'อัปเดต Cookie ของ Dev.to สำหรับโพสต์คอมเมนต์ (เปิด Modal กรอกข้อมูล)' },
         { name: '`/set-channel [channel]`', value: 'ตั้งค่าห้องรับการแจ้งเตือน Candidates (เดินไปพิมพ์ในห้องที่ต้องการได้เลย)' },

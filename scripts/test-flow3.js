@@ -2,23 +2,44 @@ const assert = require('assert');
 
 // 1. Platform-Aware URL Normalization
 function normalizeUrl(rawUrl, platform) {
+  if (!rawUrl || typeof rawUrl !== 'string') return '';
+  const trimmed = rawUrl.trim();
   try {
-    const u = new URL(rawUrl.trim());
-    if (platform === 'pantip' || u.hostname.includes('pantip.com')) {
-      const m = u.pathname.match(/\/topic\/(\d+)/);
-      return m ? `https://pantip.com/topic/${m[1]}` : u.origin + u.pathname;
+    if (typeof URL !== 'undefined') {
+      const u = new URL(trimmed);
+      if (platform === 'pantip' || u.hostname.includes('pantip.com')) {
+        const m = u.pathname.match(/\/topic\/(\d+)/);
+        return m ? 'https://pantip.com/topic/' + m[1] : u.origin + u.pathname;
+      }
+      if (platform === 'facebook' || platform === 'facebook_group' || u.hostname.includes('facebook.com')) {
+        const keepParams = ['story_fbid', 'id', 'post_id'];
+        const newParams = new URLSearchParams();
+        keepParams.forEach(p => { if (u.searchParams.has(p)) newParams.set(p, u.searchParams.get(p)); });
+        const qs = newParams.toString();
+        return u.origin + u.pathname + (qs ? '?' + qs : '');
+      }
+      if (platform === 'linkedin' || u.hostname.includes('linkedin.com')) {
+        return u.origin + u.pathname;
+      }
+      return u.origin + u.pathname;
     }
-    if (platform === 'facebook_group' || u.hostname.includes('facebook.com')) {
-      const keepParams = ['story_fbid', 'id', 'post_id'];
-      const newParams = new URLSearchParams();
-      keepParams.forEach(p => { if (u.searchParams.has(p)) newParams.set(p, u.searchParams.get(p)); });
-      const qs = newParams.toString();
-      return u.origin + u.pathname + (qs ? '?' + qs : '');
-    }
-    return u.origin + u.pathname;
-  } catch (e) {
-    return rawUrl.trim();
+  } catch (_) {}
+
+  if (platform === 'pantip' || trimmed.includes('pantip.com')) {
+    const m = trimmed.match(/pantip\.com\/topic\/(\d+)/i);
+    return m ? 'https://pantip.com/topic/' + m[1] : trimmed.split('?')[0];
   }
+  if (platform === 'linkedin' || trimmed.includes('linkedin.com')) {
+    return trimmed.split('?')[0].split('#')[0];
+  }
+  if (platform === 'facebook' || platform === 'facebook_group' || trimmed.includes('facebook.com')) {
+    const base = trimmed.split('?')[0];
+    const qs = trimmed.includes('?') ? trimmed.split('?')[1].split('#')[0] : '';
+    const keep = ['story_fbid', 'id', 'post_id'];
+    const kept = qs.split('&').filter(pair => keep.some(k => pair.startsWith(k + '=')));
+    return base + (kept.length ? '?' + kept.join('&') : '');
+  }
+  return trimmed.split('?')[0].split('#')[0];
 }
 
 // Pantip URL normalizer
@@ -31,9 +52,9 @@ assert(fb1.includes('story_fbid=987654321'));
 assert(fb1.includes('id=123456789'));
 assert(!fb1.includes('ref=notif'));
 
-// Blognone URL normalizer
-const bn1 = normalizeUrl('https://www.blognone.com/node/139999?fbclid=IwAR2345', 'blognone');
-assert.strictEqual(bn1, 'https://www.blognone.com/node/139999');
+// LinkedIn URL normalizer (Removes tracking query params, keeps canonical path)
+const li1 = normalizeUrl('https://www.linkedin.com/posts/syaco-tech_cloud-data-pipeline-activity-7123456789012345678-abcd?utm_source=share&utm_medium=member_desktop', 'linkedin');
+assert.strictEqual(li1, 'https://www.linkedin.com/posts/syaco-tech_cloud-data-pipeline-activity-7123456789012345678-abcd');
 
 // 2. Solutions extraction test (flatMap across multiple n8n items)
 const mockSolItems = [

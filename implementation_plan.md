@@ -306,8 +306,8 @@ CREATE TABLE content_drafts (
 
 ## Flow 3 — Community Lead Assistant (`/answer` on-demand)
 
-**Trigger:** Discord Slash Command `/answer` (ทีมเปิด Modal กรอก 2 ช่อง: ลิงก์กระทู้ + ข้อความคำถามที่คัดลอกมา)  
-**Goal:** แปลงคำถามในกระทู้จริงของลูกค้าไทย (Pantip, Blognone, Blockdit, Facebook Group) ให้เป็น **B2B Lead คุณภาพสูง** โดยใช้ระบบและตารางเดิม `backlink_candidates` 100%
+**Trigger:** Discord Slash Command `/answer` (ทีมเปิด Modal กรอก 2 ช่อง: ลิงก์กระทู้/โพสต์ + ข้อความคำถามที่คัดลอกมา)  
+**Goal:** แปลงคำถามในกระทู้และโพสต์จริงของกลุ่มเป้าหมาย (Pantip, LinkedIn, Facebook) ให้เป็น **B2B Lead คุณภาพสูง** โดยใช้ระบบและตารางเดิม `backlink_candidates` 100%
 
 ---
 
@@ -316,14 +316,14 @@ CREATE TABLE content_drafts (
 2. **Platform-Aware URL Normalization**: ไม่ตัด query string ทิ้งแบบเหมาเข่ง:
    - **Pantip**: ตัดเหลือเฉพาะ canonical format `https://pantip.com/topic/{id}`
    - **Facebook**: รักษาพารามิเตอร์ระบุโพสต์ที่จำเป็น เช่น `story_fbid`, `id`, `post_id` หรือ path `/groups/.../posts/{id}`
-   - **Blognone / Blockdit**: ตัด UTM/query tracking ออก เหลือ path บทความจริง
+   - **LinkedIn**: ตัด UTM/query tracking ออก เหลือ canonical post path เช่น `https://www.linkedin.com/posts/...`
 3. **Idempotency ด้วย Normalized URL**: ตรวจสอบ `post_url` (UNIQUE) หากส่งลิงก์เดิมซ้ำ บอตจะตอบกลับว่า "กระทู้นี้อยู่ในระบบแล้ว" พร้อมแสดงการ์ดเดิม ไม่สร้างแถวซ้ำ
 4. **จำกัดโควตา 3–5 กระทู้ต่อสัปดาห์ (บังคับด้วย Database Query)**:
    - เมื่อรับคำสั่ง `/answer` จะรันคำนวณจำนวนโพสต์ที่ถูก approve/posted ในช่วง 7 วันที่ผ่านมา:
      ```sql
      SELECT COUNT(*) AS weekly_count 
      FROM backlink_candidates 
-     WHERE platform IN ('pantip', 'blognone', 'blockdit', 'facebook_group')
+     WHERE platform IN ('pantip', 'linkedin', 'facebook', 'facebook_group', 'blockdit')
        AND status IN ('pending_review', 'approved', 'posted')
        AND created_at >= NOW() - INTERVAL '7 days';
      ```
@@ -346,7 +346,7 @@ CREATE TABLE content_drafts (
    {
      "post_url": "https://pantip.com/topic/43000000",
      "question_text": "โรงงานมี PLC หลายยี่ห้อ ต้องการดึงข้อมูลเข้า SAP แบบ Realtime แนะนำ Middleware ตัวไหนดีครับ",
-     "platform": "pantip" // pantip | blognone | blockdit | facebook_group
+     "platform": "pantip" // pantip | linkedin | facebook | facebook_group
    }
    ```
 2. **Platform-Aware Normalize Post URL** — Code node:
@@ -358,12 +358,15 @@ CREATE TABLE content_drafts (
          const m = u.pathname.match(/\/topic\/(\d+)/);
          return m ? `https://pantip.com/topic/${m[1]}` : u.origin + u.pathname;
        }
-       if (platform === 'facebook_group' || u.hostname.includes('facebook.com')) {
+       if (platform === 'facebook' || platform === 'facebook_group' || u.hostname.includes('facebook.com')) {
          const keepParams = ['story_fbid', 'id', 'post_id'];
          const newParams = new URLSearchParams();
          keepParams.forEach(p => { if (u.searchParams.has(p)) newParams.set(p, u.searchParams.get(p)); });
          const qs = newParams.toString();
          return u.origin + u.pathname + (qs ? '?' + qs : '');
+       }
+       if (platform === 'linkedin' || u.hostname.includes('linkedin.com')) {
+         return u.origin + u.pathname;
        }
        return u.origin + u.pathname;
      } catch (e) {
@@ -378,7 +381,7 @@ CREATE TABLE content_drafts (
    WITH quota AS (
      SELECT COUNT(*) AS weekly_count 
      FROM backlink_candidates 
-     WHERE platform IN ('pantip', 'blognone', 'blockdit', 'facebook_group')
+     WHERE platform IN ('pantip', 'linkedin', 'facebook', 'facebook_group', 'blockdit')
        AND status IN ('pending_review', 'approved', 'posted')
        AND created_at >= NOW() - INTERVAL '7 days'
    ),
@@ -400,10 +403,10 @@ CREATE TABLE content_drafts (
    - ตรวจสอบ `lead_fit`: HIGH (Enterprise/B2B/Factory), MEDIUM (SMB/General Tech), LOW (Student/Hobbyist/Gaming)
    - ตรวจสอบ `canAnswer`: Solution ใน SyaCo แก้ปัญหานี้ได้ตรงจุดหรือไม่
    - กำหนดสไตล์น้ำเสียงตามแพลตฟอร์ม:
-     - **Pantip**: เป็นกันเอง ให้เกียรติ เน้นแบ่งปันประสบการณ์เชิงวิศวกรรม
-     - **Blognone**: กระชับ ตรงประเด็น เชิงเทคนิคและสถาปัตยกรรมระบบ
+     - **Pantip**: เป็นกันเอง ให้เกียรติ เน้นแบ่งปันประสบการณ์เชิงวิศวกรรม 2-3 ย่อหน้ากระชับ
+     - **LinkedIn**: โทนมืออาชีพ B2B thought-leadership เน้นแก้ปัญหาธุรกิจ ความคุ้มค่า และเสถียรภาพระบบ
+     - **Facebook**: เป็นมิตร มืออาชีพ ตอบคอมเมนต์ตรงประเด็นและช่วยเหลือจริง
      - **Blockdit**: ภาษาอ่านง่าย เล่าที่มา ปัญหา และแนวทางแก้ไขเป็นขั้นตอน
-     - **Facebook Group**: เป็นมิตร มืออาชีพ ตอบคอมเมนต์สั้นกระชับ
    - **กฎการใส่ Backlink**: ไม่ใส่เป็นค่าเริ่มต้น! ใส่เฉพาะเมื่อจำเป็นและเกี่ยวข้องตรงๆ พร้อมระบุตัวตนจริง ("Disclosure: ผมมาจากทีม SyaCo...") และแนบ UTM: `?utm_source={platform}&utm_medium=community_answer&utm_campaign=lead_gen`
 7. **AI Lead Fit & Answer Generation** — HTTP POST Gemini API (Structured Output)
 8. **Parse & Decision Filter** — Code node:
@@ -429,7 +432,7 @@ CREATE TABLE content_drafts (
 ### การปรับปรุงตาราง `backlink_candidates` (Migration):
 ```sql
 -- เพิ่มค่า platform ใหม่สำหรับชุมชนไทย
--- platform: 'reddit', 'devto', 'bluesky', 'pantip', 'blognone', 'blockdit', 'facebook_group'
+-- platform: 'reddit', 'devto', 'bluesky', 'pantip', 'linkedin', 'facebook', 'facebook_group', 'blockdit'
 -- status: 'pending_review', 'approved', 'posted', 'rejected', 'skipped'
 ```
 
@@ -442,7 +445,7 @@ CREATE TABLE content_drafts (
 | Review & approve solution suggestions | ทุก Monday | Discord |
 | Review & กด Approve เพื่อยิง Auto-Post ทันที | ทุกวัน เมื่อตรวจพบ Solution ใหม่ | Discord (ปุ่มแยก: Bluesky, Dev.to) |
 | Copy-paste บทความ Manual ฉบับเต็ม | เมื่อต้องการเผยแพร่ | Discord (#ready-to-post) → Blognone / TechTalkThai / Medium |
-| พิมพ์คำสั่ง `/answer` เพื่อให้ AI ช่วยร่างคำตอบกระทู้ลูกค้า | เมื่อพบกระทู้ที่น่าสนใจ (On-demand) | Discord (/answer modal) → Pantip / Blognone / Blockdit / FB Group |
+| พิมพ์คำสั่ง `/answer` เพื่อให้ AI ช่วยร่างคำตอบกระทู้ลูกค้า | เมื่อพบกระทู้ที่น่าสนใจ (On-demand) | Discord (/answer modal) → Pantip / LinkedIn / Facebook / Blockdit |
 | Review & นำคำตอบไป Reply ด้วยบัญชีจริง | หลังผ่านการตรวจทานใน Discord | กระทู้ต้นทาง (จำกัด 3-5 กระทู้/สัปดาห์) |
 
 ---

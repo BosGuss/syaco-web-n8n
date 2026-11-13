@@ -108,7 +108,7 @@ erDiagram
     backlink_candidates {
         bigint id PK
         string status "pending_review | approved | manual | posted | rejected | failed | skipped"
-        string platform "pantip | blognone | blockdit | facebook_group | devto | bluesky"
+        string platform "pantip | linkedin | facebook | facebook_group | blockdit | devto | bluesky"
         string post_url UK
         string answer
         timestamp created_at
@@ -156,7 +156,7 @@ erDiagram
   3. Evaluates B2B Enterprise lead fit and computes match score.
   4. Generates natural, anti-spam technical reply using persona guidelines.
   5. Records into `backlink_candidates`.
-  6. Posts review card to Discord. Approved responses are auto-posted (Bluesky, Dev.to) or marked for manual posting (Pantip, Blognone, Facebook).
+  6. Posts review card to Discord. Approved responses are auto-posted (Bluesky, Dev.to) or marked for manual posting (Pantip, LinkedIn, Facebook).
 
 ---
 
