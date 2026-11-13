@@ -104,7 +104,7 @@ async function verify() {
   const qTest = await pool.query(`
     SELECT COUNT(*) AS weekly_count 
     FROM backlink_candidates 
-    WHERE platform IN ('pantip', 'blognone', 'blockdit', 'facebook_group')
+    WHERE platform IN ('pantip', 'linkedin', 'facebook', 'facebook_group')
       AND status IN ('pending_review', 'approved', 'manual', 'posted')
       AND created_at >= NOW() - INTERVAL '7 days';
   `);

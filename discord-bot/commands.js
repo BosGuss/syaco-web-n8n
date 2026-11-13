@@ -355,8 +355,7 @@ const commands = [
           { name: 'Pantip', value: 'pantip' },
           { name: 'LinkedIn', value: 'linkedin' },
           { name: 'Facebook', value: 'facebook' },
-          { name: 'Facebook Group', value: 'facebook_group' },
-          { name: 'Blockdit', value: 'blockdit' }
+          { name: 'Facebook Group', value: 'facebook_group' }
         )
     ),
 

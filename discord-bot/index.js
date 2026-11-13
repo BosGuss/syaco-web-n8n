@@ -926,7 +926,7 @@ async function handleApproval(interaction, candidateId, overrideAnswer = null) {
       });
     }
   } else {
-    // Reddit, Pantip, LinkedIn, Facebook, Blockdit -> Manual Workflow
+    // Pantip, LinkedIn, Facebook, Facebook Group -> Manual Workflow
     await pool.query(
       "UPDATE backlink_candidates SET status = 'manual', answer = $1, reviewed_at = NOW(), reviewed_by = $3, error_message = NULL WHERE id::text = $2",
       [finalAnswer, candidateId, reviewedBy]
