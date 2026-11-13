@@ -63,16 +63,16 @@ def sync_workflow(cursor, wf_path):
     # 2. Update or Insert workflow_entity
     if is_new:
         cursor.execute("""
-        INSERT INTO workflow_entity (id, name, active, nodes, connections, settings, staticData, pinData, versionId, triggerCount, meta, createdAt, updatedAt)
-        VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
-        """, (wf_id, name, nodes_json, connections_json, settings_json, static_data, pin_data, new_version_id, meta_json, now_str, now_str))
+        INSERT INTO workflow_entity (id, name, active, nodes, connections, settings, staticData, pinData, versionId, activeVersionId, triggerCount, meta, createdAt, updatedAt)
+        VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+        """, (wf_id, name, nodes_json, connections_json, settings_json, static_data, pin_data, new_version_id, new_version_id, meta_json, now_str, now_str))
         print(f"[CREATED] Workflow '{name}' (ID: {wf_id})")
     else:
         cursor.execute("""
         UPDATE workflow_entity
-        SET nodes=?, connections=?, settings=?, staticData=?, pinData=?, meta=?, versionId=?, updatedAt=?
+        SET nodes=?, connections=?, settings=?, staticData=?, pinData=?, meta=?, versionId=?, activeVersionId=?, updatedAt=?
         WHERE id=?
-        """, (nodes_json, connections_json, settings_json, static_data, pin_data, meta_json, new_version_id, now_str, wf_id))
+        """, (nodes_json, connections_json, settings_json, static_data, pin_data, meta_json, new_version_id, new_version_id, now_str, wf_id))
         print(f"[UPDATED] Workflow '{name}' (ID: {wf_id})")
 
     # 3. Insert into workflow_history
