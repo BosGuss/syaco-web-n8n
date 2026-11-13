@@ -361,7 +361,7 @@ async function loadBotSettings() {
         updated_at TIMESTAMPTZ DEFAULT NOW()
       )
     `);
-    const { rows } = await pool.query("SELECT key, value FROM bot_settings WHERE key IN ('DEVTO_COOKIE', 'GEMINI_API_KEY', 'GEMINI_MODEL', 'DISCORD_CHANNEL_ID', 'DISCORD_ADMIN_IDS')");
+    const { rows } = await pool.query("SELECT key, value FROM bot_settings WHERE key IN ('DEVTO_API_KEY', 'DEVTO_COOKIE', 'GEMINI_API_KEY', 'GEMINI_MODEL', 'DISCORD_CHANNEL_ID', 'DISCORD_ADMIN_IDS')");
     for (const r of rows) {
       if (r.value) {
         process.env[r.key] = r.value;

@@ -652,9 +652,30 @@ async function handleCommand(interaction, { pool, client }) {
       }
     }
 
-    // 4. Check Dev.to Session Cookie
+    // 4. Check Dev.to API Key & Session Cookie
     let devtoStatus = '⚪ Not Configured';
+    const devApiKey = (process.env.DEVTO_API_KEY || '').trim();
     const devCookie = (process.env.DEVTO_COOKIE || '').trim();
+
+    let apiStatusText = '';
+    if (devApiKey) {
+      try {
+        const userRes = await fetch('https://dev.to/api/users/me', {
+          headers: { 'api-key': devApiKey },
+          signal: AbortSignal.timeout(4000)
+        });
+        if (userRes.ok) {
+          const userData = await userRes.json();
+          apiStatusText = `🟢 API (@${userData.username || 'User'})`;
+        } else {
+          apiStatusText = `🔴 API Invalid (HTTP ${userRes.status})`;
+        }
+      } catch (e) {
+        apiStatusText = `🔴 API Error: ${e.message}`;
+      }
+    }
+
+    let cookieStatusText = '';
     if (devCookie) {
       try {
         const cookieStr = normalizeDevtoCookie(devCookie);
@@ -667,13 +688,21 @@ async function handleCommand(interaction, { pool, client }) {
         });
         const devData = await devRes.json();
         if (devData?.user) {
-          devtoStatus = `🟢 Logged in (@${devData.user.username || 'User'})`;
+          cookieStatusText = `🟢 Cookie (@${devData.user.username || 'User'})`;
         } else {
-          devtoStatus = '🔴 Session Expired (Need to refresh DEVTO_COOKIE)';
+          cookieStatusText = '🔴 Cookie Expired';
         }
       } catch (e) {
-        devtoStatus = `🔴 Error: ${e.message}`;
+        cookieStatusText = `🔴 Cookie Error: ${e.message}`;
       }
+    }
+
+    if (apiStatusText && cookieStatusText) {
+      devtoStatus = `${apiStatusText} • ${cookieStatusText}`;
+    } else if (apiStatusText) {
+      devtoStatus = apiStatusText;
+    } else if (cookieStatusText) {
+      devtoStatus = cookieStatusText;
     }
 
     // 5. Check Gemini AI
