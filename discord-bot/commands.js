@@ -103,6 +103,95 @@ async function saveAndVerifyDevtoCookie(interaction, rawCookie, pool) {
   }
 }
 
+async function saveAndVerifyDevtoKey(interaction, rawKey, pool) {
+  const key = (rawKey || '').trim();
+  if (!key) {
+    return await interaction.editReply('❌ ค่า API Key ว่างเปล่า กรุณาระบุ Dev.to API Key ที่ถูกต้อง');
+  }
+
+  // 1. Test against Dev.to API
+  let isValid = false;
+  let userDetails = null;
+  let testError = null;
+
+  try {
+    const testRes = await fetch('https://dev.to/api/users/me', {
+      headers: {
+        'api-key': key
+      },
+      signal: AbortSignal.timeout(5000)
+    });
+    if (testRes.ok) {
+      const data = await testRes.json().catch(() => null);
+      if (data?.username) {
+        isValid = true;
+        userDetails = data;
+      }
+    } else {
+      const errBody = await testRes.text().catch(() => '');
+      testError = `HTTP ${testRes.status} ${errBody.slice(0, 150)}`;
+    }
+  } catch (err) {
+    testError = err.message;
+  }
+
+  // 2. Save to database
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS bot_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT,
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+    await pool.query(`
+      INSERT INTO bot_settings (key, value, updated_at)
+      VALUES ('DEVTO_API_KEY', $1, NOW())
+      ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW();
+    `, [key]);
+
+    process.env.DEVTO_API_KEY = key;
+  } catch (dbErr) {
+    console.error('Failed to save DEVTO_API_KEY to DB:', dbErr);
+    return await interaction.editReply(`⚠️ บันทึกลงฐานข้อมูลไม่สำเร็จ: ${dbErr.message}`);
+  }
+
+  // Update .env file
+  updateEnvFile('DEVTO_API_KEY', key);
+
+  const masked = key.length > 8 ? `${key.slice(0, 4)}...${key.slice(-4)}` : '******';
+
+  // 3. Response
+  if (isValid && userDetails) {
+    const embed = new EmbedBuilder()
+      .setTitle('✅ บันทึก DEVTO_API_KEY สำเร็จ!')
+      .setColor(0x57f287)
+      .setDescription('เชื่อมต่อบัญชี Dev.to สำเร็จแล้ว พร้อมใช้งานสำหรับการเผยแพร่บทความทันที')
+      .addFields(
+        { name: '👤 บัญชี Dev.to', value: `@${userDetails.username} (${userDetails.name || 'User'})`, inline: true },
+        { name: '🔑 API Key', value: `\`${masked}\``, inline: true },
+        { name: '💾 สถานะการบันทึก', value: 'บันทึกลง Database และไฟล์ .env เรียบร้อย', inline: false }
+      )
+      .setTimestamp();
+    return await interaction.editReply({ embeds: [embed] });
+  } else {
+    const embed = new EmbedBuilder()
+      .setTitle('⚠️ บันทึก DEVTO_API_KEY แล้ว แต่การทดสอบไม่ผ่าน')
+      .setColor(0xfee75c)
+      .setDescription('ระบบบันทึกคีย์ลงฐานข้อมูลแล้ว แต่ Dev.to ตอบกลับว่า API Key ไม่ถูกต้องหรือหมดอายุ')
+      .addFields(
+        { name: '🔑 API Key', value: `\`${masked}\``, inline: true },
+        {
+          name: 'สาเหตุที่เป็นไปได้',
+          value: '• API Key อาจไม่ถูกต้องหรือก๊อปปี้มาไม่ครบ\n• แนะนำให้ไปที่ Settings -> Extensions บน Dev.to เพื่อสร้าง Key ใหม่'
+        }
+      )
+      .setFooter({ text: testError ? `Error: ${testError}` : 'API Key Invalid' })
+      .setTimestamp();
+    return await interaction.editReply({ embeds: [embed] });
+  }
+}
+
 // 2. Helper สำหรับจัดการ Environment File และ Gemini AI
 function updateEnvFile(key, value) {
   const paths = ['/app/.env', path.resolve(__dirname, '../.env')];
@@ -227,6 +316,10 @@ const commands = [
   new SlashCommandBuilder()
     .setName('health')
     .setDescription('ตรวจสอบสุขภาพของระบบ (PostgreSQL, n8n, Bluesky, Dev.to, Gemini AI)'),
+
+  new SlashCommandBuilder()
+    .setName('set-devto-key')
+    .setDescription('ตั้งค่าหรืออัปเดต DEVTO_API_KEY สำหรับเผยแพร่บทความบน Dev.to (เปิดหน้าต่างกรอก)'),
 
   new SlashCommandBuilder()
     .setName('set-devto-cookie')
@@ -826,6 +919,23 @@ async function handleCommand(interaction, { pool, client }) {
     }
   }
 
+  // คำสั่ง /set-devto-key (เปิด Modal ให้กรอก API Key อย่างปลอดภัย ไม่แสดงค่าในแชท)
+  if (commandName === 'set-devto-key') {
+    const modal = new ModalBuilder()
+      .setCustomId('modal_devto_key')
+      .setTitle('ตั้งค่า DEVTO_API_KEY');
+
+    const keyInput = new TextInputBuilder()
+      .setCustomId('key_value')
+      .setLabel('Dev.to API Key')
+      .setPlaceholder('วาง Dev.to API Key เช่น GPzyFieTByvp2TJeNmoyKD4W')
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true);
+
+    modal.addComponents(new ActionRowBuilder().addComponents(keyInput));
+    return await interaction.showModal(modal);
+  }
+
   // คำสั่ง /set-devto-cookie (เปิด Modal ให้กรอกอย่างปลอดภัย ไม่แสดงค่าในแชท)
   if (commandName === 'set-devto-cookie') {
     const modal = new ModalBuilder()
@@ -887,6 +997,7 @@ async function handleCommand(interaction, { pool, client }) {
         { name: '`/run`', value: 'สั่งเริ่มกระบวนการค้นหา Backlink ใน n8n ทันที' },
         { name: '`/request-idea`', value: 'ขอไอเดียโซลูชันใหม่จาก Flow 1' },
         { name: '`/answer <platform>`', value: 'ส่งลิงก์กระทู้และคำถามจาก Pantip, Blognone, Blockdit, Facebook ให้ AI ช่วยร่างคำตอบ' },
+        { name: '`/set-devto-key`', value: 'อัปเดต API Key ของ Dev.to สำหรับเผยแพร่บทความ (เปิด Modal กรอกข้อมูล)' },
         { name: '`/set-devto-cookie`', value: 'อัปเดต Cookie ของ Dev.to สำหรับโพสต์คอมเมนต์ (เปิด Modal กรอกข้อมูล)' },
         { name: '`/set-channel [channel]`', value: 'ตั้งค่าห้องรับการแจ้งเตือน Candidates (เดินไปพิมพ์ในห้องที่ต้องการได้เลย)' },
         { name: '`/set-admin-ids <ids>`', value: 'ตั้งค่า Discord User IDs ที่มีสิทธิ์อนุมัติ/เผยแพร่ (คั่นด้วย comma)' },
@@ -907,5 +1018,6 @@ module.exports = {
   createActionButtons,
   normalizeDevtoCookie,
   saveAndVerifyDevtoCookie,
+  saveAndVerifyDevtoKey,
   verifyGemini
 };

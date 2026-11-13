@@ -1,5 +1,5 @@
 const assert = require('assert');
-const { commands, handleCommand, normalizeDevtoCookie } = require('./commands');
+const { commands, handleCommand, normalizeDevtoCookie, saveAndVerifyDevtoKey } = require('./commands');
 
 console.log('🧪 Starting Discord Bot Commands Unit Tests...\n');
 
@@ -10,12 +10,18 @@ assert(!cmdNames.includes('set-gemini-key'), 'set-gemini-key should be removed')
 assert(!cmdNames.includes('set-gemini-model'), 'set-gemini-model should be removed');
 assert(!cmdNames.includes('set-cookie'), 'duplicate set-cookie should be removed');
 assert(cmdNames.includes('set-devto-cookie'), 'set-devto-cookie must exist');
+assert(cmdNames.includes('set-devto-key'), 'set-devto-key must exist');
 
 const devtoCmd = commands.find(c => c.name === 'set-devto-cookie');
 assert(devtoCmd, 'set-devto-cookie command must exist');
 const devtoOptions = devtoCmd.options || [];
 assert.strictEqual(devtoOptions.length, 0, 'set-devto-cookie must NOT have any options (modal only)');
-console.log('  ✅ Slash commands cleanly trimmed: set-cookie, set-gemini-key, set-gemini-model removed; set-devto-cookie has 0 options.');
+
+const devtoKeyCmd = commands.find(c => c.name === 'set-devto-key');
+assert(devtoKeyCmd, 'set-devto-key command must exist');
+const devtoKeyOptions = devtoKeyCmd.options || [];
+assert.strictEqual(devtoKeyOptions.length, 0, 'set-devto-key must NOT have any options (modal only)');
+console.log('  ✅ Slash commands cleanly defined: set-devto-key and set-devto-cookie both have 0 options (modal only).');
 
 (async () => {
   const queriesExecuted = [];
@@ -40,8 +46,22 @@ console.log('  ✅ Slash commands cleanly trimmed: set-cookie, set-gemini-key, s
   assert.strictEqual(shownModal.data.custom_id, 'modal_devto_cookie');
   console.log('  ✅ /set-devto-cookie immediately triggers modal_devto_cookie.');
 
-  // Test 3: Verify /set-channel executes separate queries (no multiple statements in single parameterized query)
-  console.log('\nTest 3: Testing /set-channel separates CREATE TABLE and INSERT queries...');
+  // Test 3: Verify /set-devto-key opens modal directly
+  console.log('\nTest 3: Testing /set-devto-key directly shows modal...');
+  let shownKeyModal = null;
+  const mockDevtoKeyInteraction = {
+    commandName: 'set-devto-key',
+    showModal: async (m) => {
+      shownKeyModal = m;
+    }
+  };
+  await handleCommand(mockDevtoKeyInteraction, { pool: mockPool, client: {} });
+  assert(shownKeyModal, 'Modal should be shown');
+  assert.strictEqual(shownKeyModal.data.custom_id, 'modal_devto_key');
+  console.log('  ✅ /set-devto-key immediately triggers modal_devto_key.');
+
+  // Test 4: Verify /set-channel executes separate queries (no multiple statements in single parameterized query)
+  console.log('\nTest 4: Testing /set-channel separates CREATE TABLE and INSERT queries...');
   queriesExecuted.length = 0;
 
   let replyMessage = null;
@@ -67,8 +87,8 @@ console.log('  ✅ Slash commands cleanly trimmed: set-cookie, set-gemini-key, s
   assert(replyMessage, 'Reply message should be sent');
   console.log('  ✅ /set-channel executed CREATE TABLE and INSERT as 2 independent queries with zero semicolon parameter bugs.');
 
-  // Test 4: Verify /set-admin-ids separates queries
-  console.log('\nTest 4: Testing /set-admin-ids separates CREATE TABLE and INSERT queries...');
+  // Test 5: Verify /set-admin-ids separates queries
+  console.log('\nTest 5: Testing /set-admin-ids separates CREATE TABLE and INSERT queries...');
   queriesExecuted.length = 0;
   replyMessage = null;
   const mockAdminInteraction = {
@@ -92,7 +112,7 @@ console.log('  ✅ Slash commands cleanly trimmed: set-cookie, set-gemini-key, s
   assert.deepStrictEqual(queriesExecuted[1].params, ['11111111,22222222']);
   console.log('  ✅ /set-admin-ids executed CREATE TABLE and INSERT as 2 independent queries.');
 
-  console.log('\n🎉 ALL 4 TESTS PASSED SUCCESSFULLY! Commands refactoring is completely verified.');
+  console.log('\n🎉 ALL 5 TESTS PASSED SUCCESSFULLY! Commands refactoring is completely verified.');
 })().catch(err => {
   console.error('❌ Test failed:', err);
   process.exit(1);

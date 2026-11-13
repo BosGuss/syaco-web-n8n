@@ -242,7 +242,8 @@ const {
   handleCommand,
   createCandidateEmbed,
   createActionButtons,
-  saveAndVerifyDevtoCookie
+  saveAndVerifyDevtoCookie,
+  saveAndVerifyDevtoKey
 } = require('./commands');
 
 // Admin Allowlist Helpers
@@ -678,6 +679,18 @@ client.on('interactionCreate', async (interaction) => {
     }
 
     if (interaction.isModalSubmit()) {
+      if (interaction.customId === 'modal_devto_key') {
+        if (!isAuthorizedAdmin(interaction.user)) {
+          return await interaction.reply({
+            content: `⛔ **ไม่มีสิทธิ์ดำเนินการ:** เฉพาะผู้ดูแลระบบที่ระบุใน \`DISCORD_ADMIN_IDS\` เท่านั้นที่สามารถตั้งค่า API Key ได้ (ID ของคุณ: \`${interaction.user.id}\`)`,
+            ephemeral: true
+          });
+        }
+        const rawKey = interaction.fields.getTextInputValue('key_value');
+        await interaction.deferReply({ ephemeral: true });
+        return await saveAndVerifyDevtoKey(interaction, rawKey, pool);
+      }
+
       if (interaction.customId === 'modal_devto_cookie') {
         if (!isAuthorizedAdmin(interaction.user)) {
           return await interaction.reply({
