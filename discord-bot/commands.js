@@ -10,7 +10,8 @@ const {
   ButtonStyle,
   ModalBuilder,
   TextInputBuilder,
-  TextInputStyle
+  TextInputStyle,
+  StringSelectMenuBuilder
 } = require('discord.js');
 const { searchRecentThreads } = require('./thread-search');
 
@@ -265,6 +266,73 @@ function createActionButtons(id) {
   );
 }
 
+function buildRadarEmbedsAndMenu(threads, solutionsCovered = []) {
+  const cut = (str, len) => (String(str || '').length > len ? str.slice(0, len - 3) + '...' : str || '');
+  const getEmoji = (plat) => {
+    if (plat === 'pantip') return '🔴';
+    if (plat === 'linkedin') return '🔵';
+    if (plat === 'facebook') return '🔷';
+    return '🌐';
+  };
+
+  const embeds = [];
+  const chunkSize = 5;
+  const totalChunks = Math.ceil(threads.length / chunkSize) || 1;
+
+  for (let c = 0; c < totalChunks; c++) {
+    const chunk = threads.slice(c * chunkSize, (c + 1) * chunkSize);
+    const startNum = c * chunkSize + 1;
+
+    let desc = '';
+    if (c === 0) {
+      const solText = solutionsCovered.length > 0 ? cut(solutionsCovered.join(', '), 150) : 'SyaCo Enterprise Solutions';
+      desc += `🎯 **โซลูชันที่สำรวจ:** ${solText}\n📅 **เงื่อนไข:** กระทู้/โพสต์ล่าสุดไม่เกิน 1 ปี (2025 - 2026)\n💡 **คำแนะนำ:** เลือกกระทู้ที่ต้องการจากเมนูด้านล่างเพื่อให้ AI ร่างคำตอบได้ทันที\n\n`;
+    }
+
+    desc += chunk.map((t, idx) => {
+      const num = startNum + idx;
+      const emoji = getEmoji(t.platform);
+      const title = cut(t.post_title || t.title, 60);
+      const snippet = cut(t.snippet, 70);
+      const categoryTag = t.solutionCategory ? `\`${cut(t.solutionCategory, 25)}\`` : `\`${(t.platform || 'WEB').toUpperCase()}\``;
+      return `**${num}.** ${emoji} [${title}](${t.post_url}) ${categoryTag}\n> ${snippet || 'ไม่มีคำอธิบายเพิ่มเติม'}`;
+    }).join('\n\n');
+
+    const embed = new EmbedBuilder()
+      .setTitle(`🌅 [Daily Thread Radar] เรดาร์กระทู้ประจำวัน (${c + 1}/${totalChunks}) — ทั้งหมด ${threads.length} รายการ`)
+      .setColor(0x5865f2)
+      .setDescription(cut(desc, 1800) || 'ไม่พบรายการ')
+      .setFooter({ text: `SyaCo Community Lead Hunter • หน้า ${c + 1}/${totalChunks}` })
+      .setTimestamp();
+
+    embeds.push(embed);
+  }
+
+  // สร้าง StringSelectMenu สำหรับเลือกกระทู้ที่ต้องการร่างคำตอบ (สูงสุด 25 ตัวเลือก)
+  const menuOptions = threads.slice(0, 25).map((t, idx) => {
+    const num = idx + 1;
+    const cleanTitle = cut(t.post_title || t.title || 'กระทู้ไม่มีชื่อ', 50);
+    const cleanSnippet = cut(t.snippet || t.post_url, 45);
+    return {
+      label: `${num}. [${(t.platform || 'WEB').toUpperCase()}] ${cleanTitle}`,
+      description: cleanSnippet || t.post_url,
+      value: String(t.id),
+      emoji: getEmoji(t.platform)
+    };
+  });
+
+  const selectMenu = new StringSelectMenuBuilder()
+    .setCustomId('select_radar_draft')
+    .setPlaceholder('🎯 เลือกกระทู้ที่ต้องการให้ AI ช่วยร่างคำตอบ (เลือกได้ 1-5 ข้อ)...')
+    .setMinValues(1)
+    .setMaxValues(Math.min(5, menuOptions.length))
+    .addOptions(menuOptions);
+
+  const actionRow = new ActionRowBuilder().addComponents(selectMenu);
+
+  return { embeds, components: [actionRow] };
+}
+
 // 2. กำหนดคำสั่งทั้งหมด (Command Definitions)
 const commands = [
   new SlashCommandBuilder()
@@ -396,6 +464,35 @@ const commands = [
         .setMinValue(1)
         .setMaxValue(10)
     ),
+
+  new SlashCommandBuilder()
+    .setName('radar')
+    .setDescription('ดึงเรดาร์กระทู้/โพสต์น่าสนใจประจำวัน (~20 รายการ) พร้อมเมนูเลือกให้ AI ร่างคำตอบ')
+    .addIntegerOption(option =>
+      option.setName('limit')
+        .setDescription('จำนวนกระทู้ที่ต้องการดึง (5-25 รายการ, ค่าเริ่มต้น: 20)')
+        .setRequired(false)
+        .setMinValue(5)
+        .setMaxValue(25)
+    ),
+
+  new SlashCommandBuilder()
+    .setName('set-radar-time')
+    .setDescription('ตั้งเวลาดึงเรดาร์กระทู้อัตโนมัติในแต่ละวัน (เวลาไทย เช่น 08:30)')
+    .addStringOption(option =>
+      option.setName('time')
+        .setDescription('เวลาในรูปแบบ HH:MM (เช่น 08:30 หรือ 09:00)')
+        .setRequired(true)
+    )
+    .addBooleanOption(option =>
+      option.setName('enabled')
+        .setDescription('เปิดหรือปิดการทำงานอัตโนมัติ')
+        .setRequired(false)
+    ),
+
+  new SlashCommandBuilder()
+    .setName('radar-status')
+    .setDescription('ดูสถานะการตั้งเวลาเรดาร์กระทู้อัตโนมัติ (เวลา, ช่องที่ส่ง, สถานะเปิด/ปิด)'),
 
   new SlashCommandBuilder()
     .setName('help')
@@ -1156,6 +1253,117 @@ async function handleCommand(interaction, { pool, client }) {
     }
   }
 
+  // คำสั่ง /radar (ดึงเรดาร์กระทู้ประจำวัน ~20 รายการ)
+  if (commandName === 'radar') {
+    const limit = interaction.options.getInteger('limit') || 20;
+    await interaction.deferReply();
+
+    try {
+      const { collectDailyRadarThreads } = require('./thread-search');
+      const { solutionsCovered, results } = await collectDailyRadarThreads(limit);
+
+      if (!results.length) {
+        return await interaction.editReply('🔍 ไม่พบกระทู้หรือโพสต์ใหม่ที่ตรงกับเงื่อนไขในช่วง 1 ปีนี้ กรุณาลองใหม่อีกครั้ง');
+      }
+
+      // บันทึกลง thread_search_cache
+      const savedRows = [];
+      for (const item of results) {
+        const { rows } = await pool.query(
+          `INSERT INTO thread_search_cache (platform, post_url, post_title, snippet, search_keyword)
+           VALUES ($1, $2, $3, $4, $5)
+           RETURNING *`,
+          [item.platform, item.url, item.title, item.snippet || '', item.solutionCategory || 'daily_radar']
+        );
+        savedRows.push({
+          ...rows[0],
+          solutionCategory: item.solutionCategory
+        });
+      }
+
+      const { embeds, components } = buildRadarEmbedsAndMenu(savedRows, solutionsCovered);
+      if (embeds.length <= 2) {
+        return await interaction.editReply({ embeds, components });
+      } else {
+        const half = Math.ceil(embeds.length / 2);
+        await interaction.editReply({
+          content: `🌅 **เรดาร์กระทู้/โพสต์น่าสนใจประจำวัน (ส่วนที่ 1/2) — ทั้งหมด ${savedRows.length} รายการ**`,
+          embeds: embeds.slice(0, half)
+        });
+        return await interaction.followUp({
+          content: `(ส่วนที่ 2/2) 👇 **เลือกกระทู้ที่ต้องการให้ AI ช่วยร่างคำตอบจากเมนูด้านล่างได้ทันทีครับ:**`,
+          embeds: embeds.slice(half),
+          components
+        });
+      }
+    } catch (err) {
+      console.error('[radar] Error:', err);
+      return await interaction.editReply(`⚠️ เกิดข้อผิดพลาดในการดึงเรดาร์กระทู้: ${err.message}`);
+    }
+  }
+
+  // คำสั่ง /set-radar-time (ตั้งเวลาดึงเรดาร์อัตโนมัติ)
+  if (commandName === 'set-radar-time') {
+    const rawTime = interaction.options.getString('time').trim();
+    const enabled = interaction.options.getBoolean('enabled');
+
+    const match = rawTime.match(/^([01]?[0-9]|2[0-3]):([0-5][0-9])$/);
+    if (!match) {
+      return await interaction.reply({
+        content: '⚠️ รูปแบบเวลาไม่ถูกต้อง กรุณากรอกเป็น `HH:MM` เช่น `08:30` หรือ `09:00`',
+        ephemeral: true
+      });
+    }
+
+    const hour = match[1].padStart(2, '0');
+    const min = match[2];
+    const timeFormatted = `${hour}:${min}`;
+
+    await pool.query(
+      "INSERT INTO bot_settings (key, value, updated_at) VALUES ('DAILY_RADAR_TIME', $1, NOW()) ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()",
+      [timeFormatted]
+    );
+
+    if (enabled !== null) {
+      await pool.query(
+        "INSERT INTO bot_settings (key, value, updated_at) VALUES ('DAILY_RADAR_ENABLED', $1, NOW()) ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()",
+        [enabled ? 'true' : 'false']
+      );
+    }
+
+    const statusText = (enabled === false) ? '🔴 ปิดใช้งานชั่วคราว' : '🟢 เปิดใช้งาน';
+    return await interaction.reply({
+      content: `✅ **บันทึกการตั้งค่าเวลาเรดาร์ประจำวันเรียบร้อย!**\n⏰ **เวลาดึงข้อมูล:** \`${timeFormatted} น.\` (เวลาไทย)\n📊 **สถานะ:** ${statusText}\n💡 ระบบจะรวบรวมกระทู้ ~20 รายการส่งเข้าห้องแจ้งเตือนอัตโนมัติทุกวันเมื่อถึงเวลาครับ`,
+      ephemeral: true
+    });
+  }
+
+  // คำสั่ง /radar-status (ดูสถานะการตั้งค่าเรดาร์อัตโนมัติ)
+  if (commandName === 'radar-status') {
+    const { rows: timeRows } = await pool.query("SELECT value FROM bot_settings WHERE key = 'DAILY_RADAR_TIME'");
+    const { rows: enabledRows } = await pool.query("SELECT value FROM bot_settings WHERE key = 'DAILY_RADAR_ENABLED'");
+    const { rows: channelRows } = await pool.query("SELECT value FROM bot_settings WHERE key = 'DISCORD_CHANNEL_ID'");
+    const { rows: limitRows } = await pool.query("SELECT value FROM bot_settings WHERE key = 'DAILY_RADAR_LIMIT'");
+
+    const radarTime = timeRows[0]?.value || '08:30';
+    const isEnabled = enabledRows[0]?.value !== 'false';
+    const channelId = channelRows[0]?.value || process.env.DISCORD_CHANNEL_ID || '';
+    const limit = limitRows[0]?.value || '20';
+
+    const embed = new EmbedBuilder()
+      .setTitle('⚙️ สถานะการตั้งค่า Daily Thread Radar')
+      .setColor(isEnabled ? 0x57f287 : 0xed4245)
+      .addFields(
+        { name: '⏰ เวลาดึงกระทู้อัตโนมัติ', value: `\`${radarTime} น.\` (เวลาไทย Asia/Bangkok)`, inline: true },
+        { name: '📊 สถานะระบบอัตโนมัติ', value: isEnabled ? '🟢 เปิดใช้งาน (Active)' : '🔴 ปิดใช้งาน (Disabled)', inline: true },
+        { name: '🎯 จำนวนกระทู้เป้าหมาย', value: `\`${limit} กระทู้\``, inline: true },
+        { name: '📢 ห้องแจ้งเตือน', value: channelId && channelId !== '123456789012345678' ? `<#${channelId}>` : '`ยังไม่ได้ระบุ (ใช้ /set-channel เพื่อตั้งค่า)`', inline: false }
+      )
+      .setFooter({ text: 'ใช้คำสั่ง /set-radar-time เพื่อปรับเวลา หรือ /radar เพื่อทดสอบดึงทันที' });
+
+    return await interaction.reply({ embeds: [embed], ephemeral: true });
+  }
+
   // คำสั่ง /help
   if (commandName === 'help') {
     const embed = new EmbedBuilder()
@@ -1163,6 +1371,9 @@ async function handleCommand(interaction, { pool, client }) {
       .setColor(0x57f287)
       .setDescription('คำสั่งที่สามารถใช้งานได้ในเซิร์ฟเวอร์:')
       .addFields(
+        { name: '`/radar [limit]`', value: 'ดึงเรดาร์กระทู้/โพสต์น่าสนใจประจำวัน (~20 รายการ) พร้อมเมนู Dropdown เลือกให้ AI ช่วยร่างคำตอบ' },
+        { name: '`/set-radar-time <time> [enabled]`', value: 'ตั้งเวลาดึงเรดาร์กระทู้อัตโนมัติประจำวัน เช่น `08:30` หรือ `09:00` (เวลาไทย)' },
+        { name: '`/radar-status`', value: 'ดูสถานะการตั้งเวลาเรดาร์กระทู้อัตโนมัติ (เวลา, ช่องที่ส่ง, สถานะเปิด/ปิด)' },
         { name: '`/find-threads [mode] [keyword] [platform] [limit]`', value: 'ค้นหากระทู้/โพสต์ที่น่าสนใจ (ระยะไม่เกิน 1 ปี) รองรับทั้งใส่ Keyword เอง และทำออโต้ด้วย AI' },
         { name: '`/latest [limit]`', value: 'ดึง Candidate ทั้งหมดในรอบเวลาล่าสุดขึ้นมาพร้อมปุ่มจัดการ' },
         { name: '`/get <id>`', value: 'ดึง Candidate ตาม ID ที่ระบุขึ้นมาดู/กด Approve/Reject' },
@@ -1191,6 +1402,7 @@ module.exports = {
   handleCommand,
   createCandidateEmbed,
   createActionButtons,
+  buildRadarEmbedsAndMenu,
   normalizeDevtoCookie,
   saveAndVerifyDevtoCookie,
   saveAndVerifyDevtoKey,

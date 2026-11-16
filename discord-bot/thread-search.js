@@ -463,8 +463,89 @@ async function searchRecentThreads({ keyword, mode = 'manual', platform = 'all',
   };
 }
 
+/**
+ * รวบรวมกระทู้/โพสต์น่าสนใจประจำวัน (Daily Radar) รวม ~20 รายการ
+ * โดยวนลูปหมุนเวียนหาจากทุกหมวดหมู่โซลูชันของ SyaCo ข้ามแพลตฟอร์ม Pantip, LinkedIn, Facebook (ไม่เกิน 1 ปี)
+ * @param {number} [targetCount=20]
+ * @returns {Promise<{ solutionsCovered: Array<string>, results: Array<Object> }>}
+ */
+async function collectDailyRadarThreads(targetCount = 20) {
+  const categories = ['warehouse', 'data', 'logistics', 'production', 'alert', 'crm', 'energy', 'predictive'];
+  const shuffled = [...categories].sort(() => Math.random() - 0.5);
+
+  const allResults = [];
+  const seenUrls = new Set();
+  const solutionsCovered = new Set();
+
+  for (const cat of shuffled) {
+    if (allResults.length >= targetCount) break;
+
+    const remaining = targetCount - allResults.length;
+    const batchLimit = Math.min(5, remaining);
+
+    try {
+      const { autoMeta, results } = await searchRecentThreads({
+        mode: 'auto',
+        keyword: `auto:${cat}`,
+        platform: 'all',
+        limit: batchLimit
+      });
+
+      if (autoMeta?.solutionTitle) {
+        solutionsCovered.add(autoMeta.solutionTitle);
+      }
+
+      for (const r of results) {
+        if (!seenUrls.has(r.url) && allResults.length < targetCount) {
+          seenUrls.add(r.url);
+          allResults.push({
+            ...r,
+            solutionCategory: autoMeta?.solutionTitle || cat
+          });
+        }
+      }
+    } catch (err) {
+      console.warn(`[DailyRadar] Error gathering for category ${cat}:`, err.message);
+    }
+
+    await new Promise(r => setTimeout(r, 600));
+  }
+
+  // หากยังไม่ครบ ให้ค้นหาด้วยคีย์เวิร์ดภาคธุรกิจเพิ่มเติม
+  if (allResults.length < targetCount) {
+    const fallbackTerms = ['ERP', 'โปรแกรมสต็อก', 'ระบบโรงงาน', 'PLC Automation', 'Logistics'];
+    for (const term of fallbackTerms) {
+      if (allResults.length >= targetCount) break;
+      try {
+        const { results } = await searchRecentThreads({
+          mode: 'manual',
+          keyword: term,
+          platform: 'all',
+          limit: targetCount - allResults.length
+        });
+        for (const r of results) {
+          if (!seenUrls.has(r.url) && allResults.length < targetCount) {
+            seenUrls.add(r.url);
+            allResults.push({
+              ...r,
+              solutionCategory: `Keyword: ${term}`
+            });
+          }
+        }
+      } catch (_) {}
+      await new Promise(r => setTimeout(r, 600));
+    }
+  }
+
+  return {
+    solutionsCovered: Array.from(solutionsCovered),
+    results: allResults.slice(0, targetCount)
+  };
+}
+
 module.exports = {
   searchRecentThreads,
+  collectDailyRadarThreads,
   generateAutoQueries,
   fetchSyacoSolutions,
   cleanUrl,

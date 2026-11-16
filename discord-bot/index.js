@@ -242,6 +242,7 @@ const {
   handleCommand,
   createCandidateEmbed,
   createActionButtons,
+  buildRadarEmbedsAndMenu,
   saveAndVerifyDevtoCookie,
   saveAndVerifyDevtoKey
 } = require('./commands');
@@ -374,10 +375,126 @@ async function loadBotSettings() {
   }
 }
 
+let lastRadarRunDate = '';
+
+async function runDailyRadarTask() {
+  try {
+    const { rows: enabledRows } = await pool.query("SELECT value FROM bot_settings WHERE key = 'DAILY_RADAR_ENABLED'");
+    if (enabledRows.length && enabledRows[0].value === 'false') {
+      console.log('[DailyRadar] Automation is disabled in settings.');
+      return;
+    }
+
+    const { rows: limitRows } = await pool.query("SELECT value FROM bot_settings WHERE key = 'DAILY_RADAR_LIMIT'");
+    const targetLimit = parseInt(limitRows[0]?.value || '20', 10);
+
+    let channelId = null;
+    const { rows: channelRows } = await pool.query("SELECT value FROM bot_settings WHERE key = 'DISCORD_CHANNEL_ID'");
+    if (channelRows.length && channelRows[0].value && channelRows[0].value !== '123456789012345678') {
+      channelId = channelRows[0].value;
+    } else {
+      channelId = process.env.DISCORD_CHANNEL_ID;
+    }
+
+    if (!channelId || channelId === '123456789012345678') {
+      console.warn('[DailyRadar] No DISCORD_CHANNEL_ID configured, skipping daily radar broadcast.');
+      return;
+    }
+
+    const channel = await client.channels.fetch(channelId).catch(() => null);
+    if (!channel) {
+      console.warn(`[DailyRadar] Channel ${channelId} not accessible.`);
+      return;
+    }
+
+    console.log(`[DailyRadar] Starting automated daily thread gathering (target: ${targetLimit})...`);
+    const { collectDailyRadarThreads } = require('./thread-search');
+    const { solutionsCovered, results } = await collectDailyRadarThreads(targetLimit);
+
+    if (!results.length) {
+      console.log('[DailyRadar] No new threads found today.');
+      return;
+    }
+
+    // บันทึกลง thread_search_cache
+    const savedRows = [];
+    for (const item of results) {
+      const { rows } = await pool.query(
+        `INSERT INTO thread_search_cache (platform, post_url, post_title, snippet, search_keyword)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING *`,
+        [item.platform, item.url, item.title, item.snippet || '', item.solutionCategory || 'daily_radar']
+      );
+      savedRows.push({
+        ...rows[0],
+        solutionCategory: item.solutionCategory
+      });
+    }
+
+    const { embeds, components } = buildRadarEmbedsAndMenu(savedRows, solutionsCovered);
+
+    if (embeds.length <= 2) {
+      await channel.send({
+        content: `🌅 **สวัสดีตอนเช้าครับทีมงาน! เรดาร์กระทู้/โพสต์น่าสนใจประจำวันพร้อมแล้ว (${savedRows.length} รายการ)**\nเลือกกระทู้ที่สนใจจากเมนูด้านล่างเพื่อให้ AI ร่างคำตอบได้ทันทีครับ:`,
+        embeds,
+        components
+      });
+    } else {
+      const half = Math.ceil(embeds.length / 2);
+      await channel.send({
+        content: `🌅 **สวัสดีตอนเช้าครับทีมงาน! เรดาร์กระทู้/โพสต์น่าสนใจประจำวันพร้อมแล้ว (${savedRows.length} รายการ)**\n(ส่วนที่ 1/2)`,
+        embeds: embeds.slice(0, half)
+      });
+      await channel.send({
+        content: `(ส่วนที่ 2/2) 👇 **เลือกกระทู้ที่ต้องการให้ AI ช่วยร่างคำตอบจากเมนูด้านล่างได้ทันทีครับ:**`,
+        embeds: embeds.slice(half),
+        components
+      });
+    }
+    console.log(`[DailyRadar] Successfully broadcasted ${savedRows.length} threads to #${channel.name}`);
+  } catch (err) {
+    console.error('[DailyRadar] Scheduled run failed:', err);
+  }
+}
+
+function startRadarCronScheduler() {
+  console.log('⏰ [DailyRadar] ระบบตรวจเวลาเรดาร์กระทู้อัตโนมัติเริ่มทำงานแล้ว (เช็คทุก 45 วินาที)');
+  setInterval(async () => {
+    try {
+      const now = new Date();
+      const bkkFormatter = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Asia/Bangkok',
+        hour: '2-digit',
+        minute: '2-digit',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour12: false
+      });
+      const parts = bkkFormatter.formatToParts(now);
+      const getVal = type => parts.find(p => p.type === type)?.value;
+      const todayStr = `${getVal('year')}-${getVal('month')}-${getVal('day')}`;
+      const currentTime = `${getVal('hour')}:${getVal('minute')}`;
+
+      const { rows: timeRows } = await pool.query("SELECT value FROM bot_settings WHERE key = 'DAILY_RADAR_TIME'");
+      const targetTime = timeRows[0]?.value || '08:30';
+
+      if (currentTime === targetTime && lastRadarRunDate !== todayStr) {
+        lastRadarRunDate = todayStr;
+        console.log(`⏰ [DailyRadar] ถึงเวลาเป้าหมาย ${currentTime} น. (วันที่ ${todayStr}) เริ่มต้นดึงเรดาร์กระทู้ประจำวัน...`);
+        await runDailyRadarTask();
+      }
+    } catch (err) {
+      console.error('[DailyRadar] Cron check error:', err);
+    }
+  }, 45000);
+}
+
 client.once('ready', async () => {
   console.log(`Discord bot logged in as ${client.user.tag}`);
   await loadBotSettings();
   await registerCommands(client);
+  startRadarCronScheduler();
 });
 
 // เมื่อบอทได้รับเชิญเข้า Server ใหม่ ให้ลงทะเบียน Slash Commands ทันที
@@ -421,6 +538,62 @@ client.on('interactionCreate', async (interaction) => {
 
     if (interaction.isChatInputCommand()) {
       return await handleCommand(interaction, { pool, client });
+    }
+
+    if (interaction.isStringSelectMenu()) {
+      if (interaction.customId === 'select_radar_draft') {
+        const selectedIds = interaction.values;
+        await interaction.deferReply({ ephemeral: true });
+
+        try {
+          const n8nWebhookUrl = process.env.N8N_FLOW3_WEBHOOK_URL || 'http://n8n:5678/webhook/answer-question';
+          const dispatched = [];
+          const already = [];
+
+          for (const val of selectedIds) {
+            const cacheId = parseInt(val, 10);
+            const { rows } = await pool.query('SELECT * FROM thread_search_cache WHERE id = $1', [cacheId]);
+            if (rows.length) {
+              const thread = rows[0];
+              const questionText = `${thread.post_title}\n\n${thread.snippet || ''}`.trim();
+
+              const webhookRes = await fetch(n8nWebhookUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  post_url: thread.post_url,
+                  question_text: questionText,
+                  platform: thread.platform,
+                  requested_by: interaction.user.tag,
+                }),
+                signal: AbortSignal.timeout(10000),
+              });
+
+              const resData = await webhookRes.json().catch(() => ({}));
+              if (resData.status === 'already_exists') {
+                already.push(`[${thread.platform.toUpperCase()}] ${thread.post_title.slice(0, 50)}...`);
+              } else {
+                dispatched.push(`[${thread.platform.toUpperCase()}] ${thread.post_title.slice(0, 50)}...`);
+              }
+            }
+          }
+
+          let replyMsg = '';
+          if (dispatched.length > 0) {
+            replyMsg += `✅ **ส่งกระทู้ให้ AI เรียบร้อยแล้ว (${dispatched.length} รายการ)!**\n` +
+              dispatched.map((t, i) => `${i + 1}. *${t}*`).join('\n') +
+              '\n\n🤖 AI กำลังประเมิน Lead Fit และร่างคำตอบ การ์ดรีวิวจะถูกส่งเข้ามาในห้องแจ้งเตือนทันทีเมื่อพร้อมครับ\n';
+          }
+          if (already.length > 0) {
+            replyMsg += `\n⚠️ กระทู้เหล่านี้มีอยู่ในระบบแล้ว:\n` + already.map(t => `• *${t}*`).join('\n');
+          }
+
+          return await interaction.editReply(replyMsg || 'ดำเนินการเรียบร้อยครับ');
+        } catch (err) {
+          console.error('[select_radar_draft] Error:', err);
+          return await interaction.editReply(`⚠️ ไม่สามารถส่งกระทู้เข้า Flow 3 ได้: ${err.message}`);
+        }
+      }
     }
 
     if (interaction.isButton()) {
@@ -1142,6 +1315,17 @@ app.post('/notify', async (req, res) => {
     return res.json({ ok: true, id: candidate.id });
   } catch (err) {
     console.error('Notify endpoint error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Endpoint สำหรับสั่งรัน Daily Radar ทันทีผ่าน API หรือ n8n
+app.post('/daily-radar/trigger', async (req, res) => {
+  try {
+    const limit = parseInt(req.body?.limit || '20', 10);
+    runDailyRadarTask().catch(e => console.error('[DailyRadar] Async task error:', e));
+    return res.json({ ok: true, message: `Daily radar task dispatched (target: ${limit} threads)` });
+  } catch (err) {
     return res.status(500).json({ error: err.message });
   }
 });
