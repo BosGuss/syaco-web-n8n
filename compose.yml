@@ -166,6 +166,8 @@ services:
       - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.5-flash-lite}
       - SYACO_API_URL=${SYACO_API_URL:-https://www.syaco.co.th/api/solutions}
       - SYACO_API_TOKEN=${SYACO_API_TOKEN}
+      - SEARXNG_URL=http://searxng:8080
+      - N8N_FLOW3_WEBHOOK_URL=http://n8n:5678/webhook/answer-question
     volumes:
       - ./.env:/app/.env
     depends_on:

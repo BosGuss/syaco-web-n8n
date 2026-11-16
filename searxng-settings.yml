@@ -10,19 +10,16 @@ outgoing:
   max_request_timeout: 6.0
 
 engines:
-  - name: duckduckgo
+  - name: google cse
+    disabled: false
+    weight: 5
+  - name: bing
+    disabled: true
+  - name: yahoo
     disabled: true
   - name: brave
     disabled: true
   - name: google
     disabled: true
-  - name: google cse
+  - name: duckduckgo
     disabled: true
-  - name: qwant
-    disabled: true
-  - name: bing
-    disabled: false
-    weight: 2
-  - name: yahoo
-    disabled: false
-    weight: 1

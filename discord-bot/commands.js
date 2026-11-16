@@ -12,6 +12,7 @@ const {
   TextInputBuilder,
   TextInputStyle
 } = require('discord.js');
+const { searchRecentThreads } = require('./thread-search');
 
 // 1. Helper สร้าง Embed, ปุ่ม Action และจัดการ Cookie
 function normalizeDevtoCookie(cookie) {
@@ -357,6 +358,33 @@ const commands = [
           { name: 'Facebook', value: 'facebook' },
           { name: 'Facebook Group', value: 'facebook_group' }
         )
+    ),
+
+  new SlashCommandBuilder()
+    .setName('find-threads')
+    .setDescription('ค้นหากระทู้/โพสต์ที่น่าสนใจ (ระยะไม่เกิน 1 ปี) เพื่อส่งให้ AI วิเคราะห์')
+    .addStringOption(option =>
+      option.setName('keyword')
+        .setDescription('คำค้นหา เช่น ERP, ระบบสต็อก, SAP, Automation')
+        .setRequired(true)
+    )
+    .addStringOption(option =>
+      option.setName('platform')
+        .setDescription('เลือกแพลตฟอร์มที่ต้องการค้นหา (ค่าเริ่มต้น: ทุกแพลตฟอร์ม)')
+        .setRequired(false)
+        .addChoices(
+          { name: '🌐 ทุกแพลตฟอร์ม (Pantip, LinkedIn, Facebook)', value: 'all' },
+          { name: '🟣 Pantip', value: 'pantip' },
+          { name: '💼 LinkedIn', value: 'linkedin' },
+          { name: '🔵 Facebook', value: 'facebook' }
+        )
+    )
+    .addIntegerOption(option =>
+      option.setName('limit')
+        .setDescription('จำนวนผลลัพธ์ที่ต้องการ (1-10 รายการ, ค่าเริ่มต้น: 5)')
+        .setRequired(false)
+        .setMinValue(1)
+        .setMaxValue(10)
     ),
 
   new SlashCommandBuilder()
@@ -982,6 +1010,113 @@ async function handleCommand(interaction, { pool, client }) {
     return await interaction.showModal(modal);
   }
 
+  // คำสั่ง /find-threads (ค้นหากระทู้/โพสต์ที่น่าสนใจในช่วง 1 ปี)
+  if (commandName === 'find-threads') {
+    const keyword = interaction.options.getString('keyword').trim();
+    const platform = interaction.options.getString('platform') || 'all';
+    const limit = interaction.options.getInteger('limit') || 5;
+
+    await interaction.deferReply();
+
+    try {
+      // 1. ตรวจสอบและสร้างตารางแคชหากยังไม่มี
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS thread_search_cache (
+          id SERIAL PRIMARY KEY,
+          platform VARCHAR(50) NOT NULL,
+          post_url TEXT NOT NULL,
+          post_title TEXT NOT NULL,
+          snippet TEXT,
+          search_keyword TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+      `);
+
+      // 2. ค้นหากระทู้ผ่าน SearXNG (จำกัดไม่เกิน 1 ปี)
+      const results = await searchRecentThreads({ keyword, platform, limit });
+
+      if (!results.length) {
+        const noResultEmbed = new EmbedBuilder()
+          .setTitle('🔍 ไม่พบกระทู้หรือโพสต์ที่ตรงกับเงื่อนไข')
+          .setColor(0xfee75c)
+          .setDescription(`ไม่พบโพสต์ที่ตรงกับคำค้นหา **"${keyword}"** ในช่วง 1 ปีที่ผ่านมา (แพลตฟอร์ม: \`${platform.toUpperCase()}\`)\n\n💡 **คำแนะนำ:**\n• ลองใช้คีย์เวิร์ดที่กว้างขึ้น เช่น \`ERP\`, \`สต็อก\`, \`บัญชี\`, \`SAP\`, \`Automation\`\n• เลือกค้นหาแบบ \`ทุกแพลตฟอร์ม (all)\``)
+          .setTimestamp();
+        return await interaction.editReply({ embeds: [noResultEmbed] });
+      }
+
+      // 3. บันทึกผลลัพธ์ลง thread_search_cache เพื่อใช้เชื่อมกับปุ่ม Action
+      const savedItems = [];
+      for (const item of results) {
+        const ins = await pool.query(`
+          INSERT INTO thread_search_cache (platform, post_url, post_title, snippet, search_keyword, created_at)
+          VALUES ($1, $2, $3, $4, $5, NOW())
+          RETURNING id;
+        `, [item.platform, item.url, item.title, item.snippet, keyword]);
+        savedItems.push({
+          cacheId: ins.rows[0].id,
+          ...item
+        });
+      }
+
+      // 4. สร้าง Discord Embed
+      const platformBadge = {
+        pantip: '🟣 Pantip',
+        linkedin: '💼 LinkedIn',
+        facebook: '🔵 Facebook'
+      };
+
+      const embed = new EmbedBuilder()
+        .setTitle('🔍 ผลการค้นหากระทู้และโพสต์ที่น่าสนใจ (ระยะไม่เกิน 1 ปี)')
+        .setColor(0x5865f2)
+        .setDescription(
+          `🔎 **คำค้นหา:** \`${keyword}\`\n` +
+          `🌐 **แพลตฟอร์ม:** \`${platform === 'all' ? 'ทุกแพลตฟอร์ม' : platform.toUpperCase()}\`\n` +
+          `📊 **พบ:** \`${savedItems.length}\` รายการที่ตรงเงื่อนไข\n\n` +
+          `💡 *กดปุ่ม **[🤖 ร่างคำตอบ]** ด้านล่าง เพื่อให้ AI วิเคราะห์ปัญหาและร่างคำตอบเข้าสู่ Flow 3 ทันที*`
+        )
+        .setTimestamp();
+
+      savedItems.forEach((item, index) => {
+        const pBadge = platformBadge[item.platform] || item.platform;
+        const cleanSnippet = item.snippet ? (item.snippet.length > 200 ? item.snippet.slice(0, 197) + '...' : item.snippet) : 'ไม่มีคำอธิบายย่อ';
+        embed.addFields({
+          name: `${index + 1}. [${pBadge}] ${item.title.slice(0, 200)}`,
+          value: `📝 ${cleanSnippet}\n🔗 [เปิดดูกระทู้ต้นทาง](${item.url})`,
+          inline: false
+        });
+      });
+
+      // 5. สร้างปุ่ม Action (Row ละไม่เกิน 5 ปุ่ม)
+      const actionRows = [];
+      let currentRow = new ActionRowBuilder();
+
+      savedItems.forEach((item, index) => {
+        if (currentRow.components.length === 5) {
+          actionRows.push(currentRow);
+          currentRow = new ActionRowBuilder();
+        }
+        currentRow.addComponents(
+          new ButtonBuilder()
+            .setCustomId(`lead_draft_${item.cacheId}`)
+            .setLabel(`🤖 ร่างคำตอบ #${index + 1}`)
+            .setStyle(ButtonStyle.Primary)
+        );
+      });
+
+      if (currentRow.components.length > 0) {
+        actionRows.push(currentRow);
+      }
+
+      return await interaction.editReply({
+        embeds: [embed],
+        components: actionRows
+      });
+    } catch (err) {
+      console.error('[find-threads] Error:', err);
+      return await interaction.editReply(`⚠️ เกิดข้อผิดพลาดในการค้นหา: ${err.message}`);
+    }
+  }
+
   // คำสั่ง /help
   if (commandName === 'help') {
     const embed = new EmbedBuilder()
@@ -989,6 +1124,7 @@ async function handleCommand(interaction, { pool, client }) {
       .setColor(0x57f287)
       .setDescription('คำสั่งที่สามารถใช้งานได้ในเซิร์ฟเวอร์:')
       .addFields(
+        { name: '`/find-threads <keyword> [platform] [limit]`', value: 'ค้นหากระทู้/โพสต์ที่น่าสนใจในช่วง 1 ปี (Pantip, LinkedIn, Facebook) พร้อมปุ่มสั่ง AI ร่างคำตอบ' },
         { name: '`/latest [limit]`', value: 'ดึง Candidate ทั้งหมดในรอบเวลาล่าสุดขึ้นมาพร้อมปุ่มจัดการ' },
         { name: '`/get <id>`', value: 'ดึง Candidate ตาม ID ที่ระบุขึ้นมาดู/กด Approve/Reject' },
         { name: '`/posted`', value: 'ดู 5 รายการล่าสุดที่โพสต์ Backlink สำเร็จ' },

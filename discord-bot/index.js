@@ -401,6 +401,60 @@ client.on('interactionCreate', async (interaction) => {
     if (interaction.isButton()) {
       // อนุญาตให้ทุกคนใน Server มีสิทธิ์กดปุ่มได้ โดยระบบจะบันทึกข้อมูลผู้ดำเนินการลงฐานข้อมูลเสมอ
 
+      if (interaction.customId.startsWith('lead_draft_')) {
+        const cacheId = parseInt(interaction.customId.replace('lead_draft_', ''), 10);
+        await interaction.deferReply({ ephemeral: true });
+
+        try {
+          const { rows } = await pool.query(
+            'SELECT * FROM thread_search_cache WHERE id = $1',
+            [cacheId]
+          );
+
+          if (!rows.length) {
+            return await interaction.editReply('❌ ไม่พบข้อมูลกระทู้นี้ในระบบ หรืออาจหมดอายุแล้ว กรุณาลองค้นหาใหม่อีกครั้ง');
+          }
+
+          const thread = rows[0];
+          const n8nWebhookUrl = process.env.N8N_FLOW3_WEBHOOK_URL || 'http://n8n:5678/webhook/answer-question';
+          const questionText = `${thread.post_title}\n\n${thread.snippet || ''}`.trim();
+
+          const webhookRes = await fetch(n8nWebhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              post_url: thread.post_url,
+              question_text: questionText,
+              platform: thread.platform,
+              requested_by: interaction.user.tag,
+            }),
+            signal: AbortSignal.timeout(10000),
+          });
+
+          const resData = await webhookRes.json().catch(() => ({}));
+          if (resData.status === 'already_exists') {
+            return await interaction.editReply(`⚠️ กระทู้นี้อยู่ในระบบแล้ว (Candidate ID: #${resData.id}, สถานะ: \`${resData.existing_status}\`)`);
+          }
+          if (resData.status === 'quota_exceeded') {
+            return await interaction.editReply(`🚫 **โควตาสัปดาห์นี้เต็มแล้ว (${resData.count}/5)** เพื่อป้องกันการสแปมตามนโยบายชุมชน`);
+          }
+
+          const notifyChannelId = process.env.DISCORD_CHANNEL_ID;
+          const channelMention = notifyChannelId ? `<#${notifyChannelId}>` : 'ห้องแจ้งเตือน';
+
+          return await interaction.editReply(
+            `✅ **ส่งกระทู้เข้าสู่ระบบ Flow 3 สำเร็จ!**\n` +
+            `📌 **หัวข้อ:** ${thread.post_title}\n` +
+            `🌐 **แพลตฟอร์ม:** \`${thread.platform.toUpperCase()}\`\n` +
+            `🔗 **URL:** ${thread.post_url}\n\n` +
+            `🤖 AI กำลังวิเคราะห์ปัญหา ประเมิน Lead Fit และร่างคำตอบ การ์ดตรวจทานจะถูกส่งไปที่ ${channelMention} เมื่อพร้อมครับ!`
+          );
+        } catch (err) {
+          console.error('[lead_draft] Error:', err);
+          return await interaction.editReply(`⚠️ ไม่สามารถส่งคำขอไปยัง n8n ได้: ${err.message}`);
+        }
+      }
+
       if (interaction.customId.startsWith('flow1_approve_')) {
         const id = interaction.customId.replace('flow1_approve_', '');
         await interaction.deferUpdate();
