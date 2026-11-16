@@ -2,6 +2,7 @@
  * thread-search.js
  * ค้นหากระทู้และโพสต์ที่น่าสนใจในช่วง 1 ปีที่ผ่านมา (Pantip, LinkedIn, Facebook)
  * รองรับทั้งการใส่ Keyword เอง และโหมดทำออโต้โดยใช้ Gemini AI ดึงโจทย์จาก SyaCo Solutions
+ * พร้อมระบบ Unfurl Open Graph Metadata สำหรับ Facebook เพื่อให้ได้ชื่อและเนื้อหาจริงของโพสต์/กลุ่ม
  */
 
 const SEARXNG_URL = process.env.SEARXNG_URL || 'http://searxng:8080';
@@ -115,6 +116,70 @@ const SYACO_CATALOG = [
   }
 ];
 
+// ชุมชน Facebook B2B คุณภาพสูงที่เกี่ยวข้องกับโซลูชัน SyaCo (สำหรับเสริมความแม่นยำในการสร้าง Backlink)
+const CURATED_FACEBOOK_COMMUNITIES = {
+  warehouse: [
+    {
+      title: 'คลังสินค้า Logistics และ Supply Chain ประเทศไทย',
+      url: 'https://www.facebook.com/groups/logisticsthai/',
+      snippet: 'ชุมชนแลกเปลี่ยนความรู้ด้านคลังสินค้า (WMS) ระบบจัดเก็บ Barcode/RFID และ Supply Chain ในไทย'
+    },
+    {
+      title: 'สมาคมผู้ประกอบการ e-Commerce ไทย (สต็อก & คลังสินค้า)',
+      url: 'https://www.facebook.com/groups/ecommerce.or.th/',
+      snippet: 'กลุ่มผู้ประกอบการ พูดคุยเรื่องระบบสต็อกสินค้า คลังสินค้า และการเชื่อมโยงระบบออนไลน์'
+    }
+  ],
+  data: [
+    {
+      title: 'Odoo Thailand (ERP) & Data Integration',
+      url: 'https://www.facebook.com/groups/odoo.erp.thailand/',
+      snippet: 'กลุ่มผู้สนใจพัฒนาและแลกเปลี่ยนความรู้การพัฒนาระบบ ERP, API และการเชื่อมต่อฐานข้อมูล'
+    },
+    {
+      title: 'SAP ABAP & Enterprise Systems Thailand',
+      url: 'https://www.facebook.com/groups/sapabap4/',
+      snippet: 'กลุ่มแลกเปลี่ยนปัญหาและโซลูชันระบบ SAP, ERP และการเชื่อมต่อระบบโรงงาน'
+    }
+  ],
+  logistics: [
+    {
+      title: 'รถร่วมขนส่ง ผู้ประกอบการขนส่ง หางาน รถส่งของ',
+      url: 'https://www.facebook.com/groups/750105715501953/',
+      snippet: 'ชุมชนผู้ประกอบการขนส่ง รถร่วม และการบริหารจัดการเที่ยววิ่ง Logistics'
+    },
+    {
+      title: 'Logistics & Development Thailand Forum ข่าวสารการขนส่ง',
+      url: 'https://www.facebook.com/Logistic-Thailand-Forum-1426104774283552',
+      snippet: 'ศูนย์รวมข้อมูลข่าวสาร นวัตกรรมระบบติดตามรถ GPS และเทคโนโลยีโลจิสติกส์'
+    }
+  ],
+  analytics: [
+    {
+      title: 'Power BI Thailand Community',
+      url: 'https://www.facebook.com/groups/powerbithailand/',
+      snippet: 'กลุ่มคนทำ Dashboard, Business Intelligence (BI) วิเคราะห์ยอดขายและข้อมูลองค์กร'
+    },
+    {
+      title: 'DataTH - Data Science & Business Analytics Thailand',
+      url: 'https://www.facebook.com/groups/datathailand/',
+      snippet: 'ชุมชนคนทำงานด้าน Data Analytics, Dashboard ผู้บริหาร และ Business Intelligence'
+    }
+  ],
+  automation: [
+    {
+      title: 'thaiadmin.org ระบบเซิร์ฟเวอร์และระบบออโตเมชันองค์กร',
+      url: 'https://www.facebook.com/groups/thaiadmin/',
+      snippet: 'ชุมชนแลกเปลี่ยนปัญหา IT, Server, ระบบ Automation และการปรับปรุงประสิทธิภาพองค์กร'
+    },
+    {
+      title: 'Jobs & Tech for Thai Programmers & Engineers',
+      url: 'https://www.facebook.com/groups/647718825333067/',
+      snippet: 'ชุมชนสายเทค วิศวกร และผู้เชี่ยวชาญด้านระบบอัตโนมัติ AI และซอฟต์แวร์โรงงาน'
+    }
+  ]
+};
+
 /**
  * ดึงรายการโซลูชันล่าสุดจาก API ของ SyaCo
  */
@@ -145,12 +210,10 @@ async function fetchSyacoSolutions() {
 
 /**
  * สุ่ม/เลือกโซลูชัน และสร้าง Search Queries อัตโนมัติด้วย Gemini AI
- * (จำลองพฤติกรรมเดียวกับโหนด AI Generate Search Queries ใน n8n)
  */
 async function generateAutoQueries(category = 'auto') {
   const solutions = await fetchSyacoSolutions();
 
-  // เลือกโซลูชันเป้าหมาย
   let selectedSol = null;
   if (category && category !== 'auto') {
     const catLow = category.toLowerCase();
@@ -162,14 +225,12 @@ async function generateAutoQueries(category = 'auto') {
   }
 
   if (!selectedSol) {
-    // สุ่มเลือก 1 โซลูชันจากรายการทั้งหมด
     selectedSol = solutions[Math.floor(Math.random() * solutions.length)];
   }
 
   const solTitle = selectedSol.titleTh || selectedSol.titleEn;
   const solDesc = selectedSol.descTh || selectedSol.descEn;
 
-  // 1. พยายามเรียก Gemini AI สร้างคำค้นหาตามบริบทแบบเรียลไทม์
   const apiKey = process.env.GEMINI_API_KEY;
   const model = process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
 
@@ -230,6 +291,7 @@ async function generateAutoQueries(category = 'auto') {
             return {
               isAuto: true,
               solutionTitle: solTitle,
+              solutionKey: SYACO_CATALOG.find(c => c.id === selectedSol.id)?.key || 'auto',
               targetProblem: parsed.targetProblem || solDesc.slice(0, 100),
               queries: parsed.queries.map(q => q.trim()).filter(Boolean).slice(0, 4)
             };
@@ -241,13 +303,58 @@ async function generateAutoQueries(category = 'auto') {
     }
   }
 
-  // Fallback: ใช้ Curated Queries ประจำโซลูชัน
   return {
     isAuto: true,
     solutionTitle: solTitle,
+    solutionKey: SYACO_CATALOG.find(c => c.id === selectedSol.id)?.key || 'auto',
     targetProblem: solDesc.split('\n')[0].slice(0, 120),
     queries: selectedSol.curatedQueries || [`${solTitle} ปัญหา`, `แนะนำ ${solTitle}`]
   };
+}
+
+/**
+ * แปลง HTML Entities เป็นตัวอักษรปกติ (เช่น &#xe15; -> ต)
+ */
+function decodeHtmlEntities(str) {
+  if (!str) return '';
+  return str
+    .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCharCode(parseInt(code, 16)))
+    .replace(/&#([0-9]+);/gi, (_, code) => String.fromCharCode(parseInt(code, 10)))
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&nbsp;/g, ' ');
+}
+
+/**
+ * ดึง Open Graph Metadata ของ Facebook URL (og:title, og:description)
+ * เพื่อแปลงจาก "Link to facebook.com" เป็นหัวข้อและเนื้อหาจริง
+ */
+async function unfurlFacebookMetadata(url) {
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)',
+        'Accept': 'text/html,application/xhtml+xml',
+        'Accept-Language': 'th,en-US;q=0.9,en;q=0.8'
+      },
+      signal: AbortSignal.timeout(4000)
+    });
+    if (!res.ok) return null;
+    const html = await res.text();
+    const titleMatch = html.match(/<meta[^>]*property=["']og:title["'][^>]*content=["']([^"']+)["']/i) || html.match(/<title[^>]*>([^<]+)<\/title>/i);
+    const descMatch = html.match(/<meta[^>]*property=["']og:description["'][^>]*content=["']([^"']+)["']/i);
+    
+    let title = decodeHtmlEntities(titleMatch ? titleMatch[1] : '').replace(/ \| Facebook$/i, '').trim();
+    let snippet = decodeHtmlEntities(descMatch ? descMatch[1] : '').trim();
+    if (title === 'Facebook' || title === 'Log into Facebook' || title.includes('Link to facebook.com')) {
+      title = '';
+    }
+    return { title, snippet };
+  } catch (_) {
+    return null;
+  }
 }
 
 /**
@@ -265,13 +372,20 @@ function cleanUrl(rawUrl, platform) {
       return u.origin + u.pathname;
     }
     if (platform === 'facebook' || u.hostname.includes('facebook.com')) {
+      u.hostname = 'www.facebook.com';
+      u.searchParams.delete('locale');
+      u.searchParams.delete('view');
+      u.searchParams.delete('ref');
+      u.searchParams.delete('ti');
+      u.searchParams.delete('__tn__');
+      u.searchParams.delete('__cft__');
       const keepParams = ['story_fbid', 'id', 'post_id'];
       const newParams = new URLSearchParams();
       keepParams.forEach(p => {
         if (u.searchParams.has(p)) newParams.set(p, u.searchParams.get(p));
       });
       const qs = newParams.toString();
-      return u.origin + u.pathname + (qs ? '?' + qs : '');
+      return u.origin + u.pathname.replace(/\/+$/, '') + (qs ? '?' + qs : '');
     }
     return u.origin + u.pathname;
   } catch (_) {
@@ -308,10 +422,7 @@ function isValidCandidate(item, targetPlatform = 'all') {
     const topicMatch = url.match(/\/topic\/(\d+)/);
     if (!topicMatch) return false;
     const topicId = parseInt(topicMatch[1], 10);
-    // Topic ID >= 42800000 คือช่วงปลายปี 2024 ถึงปัจจุบัน (2025 - 2026)
     if (topicId >= 42800000) return true;
-
-    // หาก ID เก่ากว่านั้น ให้ดูว่ามีการกล่าวถึงปีล่าสุดในเนื้อหา/หัวข้อหรือไม่
     const hasRecentYear = /(?:202[4-6]|256[7-9])/.test(fullText);
     return hasRecentYear;
   }
@@ -323,10 +434,27 @@ function isValidCandidate(item, targetPlatform = 'all') {
     return true;
   }
 
-  // 3. Facebook: ต้องเป็นโพสต์หรือวิดีโอที่มีเนื้อหา
+  // 3. Facebook: ต้องเป็นโพสต์ กลุ่ม หรือวิดีโอที่มีเนื้อหา (ไม่เอาหน้า login, help, policy, developers)
   if (platform === 'facebook') {
-    const isPost = url.includes('/posts/') || url.includes('permalink.php') || url.includes('story_fbid') || url.includes('/videos/') || url.includes('/groups/');
-    if (!isPost) return false;
+    const isJunk = url.includes('developers.facebook.com') ||
+                   url.includes('/help/') ||
+                   url.includes('/login') ||
+                   url.includes('/policies') ||
+                   url.includes('/recover') ||
+                   url.includes('/legal');
+    if (isJunk) return false;
+
+    const isPostOrGroup = url.includes('/posts/') ||
+                          url.includes('/groups/') ||
+                          url.includes('/permalink') ||
+                          url.includes('story_fbid') ||
+                          url.includes('story.php') ||
+                          url.includes('/photos/') ||
+                          url.includes('/videos/') ||
+                          url.includes('/watch/') ||
+                          url.includes('/share/');
+
+    if (!isPostOrGroup) return false;
     return true;
   }
 
@@ -337,7 +465,7 @@ function isValidCandidate(item, targetPlatform = 'all') {
  * เรียกค้นหาจาก SearXNG
  */
 async function querySearxng(query) {
-  const endpoint = `${SEARXNG_URL}/search?q=${encodeURIComponent(query)}&format=json&engines=duckduckgo+web,yandex`;
+  const endpoint = `${SEARXNG_URL}/search?q=${encodeURIComponent(query)}&format=json&engines=yandex`;
   try {
     const res = await fetch(endpoint, {
       signal: AbortSignal.timeout(8000),
@@ -358,14 +486,180 @@ async function querySearxng(query) {
 }
 
 /**
+ * ค้นหาเฉพาะ Facebook พร้อม Unfurl Title และ Description
+ */
+async function searchFacebookThreads(terms, limit = 5, solutionCategory = '') {
+  const primary = terms[0] || 'Business Solution';
+  const queries = [
+    `site:facebook.com ${primary}`,
+    `site:facebook.com/groups ${primary}`
+  ];
+  if (terms[1]) {
+    queries.push(`site:facebook.com ${terms[1]}`);
+  }
+
+  const results = [];
+  const seenUrls = new Set();
+
+  for (const q of queries) {
+    if (results.length >= limit) break;
+    const rawList = await querySearxng(q);
+
+    for (const item of rawList) {
+      if (!isValidCandidate(item, 'facebook')) continue;
+
+      const clean = cleanUrl(item.url, 'facebook');
+      if (seenUrls.has(clean)) continue;
+      seenUrls.add(clean);
+
+      let title = item.title || '';
+      let snippet = item.content || '';
+
+      // Unfurl if title or snippet is generic
+      if (!title || title.includes('Link to facebook.com') || title === 'Facebook' || !snippet || snippet.includes('The site owner hides')) {
+        const unfurled = await unfurlFacebookMetadata(item.url);
+        if (unfurled?.title) title = unfurled.title;
+        if (unfurled?.snippet) snippet = unfurled.snippet;
+      }
+
+      // Fallback title from path
+      if (!title || title.includes('Link to facebook.com') || title === 'Facebook') {
+        const mGroup = item.url.match(/facebook\.com\/groups\/([^/?]+)/);
+        const mPage = item.url.match(/facebook\.com\/([^/?]+)/);
+        if (mGroup) {
+          title = `กลุ่ม Facebook: ${decodeURIComponent(mGroup[1])}`;
+        } else if (mPage) {
+          title = `เพจ Facebook: ${decodeURIComponent(mPage[1])}`;
+        } else {
+          title = `โพสต์ข้อความสนทนาบน Facebook (${primary})`;
+        }
+      }
+
+      if (!snippet || snippet.includes('The site owner hides')) {
+        snippet = `ชุมชนและโพสต์แลกเปลี่ยนความคิดเห็นบน Facebook เกี่ยวกับ "${primary}"`;
+      }
+
+      // กรองเฉพาะกระทู้/โพสต์/กลุ่มที่มีความเกี่ยวข้องกับธุรกิจ ไอที โรงงาน ซอฟต์แวร์
+      const isRelevant = /(?:erp|sap|wms|สต็อก|คลัง|ขนส่ง|logistics|จัดซื้อ|โรงงาน|การผลิต|โปรแกรม|ระบบ|pos|dashboard|bi|plc|automation|ซอฟต์แวร์|ไอที|ธุรกิจ|sme|บาร์โค้ด|barcode|database|api|scada|data|engineer|developer|computer)/i.test(`${title} ${snippet}`);
+      if (!isRelevant) continue;
+
+      results.push({
+        platform: 'facebook',
+        title: title.slice(0, 150),
+        url: clean,
+        snippet: snippet.slice(0, 250)
+      });
+
+      if (results.length >= limit) break;
+    }
+
+    if (results.length >= limit) break;
+  }
+
+  // หากยังไม่เต็ม limit และมี Curated Communities ให้เติมเข้ามา
+  if (results.length < limit && solutionCategory && CURATED_FACEBOOK_COMMUNITIES[solutionCategory]) {
+    for (const c of CURATED_FACEBOOK_COMMUNITIES[solutionCategory]) {
+      if (results.length >= limit) break;
+      if (!seenUrls.has(c.url)) {
+        seenUrls.add(c.url);
+        results.push({
+          platform: 'facebook',
+          title: c.title,
+          url: c.url,
+          snippet: c.snippet
+        });
+      }
+    }
+  }
+
+  return results;
+}
+
+/**
+ * ค้นหาเฉพาะ Pantip
+ */
+async function searchPantipThreads(terms, limit = 5) {
+  const primary = terms[0] || 'Business Solution';
+  const queries = [
+    `site:pantip.com/topic ${primary}`,
+    `pantip ${primary}`
+  ];
+  if (terms[1]) {
+    queries.push(`site:pantip.com/topic ${terms[1]}`);
+  }
+
+  const results = [];
+  const seenUrls = new Set();
+
+  for (const q of queries) {
+    if (results.length >= limit) break;
+    const rawList = await querySearxng(q);
+
+    for (const item of rawList) {
+      if (!isValidCandidate(item, 'pantip')) continue;
+      const clean = cleanUrl(item.url, 'pantip');
+      if (seenUrls.has(clean)) continue;
+      seenUrls.add(clean);
+
+      results.push({
+        platform: 'pantip',
+        title: String(item.title || 'ไม่มีหัวข้อ').replace(/ - Pantip$/i, '').trim().slice(0, 150),
+        url: clean,
+        snippet: String(item.content || '').trim().slice(0, 250)
+      });
+
+      if (results.length >= limit) break;
+    }
+    if (results.length >= limit) break;
+  }
+
+  return results;
+}
+
+/**
+ * ค้นหาเฉพาะ LinkedIn
+ */
+async function searchLinkedInThreads(terms, limit = 5) {
+  const primary = terms[0] || 'Business Solution';
+  const queries = [
+    `site:linkedin.com/posts ${primary}`,
+    `site:linkedin.com/pulse ${primary}`
+  ];
+  if (terms[1]) {
+    queries.push(`site:linkedin.com/posts ${terms[1]}`);
+  }
+
+  const results = [];
+  const seenUrls = new Set();
+
+  for (const q of queries) {
+    if (results.length >= limit) break;
+    const rawList = await querySearxng(q);
+
+    for (const item of rawList) {
+      if (!isValidCandidate(item, 'linkedin')) continue;
+      const clean = cleanUrl(item.url, 'linkedin');
+      if (seenUrls.has(clean)) continue;
+      seenUrls.add(clean);
+
+      results.push({
+        platform: 'linkedin',
+        title: String(item.title || 'ไม่มีหัวข้อ').replace(/ - LinkedIn$/i, '').trim().slice(0, 150),
+        url: clean,
+        snippet: String(item.content || '').trim().slice(0, 250)
+      });
+
+      if (results.length >= limit) break;
+    }
+    if (results.length >= limit) break;
+  }
+
+  return results;
+}
+
+/**
  * ค้นหากระทู้/โพสต์ตาม Keyword และ Platform (ระยะเวลาไม่เกิน 1 ปี)
- * รองรับทั้งใส่ Keyword เอง และ Auto Mode
- * @param {Object} options
- * @param {string} [options.keyword] - คำค้นหาหลัก (ถ้าเว้นว่าง หรือเลือกโหมด auto จะสุ่มจาก SyaCo Solutions)
- * @param {string} [options.mode='manual'] - 'manual' | 'auto'
- * @param {string} [options.platform='all'] - 'all' | 'pantip' | 'linkedin' | 'facebook'
- * @param {number} [options.limit=5] - จำนวนผลลัพธ์ที่ต้องการ (1 - 10)
- * @returns {Promise<{ autoMeta?: Object, results: Array<{ platform: string, title: string, url: string, snippet: string }> }>}
+ * มีระบบกระจายโควตาแพลตฟอร์มที่เป็นธรรม (ไม่ถูก Pantip ดูดโควตาจนหมด)
  */
 async function searchRecentThreads({ keyword, mode = 'manual', platform = 'all', limit = 5 }) {
   const isAutoMode = mode === 'auto' || (keyword && keyword.startsWith('auto')) || (!keyword && mode !== 'manual');
@@ -390,84 +684,57 @@ async function searchRecentThreads({ keyword, mode = 'manual', platform = 'all',
     }
   }
 
-  function buildSearchQueries(term, plat) {
-    if (plat === 'pantip') {
-      return [
-        `pantip ${term} 2025`,
-        `pantip ${term}`
-      ];
-    }
-    if (plat === 'linkedin') {
-      return [
-        `site:linkedin.com/posts ${term}`,
-        `linkedin posts ${term}`
-      ];
-    }
-    if (plat === 'facebook') {
-      return [
-        `site:facebook.com ${term}`,
-        `facebook ${term}`
-      ];
-    }
-    return [
-      `pantip ${term} 2025`,
-      `site:linkedin.com/posts ${term}`,
-      `site:facebook.com ${term}`,
-      `pantip ${term}`
-    ];
+  const solKey = autoMeta?.solutionKey || (keyword?.startsWith('auto:') ? keyword.replace('auto:', '') : '');
+
+  // 1. กรณีระบุแพลตฟอร์มเจาะจง
+  if (platform === 'facebook') {
+    const fbResults = await searchFacebookThreads(queriesToRun, limit, solKey);
+    return { autoMeta, results: fbResults.slice(0, limit) };
   }
 
-  const results = [];
-  const seenUrls = new Set();
+  if (platform === 'pantip') {
+    const ptResults = await searchPantipThreads(queriesToRun, limit);
+    return { autoMeta, results: ptResults.slice(0, limit) };
+  }
 
-  for (let i = 0; i < queriesToRun.length; i++) {
-    const term = queriesToRun[i];
-    const queries = buildSearchQueries(term, platform);
+  if (platform === 'linkedin') {
+    const liResults = await searchLinkedInThreads(queriesToRun, limit);
+    return { autoMeta, results: liResults.slice(0, limit) };
+  }
 
-    for (let qIdx = 0; qIdx < queries.length; qIdx++) {
-      if (results.length >= limit) break;
-      if (i > 0 || qIdx > 0) {
-        await new Promise(r => setTimeout(r, 600));
-      }
+  // 2. กรณี platform === 'all': แบ่งสัดส่วนอย่างสมดุล (Pantip 40%, Facebook 35%, LinkedIn 25%)
+  const fbTarget = Math.max(1, Math.round(limit * 0.35));
+  const liTarget = Math.max(1, Math.round(limit * 0.25));
+  const ptTarget = Math.max(1, limit - fbTarget - liTarget);
 
-      const q = queries[qIdx];
-      const rawList = await querySearxng(q);
-      for (const item of rawList) {
-        if (isValidCandidate(item, platform)) {
-          const itemPlatform = detectPlatform(item.url);
-          const url = cleanUrl(item.url, itemPlatform);
-          if (!seenUrls.has(url)) {
-            seenUrls.add(url);
-            results.push({
-              platform: itemPlatform,
-              title: String(item.title || 'ไม่มีหัวข้อ')
-                .replace(/ - Pantip$/i, '')
-                .replace(/ - LinkedIn$/i, '')
-                .replace(/ - Facebook$/i, '')
-                .trim(),
-              url: url,
-              snippet: String(item.content || '').trim().slice(0, 300)
-            });
-          }
-        }
-        if (results.length >= limit) break;
+  const fbList = await searchFacebookThreads(queriesToRun, fbTarget, solKey);
+  const ptList = await searchPantipThreads(queriesToRun, ptTarget);
+  const liList = await searchLinkedInThreads(queriesToRun, liTarget);
+
+  let combined = [...fbList, ...ptList, ...liList];
+
+  // หากยังไม่ครบ limit ให้เติมส่วนที่ขาดจากแพลตฟอร์มที่มี
+  if (combined.length < limit) {
+    const deficit = limit - combined.length;
+    const morePt = await searchPantipThreads(queriesToRun, ptTarget + deficit);
+    const existingUrls = new Set(combined.map(r => r.url));
+    for (const p of morePt) {
+      if (!existingUrls.has(p.url) && combined.length < limit) {
+        existingUrls.add(p.url);
+        combined.push(p);
       }
     }
-
-    if (results.length >= limit) break;
   }
 
   return {
     autoMeta,
-    results: results.slice(0, limit)
+    results: combined.slice(0, limit)
   };
 }
 
 /**
  * รวบรวมกระทู้/โพสต์น่าสนใจประจำวัน (Daily Radar) รวม ~20 รายการ
- * โดยวนลูปหมุนเวียนหาจากทุกหมวดหมู่โซลูชันของ SyaCo ข้ามแพลตฟอร์ม Pantip, LinkedIn, Facebook (ไม่เกิน 1 ปี)
- * @param {number} [targetCount=20]
- * @returns {Promise<{ solutionsCovered: Array<string>, results: Array<Object> }>}
+ * กระจายครบทุกหมวดหมู่โซลูชัน และการันตีมีกระทู้ Facebook + Pantip + LinkedIn ครบถ้วน
  */
 async function collectDailyRadarThreads(targetCount = 20) {
   const categories = ['warehouse', 'data', 'logistics', 'production', 'alert', 'crm', 'energy', 'predictive'];
@@ -477,63 +744,97 @@ async function collectDailyRadarThreads(targetCount = 20) {
   const seenUrls = new Set();
   const solutionsCovered = new Set();
 
+  // กำหนดโควตาเป้าหมาย: Facebook ~7-8, Pantip ~7-8, LinkedIn ~5
+  const fbTargetTotal = Math.round(targetCount * 0.35); // ~7
+  const liTargetTotal = Math.round(targetCount * 0.25); // ~5
+  const ptTargetTotal = targetCount - fbTargetTotal - liTargetTotal; // ~8
+
+  let fbCount = 0;
+  let ptCount = 0;
+  let liCount = 0;
+
   for (const cat of shuffled) {
     if (allResults.length >= targetCount) break;
 
-    const remaining = targetCount - allResults.length;
-    const batchLimit = Math.min(5, remaining);
-
     try {
-      const { autoMeta, results } = await searchRecentThreads({
-        mode: 'auto',
-        keyword: `auto:${cat}`,
-        platform: 'all',
-        limit: batchLimit
-      });
+      const sol = SYACO_CATALOG.find(c => c.key === cat) || SYACO_CATALOG[0];
+      const queries = sol.curatedQueries;
+      solutionsCovered.add(sol.titleTh);
 
-      if (autoMeta?.solutionTitle) {
-        solutionsCovered.add(autoMeta.solutionTitle);
+      // ดึง Facebook สำหรับหมวดนี้
+      if (fbCount < fbTargetTotal) {
+        const fbBatch = await searchFacebookThreads(queries, 1, cat);
+        for (const item of fbBatch) {
+          if (!seenUrls.has(item.url) && allResults.length < targetCount && fbCount < fbTargetTotal) {
+            seenUrls.add(item.url);
+            fbCount++;
+            allResults.push({
+              ...item,
+              solutionCategory: sol.titleTh || cat
+            });
+          }
+        }
       }
 
-      for (const r of results) {
-        if (!seenUrls.has(r.url) && allResults.length < targetCount) {
-          seenUrls.add(r.url);
-          allResults.push({
-            ...r,
-            solutionCategory: autoMeta?.solutionTitle || cat
-          });
+      // ดึง Pantip สำหรับหมวดนี้
+      if (ptCount < ptTargetTotal) {
+        const ptBatch = await searchPantipThreads(queries, 1);
+        for (const item of ptBatch) {
+          if (!seenUrls.has(item.url) && allResults.length < targetCount && ptCount < ptTargetTotal) {
+            seenUrls.add(item.url);
+            ptCount++;
+            allResults.push({
+              ...item,
+              solutionCategory: sol.titleTh || cat
+            });
+          }
+        }
+      }
+
+      // ดึง LinkedIn สำหรับหมวดนี้
+      if (liCount < liTargetTotal) {
+        const liBatch = await searchLinkedInThreads(queries, 1);
+        for (const item of liBatch) {
+          if (!seenUrls.has(item.url) && allResults.length < targetCount && liCount < liTargetTotal) {
+            seenUrls.add(item.url);
+            liCount++;
+            allResults.push({
+              ...item,
+              solutionCategory: sol.titleTh || cat
+            });
+          }
         }
       }
     } catch (err) {
       console.warn(`[DailyRadar] Error gathering for category ${cat}:`, err.message);
     }
 
-    await new Promise(r => setTimeout(r, 600));
+    await new Promise(r => setTimeout(r, 400));
   }
 
-  // หากยังไม่ครบ ให้ค้นหาด้วยคีย์เวิร์ดภาคธุรกิจเพิ่มเติม
+  // หากยังไม่ครบ targetCount ให้ดึงเสริม
   if (allResults.length < targetCount) {
-    const fallbackTerms = ['ERP', 'โปรแกรมสต็อก', 'ระบบโรงงาน', 'PLC Automation', 'Logistics'];
+    const fallbackTerms = ['ERP โรงงาน', 'โปรแกรมสต็อก คลังสินค้า', 'ระบบขนส่ง logistics', 'WMS Barcode', 'Dashboard ผู้บริหาร'];
     for (const term of fallbackTerms) {
       if (allResults.length >= targetCount) break;
       try {
-        const { results } = await searchRecentThreads({
-          mode: 'manual',
-          keyword: term,
-          platform: 'all',
-          limit: targetCount - allResults.length
-        });
-        for (const r of results) {
+        const fbMore = await searchFacebookThreads([term], 2);
+        for (const r of fbMore) {
           if (!seenUrls.has(r.url) && allResults.length < targetCount) {
             seenUrls.add(r.url);
-            allResults.push({
-              ...r,
-              solutionCategory: `Keyword: ${term}`
-            });
+            allResults.push({ ...r, solutionCategory: `Keyword: ${term}` });
+          }
+        }
+
+        const ptMore = await searchPantipThreads([term], 2);
+        for (const r of ptMore) {
+          if (!seenUrls.has(r.url) && allResults.length < targetCount) {
+            seenUrls.add(r.url);
+            allResults.push({ ...r, solutionCategory: `Keyword: ${term}` });
           }
         }
       } catch (_) {}
-      await new Promise(r => setTimeout(r, 600));
+      await new Promise(r => setTimeout(r, 400));
     }
   }
 
@@ -545,11 +846,16 @@ async function collectDailyRadarThreads(targetCount = 20) {
 
 module.exports = {
   searchRecentThreads,
+  searchFacebookThreads,
+  searchPantipThreads,
+  searchLinkedInThreads,
   collectDailyRadarThreads,
   generateAutoQueries,
   fetchSyacoSolutions,
   cleanUrl,
   detectPlatform,
   isValidCandidate,
-  SYACO_CATALOG
+  unfurlFacebookMetadata,
+  SYACO_CATALOG,
+  CURATED_FACEBOOK_COMMUNITIES
 };
