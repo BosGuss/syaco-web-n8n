@@ -394,6 +394,31 @@ client.on('guildCreate', async (guild) => {
 // Handle Discord Gateway Interactions
 client.on('interactionCreate', async (interaction) => {
   try {
+    if (interaction.isAutocomplete()) {
+      const { commandName } = interaction;
+      if (commandName === 'find-threads') {
+        const focused = interaction.options.getFocused(true);
+        if (focused.name === 'keyword') {
+          const val = (focused.value || '').toLowerCase().trim();
+          const choices = [
+            { name: '🤖 [ทำออโต้] AI สุ่มวิเคราะห์จาก SyaCo Solutions ทั้งหมด', value: 'auto' },
+            { name: '🤖 [ออโต้] Smart Inventory & Warehouse (สต็อก / คลังสินค้า)', value: 'auto:warehouse' },
+            { name: '🤖 [ออโต้] Data Integration & APIs (ERP / PLC / API)', value: 'auto:data' },
+            { name: '🤖 [ออโต้] Real-time Tracking & Logistics (GPS / ขนส่ง)', value: 'auto:logistics' },
+            { name: '🤖 [ออโต้] Analytics & Dashboard (BI / รายงานผู้บริหาร)', value: 'auto:analytics' },
+            { name: '🤖 [ออโต้] AI & Automation (AI / ตรวจจับ Defect / อัตโนมัติ)', value: 'auto:automation' },
+            { name: '🤖 [ออโต้] Alerts & Notification System (แจ้งเตือน / อนุมัติงาน)', value: 'auto:alerts' },
+            { name: '🤖 [ออโต้] Enterprise Web & Mobile Apps (แอปทำงาน Offline)', value: 'auto:apps' }
+          ];
+          const filtered = val
+            ? choices.filter(c => c.name.toLowerCase().includes(val) || c.value.toLowerCase().includes(val))
+            : choices;
+          return await interaction.respond(filtered.slice(0, 10));
+        }
+      }
+      return;
+    }
+
     if (interaction.isChatInputCommand()) {
       return await handleCommand(interaction, { pool, client });
     }

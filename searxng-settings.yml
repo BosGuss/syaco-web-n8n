@@ -11,15 +11,16 @@ outgoing:
 
 engines:
   - name: google cse
-    disabled: false
-    weight: 5
-  - name: bing
-    disabled: true
-  - name: yahoo
     disabled: true
   - name: brave
     disabled: true
-  - name: google
-    disabled: true
+  - name: bing
+    disabled: false
+    weight: 3
+  - name: yahoo
+    disabled: false
+    weight: 2
   - name: duckduckgo
+    disabled: true
+  - name: google
     disabled: true

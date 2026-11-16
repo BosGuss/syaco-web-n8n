@@ -364,9 +364,19 @@ const commands = [
     .setName('find-threads')
     .setDescription('ค้นหากระทู้/โพสต์ที่น่าสนใจ (ระยะไม่เกิน 1 ปี) เพื่อส่งให้ AI วิเคราะห์')
     .addStringOption(option =>
+      option.setName('mode')
+        .setDescription('เลือกรูปแบบ: ทำออโต้ (AI สุ่มโจทย์จาก SyaCo Solutions) หรือ ใส่ Keyword เอง')
+        .setRequired(false)
+        .addChoices(
+          { name: '🤖 ทำออโต้ (AI วิเคราะห์โจทย์จาก SyaCo Solutions)', value: 'auto' },
+          { name: '✍️ ใส่เอง (ระบุ Keyword)', value: 'manual' }
+        )
+    )
+    .addStringOption(option =>
       option.setName('keyword')
-        .setDescription('คำค้นหา เช่น ERP, ระบบสต็อก, SAP, Automation')
-        .setRequired(true)
+        .setDescription('คำค้นหา (หากเลือกทำออโต้ สามารถเว้นว่างได้ หรือเลือกหมวดหมู่ออโต้)')
+        .setRequired(false)
+        .setAutocomplete(true)
     )
     .addStringOption(option =>
       option.setName('platform')
@@ -1012,9 +1022,17 @@ async function handleCommand(interaction, { pool, client }) {
 
   // คำสั่ง /find-threads (ค้นหากระทู้/โพสต์ที่น่าสนใจในช่วง 1 ปี)
   if (commandName === 'find-threads') {
-    const keyword = interaction.options.getString('keyword').trim();
+    const rawMode = interaction.options.getString('mode');
+    const rawKeyword = (interaction.options.getString('keyword') || '').trim();
     const platform = interaction.options.getString('platform') || 'all';
     const limit = interaction.options.getInteger('limit') || 5;
+
+    // ตรวจสอบว่าเป็นโหมด Auto หรือไม่:
+    // 1. ระบุ mode === 'auto'
+    // 2. หรือเลือกตัวเลือกจาก autocomplete เช่น 'auto', 'auto:warehouse'
+    // 3. หรือไม่ได้กรอกทั้ง mode และ keyword (default เข้า auto)
+    const isAuto = rawMode === 'auto' || rawKeyword.startsWith('auto') || (!rawMode && !rawKeyword);
+    const mode = isAuto ? 'auto' : 'manual';
 
     await interaction.deferReply();
 
@@ -1033,25 +1051,35 @@ async function handleCommand(interaction, { pool, client }) {
       `);
 
       // 2. ค้นหากระทู้ผ่าน SearXNG (จำกัดไม่เกิน 1 ปี)
-      const results = await searchRecentThreads({ keyword, platform, limit });
+      const { autoMeta, results } = await searchRecentThreads({
+        keyword: rawKeyword,
+        mode,
+        platform,
+        limit
+      });
 
       if (!results.length) {
         const noResultEmbed = new EmbedBuilder()
           .setTitle('🔍 ไม่พบกระทู้หรือโพสต์ที่ตรงกับเงื่อนไข')
           .setColor(0xfee75c)
-          .setDescription(`ไม่พบโพสต์ที่ตรงกับคำค้นหา **"${keyword}"** ในช่วง 1 ปีที่ผ่านมา (แพลตฟอร์ม: \`${platform.toUpperCase()}\`)\n\n💡 **คำแนะนำ:**\n• ลองใช้คีย์เวิร์ดที่กว้างขึ้น เช่น \`ERP\`, \`สต็อก\`, \`บัญชี\`, \`SAP\`, \`Automation\`\n• เลือกค้นหาแบบ \`ทุกแพลตฟอร์ม (all)\``)
+          .setDescription(
+            isAuto
+              ? `AI ได้สร้างคำค้นหาจากโซลูชัน **"${autoMeta?.solutionTitle}"** (\`${autoMeta?.queries?.join('`, `')}\`) แต่ไม่พบโพสต์ล่าสุดที่ตรงเงื่อนไขในช่วง 1 ปีที่ผ่านมา\n\n💡 **คำแนะนำ:** ลองกดค้นหาแบบออโต้อีกครั้งเพื่อให้ AI สุ่มโซลูชันอื่น หรือพิมพ์ Keyword ที่ต้องการค้นหาโดยตรงครับ`
+              : `ไม่พบโพสต์ที่ตรงกับคำค้นหา **"${rawKeyword}"** ในช่วง 1 ปีที่ผ่านมา (แพลตฟอร์ม: \`${platform.toUpperCase()}\`)\n\n💡 **คำแนะนำ:**\n• ลองใช้คีย์เวิร์ดที่กว้างขึ้น เช่น \`ERP\`, \`สต็อก\`, \`บัญชี\`, \`SAP\`, \`Automation\`\n• หรือปล่อยช่อง Keyword ว่างเพื่อให้ AI ทำออโต้`
+          )
           .setTimestamp();
         return await interaction.editReply({ embeds: [noResultEmbed] });
       }
 
       // 3. บันทึกผลลัพธ์ลง thread_search_cache เพื่อใช้เชื่อมกับปุ่ม Action
       const savedItems = [];
+      const loggedKeyword = isAuto ? `[Auto: ${autoMeta?.solutionTitle}]` : rawKeyword;
       for (const item of results) {
         const ins = await pool.query(`
           INSERT INTO thread_search_cache (platform, post_url, post_title, snippet, search_keyword, created_at)
           VALUES ($1, $2, $3, $4, $5, NOW())
           RETURNING id;
-        `, [item.platform, item.url, item.title, item.snippet, keyword]);
+        `, [item.platform, item.url, item.title, item.snippet, loggedKeyword]);
         savedItems.push({
           cacheId: ins.rows[0].id,
           ...item
@@ -1066,15 +1094,26 @@ async function handleCommand(interaction, { pool, client }) {
       };
 
       const embed = new EmbedBuilder()
-        .setTitle('🔍 ผลการค้นหากระทู้และโพสต์ที่น่าสนใจ (ระยะไม่เกิน 1 ปี)')
-        .setColor(0x5865f2)
-        .setDescription(
-          `🔎 **คำค้นหา:** \`${keyword}\`\n` +
-          `🌐 **แพลตฟอร์ม:** \`${platform === 'all' ? 'ทุกแพลตฟอร์ม' : platform.toUpperCase()}\`\n` +
-          `📊 **พบ:** \`${savedItems.length}\` รายการที่ตรงเงื่อนไข\n\n` +
-          `💡 *กดปุ่ม **[🤖 ร่างคำตอบ]** ด้านล่าง เพื่อให้ AI วิเคราะห์ปัญหาและร่างคำตอบเข้าสู่ Flow 3 ทันที*`
-        )
+        .setColor(isAuto ? 0x57f287 : 0x5865f2)
         .setTimestamp();
+
+      if (isAuto && autoMeta) {
+        embed.setTitle('🤖 ผลการค้นหากระทู้ด้วย AI (SyaCo Auto-Lead Discovery)')
+          .setDescription(
+            `🎯 **โซลูชัน SyaCo:** \`${autoMeta.solutionTitle}\`\n` +
+            `⚠️ **โจทย์/ปัญหาที่ค้นหา:** ${autoMeta.targetProblem}\n` +
+            `💡 **คำค้นหาที่ AI ใช้:** \`${autoMeta.queries.join('`, `')}\`\n` +
+            `🌐 **แพลตฟอร์ม:** \`${platform === 'all' ? 'ทุกแพลตฟอร์ม' : platform.toUpperCase()}\` | **พบ:** \`${savedItems.length}\` รายการ\n\n` +
+            `💡 *กดปุ่ม **[🤖 ร่างคำตอบ]** ด้านล่าง เพื่อให้ AI วิเคราะห์ปัญหาและร่างคำตอบเข้าสู่ Flow 3 ทันที*`
+          );
+      } else {
+        embed.setTitle('🔍 ผลการค้นหากระทู้และโพสต์ที่น่าสนใจ (ระยะไม่เกิน 1 ปี)')
+          .setDescription(
+            `🔎 **คำค้นหา:** \`${rawKeyword}\` (โหมด: กำหนดเอง)\n` +
+            `🌐 **แพลตฟอร์ม:** \`${platform === 'all' ? 'ทุกแพลตฟอร์ม' : platform.toUpperCase()}\` | **พบ:** \`${savedItems.length}\` รายการ\n\n` +
+            `💡 *กดปุ่ม **[🤖 ร่างคำตอบ]** ด้านล่าง เพื่อให้ AI วิเคราะห์ปัญหาและร่างคำตอบเข้าสู่ Flow 3 ทันที*`
+          );
+      }
 
       savedItems.forEach((item, index) => {
         const pBadge = platformBadge[item.platform] || item.platform;
@@ -1124,7 +1163,7 @@ async function handleCommand(interaction, { pool, client }) {
       .setColor(0x57f287)
       .setDescription('คำสั่งที่สามารถใช้งานได้ในเซิร์ฟเวอร์:')
       .addFields(
-        { name: '`/find-threads <keyword> [platform] [limit]`', value: 'ค้นหากระทู้/โพสต์ที่น่าสนใจในช่วง 1 ปี (Pantip, LinkedIn, Facebook) พร้อมปุ่มสั่ง AI ร่างคำตอบ' },
+        { name: '`/find-threads [mode] [keyword] [platform] [limit]`', value: 'ค้นหากระทู้/โพสต์ที่น่าสนใจ (ระยะไม่เกิน 1 ปี) รองรับทั้งใส่ Keyword เอง และทำออโต้ด้วย AI' },
         { name: '`/latest [limit]`', value: 'ดึง Candidate ทั้งหมดในรอบเวลาล่าสุดขึ้นมาพร้อมปุ่มจัดการ' },
         { name: '`/get <id>`', value: 'ดึง Candidate ตาม ID ที่ระบุขึ้นมาดู/กด Approve/Reject' },
         { name: '`/posted`', value: 'ดู 5 รายการล่าสุดที่โพสต์ Backlink สำเร็จ' },
