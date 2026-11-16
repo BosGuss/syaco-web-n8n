@@ -513,7 +513,7 @@ client.on('interactionCreate', async (interaction) => {
   try {
     if (interaction.isAutocomplete()) {
       const { commandName } = interaction;
-      if (commandName === 'find-threads') {
+      if (commandName === 'find' || commandName === 'find-threads') {
         const focused = interaction.options.getFocused(true);
         if (focused.name === 'keyword') {
           const val = (focused.value || '').toLowerCase().trim();
@@ -651,6 +651,38 @@ client.on('interactionCreate', async (interaction) => {
           console.error('[lead_draft] Error:', err);
           return await interaction.editReply(`⚠️ ไม่สามารถส่งคำขอไปยัง n8n ได้: ${err.message}`);
         }
+      }
+
+      if (interaction.customId === 'btn_settings_devto_key') {
+        const modal = new ModalBuilder()
+          .setCustomId('modal_devto_key')
+          .setTitle('ตั้งค่า DEVTO_API_KEY');
+
+        const keyInput = new TextInputBuilder()
+          .setCustomId('key_value')
+          .setLabel('Dev.to API Key')
+          .setPlaceholder('วาง Dev.to API Key เช่น GPzyFieTByvp2TJeNmoyKD4W')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true);
+
+        modal.addComponents(new ActionRowBuilder().addComponents(keyInput));
+        return await interaction.showModal(modal);
+      }
+
+      if (interaction.customId === 'btn_settings_devto_cookie') {
+        const modal = new ModalBuilder()
+          .setCustomId('modal_devto_cookie')
+          .setTitle('ตั้งค่า DEVTO_COOKIE');
+
+        const cookieInput = new TextInputBuilder()
+          .setCustomId('cookie_value')
+          .setLabel('Dev.to Cookie')
+          .setPlaceholder('วาง Cookie ทั้งหมด หรือ remember_user_token=...')
+          .setStyle(TextInputStyle.Paragraph)
+          .setRequired(true);
+
+        modal.addComponents(new ActionRowBuilder().addComponents(cookieInput));
+        return await interaction.showModal(modal);
       }
 
       if (interaction.customId.startsWith('flow1_approve_')) {

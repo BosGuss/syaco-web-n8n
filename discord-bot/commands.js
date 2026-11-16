@@ -333,91 +333,43 @@ function buildRadarEmbedsAndMenu(threads, solutionsCovered = []) {
   return { embeds, components: [actionRow] };
 }
 
-// 2. กำหนดคำสั่งทั้งหมด (Command Definitions)
+// 2. กำหนดคำสั่งทั้งหมด (7 คำสั่งหลัก สั้น กระชับ จำง่าย ครบทุกฟังก์ชัน)
 const commands = [
+  // 1. /find - ค้นหากระทู้/โพสต์น่าสนใจ หรือดึงเรดาร์ประจำวัน 20 รายการ
   new SlashCommandBuilder()
-    .setName('ping')
-    .setDescription('ทดสอบสถานะการเชื่อมต่อและความเร็วของบอท'),
-
-  new SlashCommandBuilder()
-    .setName('status')
-    .setDescription('ดูภาพรวมจำนวนรายการ Backlink Candidates ในฐานข้อมูล'),
-
-  new SlashCommandBuilder()
-    .setName('pending')
-    .setDescription('ดูรายการที่กำลังรอตรวจสอบ พร้อมปุ่ม Approve / Edit / Reject')
+    .setName('find')
+    .setDescription('ค้นหากระทู้/โพสต์น่าสนใจ (ไม่เกิน 1 ปี) หรือดึงเรดาร์ประจำวัน พร้อมเมนูให้ AI ร่างคำตอบ')
+    .addStringOption(option =>
+      option.setName('keyword')
+        .setDescription('คำค้นหา เช่น ERP, สต็อก (หากเว้นว่าง ระบบจะดึงเรดาร์ออโต้ ~20 รายการ)')
+        .setRequired(false)
+        .setAutocomplete(true)
+    )
+    .addStringOption(option =>
+      option.setName('platform')
+        .setDescription('เลือกแพลตฟอร์ม (ค่าเริ่มต้น: ทุกแพลตฟอร์ม)')
+        .setRequired(false)
+        .addChoices(
+          { name: '🌐 ทุกแพลตฟอร์ม (Pantip, LinkedIn, Facebook)', value: 'all' },
+          { name: '🔴 Pantip', value: 'pantip' },
+          { name: '🔵 LinkedIn', value: 'linkedin' },
+          { name: '🔷 Facebook', value: 'facebook' }
+        )
+    )
     .addIntegerOption(option =>
       option.setName('limit')
-        .setDescription('จำนวนรายการที่ต้องการแสดง (ค่าเริ่มต้น: 5 รายการ)')
+        .setDescription('จำนวนกระทู้ที่ต้องการ (1-25 รายการ, ค่าเริ่มต้น: 20)')
         .setRequired(false)
+        .setMinValue(1)
+        .setMaxValue(25)
     ),
 
-  new SlashCommandBuilder()
-    .setName('posted')
-    .setDescription('ดู 5 รายการล่าสุดที่สร้างและโพสต์ Backlink สำเร็จแล้ว'),
-
-  new SlashCommandBuilder()
-    .setName('get')
-    .setDescription('ดึง Candidate ตาม ID ขึ้นมาตรวจสอบ พร้อมปุ่ม Approve / Edit / Reject')
-    .addStringOption(option =>
-      option.setName('id')
-        .setDescription('Candidate ID ที่ต้องการเรียกดู')
-        .setRequired(true)
-    ),
-
-  new SlashCommandBuilder()
-    .setName('latest')
-    .setDescription('ดึง Candidate ทั้งหมดในรอบเวลาล่าสุดที่รอรีวิวขึ้นมาแสดงพร้อมปุ่มจัดการ')
-    .addIntegerOption(option =>
-      option.setName('limit')
-        .setDescription('จำนวนรายการสูงสุดที่ต้องการแสดง (ค่าเริ่มต้น: แสดงทั้งหมดในรอบล่าสุด)')
-        .setRequired(false)
-    ),
-
-  new SlashCommandBuilder()
-    .setName('run')
-    .setDescription('สั่งให้ n8n เริ่มค้นหาและประมวลผล Backlink รอบใหม่'),
-
-  new SlashCommandBuilder()
-    .setName('request-idea')
-    .setDescription('ขอไอเดียโซลูชันใหม่จาก Flow 1 (วิเคราะห์ข่าวสารและเทคโนโลยี Enterprise)'),
-
-  new SlashCommandBuilder()
-    .setName('health')
-    .setDescription('ตรวจสอบสุขภาพของระบบ (PostgreSQL, n8n, Bluesky, Dev.to, Gemini AI)'),
-
-  new SlashCommandBuilder()
-    .setName('set-devto-key')
-    .setDescription('ตั้งค่าหรืออัปเดต DEVTO_API_KEY สำหรับเผยแพร่บทความบน Dev.to (เปิดหน้าต่างกรอก)'),
-
-  new SlashCommandBuilder()
-    .setName('set-devto-cookie')
-    .setDescription('ตั้งค่าหรืออัปเดต DEVTO_COOKIE สำหรับโพสต์คอมเมนต์บน Dev.to (เปิดหน้าต่างกรอก)'),
-
-  new SlashCommandBuilder()
-    .setName('set-channel')
-    .setDescription('ตั้งค่าห้องนี้ (หรือห้องที่เลือก) เป็นห้องรับแจ้งเตือน Backlink Candidates')
-    .addChannelOption(option =>
-      option.setName('channel')
-        .setDescription('ห้องที่ต้องการให้ส่งแจ้งเตือน (หากเว้นว่าง จะใช้ห้องปัจจุบัน)')
-        .setRequired(false)
-    ),
-
-  new SlashCommandBuilder()
-    .setName('set-admin-ids')
-    .setDescription('ตั้งค่ารายชื่อ Discord User IDs ที่มีสิทธิ์อนุมัติ/เผยแพร่ (คั่นด้วย comma)')
-    .addStringOption(option =>
-      option.setName('ids')
-        .setDescription('เช่น: 1558033226033799209, 1234567890')
-        .setRequired(true)
-    ),
-
+  // 2. /answer - ส่งคำถามกระทู้ให้ AI ช่วยตอบ
   new SlashCommandBuilder()
     .setName('answer')
     .setDescription('ส่งคำถามหรือโพสต์จาก Pantip, LinkedIn, Facebook ให้ AI ช่วยร่างคำตอบ')
     .addStringOption(option =>
-      option
-        .setName('platform')
+      option.setName('platform')
         .setDescription('แพลตฟอร์มต้นทาง')
         .setRequired(true)
         .addChoices(
@@ -428,72 +380,91 @@ const commands = [
         )
     ),
 
+  // 3. /settings - จัดการการตั้งค่าทั้งหมดในที่เดียว
   new SlashCommandBuilder()
-    .setName('find-threads')
-    .setDescription('ค้นหากระทู้/โพสต์ที่น่าสนใจ (ระยะไม่เกิน 1 ปี) เพื่อส่งให้ AI วิเคราะห์')
-    .addStringOption(option =>
-      option.setName('mode')
-        .setDescription('เลือกรูปแบบ: ทำออโต้ (AI สุ่มโจทย์จาก SyaCo Solutions) หรือ ใส่ Keyword เอง')
-        .setRequired(false)
-        .addChoices(
-          { name: '🤖 ทำออโต้ (AI วิเคราะห์โจทย์จาก SyaCo Solutions)', value: 'auto' },
-          { name: '✍️ ใส่เอง (ระบุ Keyword)', value: 'manual' }
+    .setName('settings')
+    .setDescription('จัดการการตั้งค่าระบบบอทและตารางเวลา')
+    .addSubcommand(sub =>
+      sub.setName('view')
+        .setDescription('ดูค่าการตั้งค่าปัจจุบันทั้งหมด (ห้องแจ้งเตือน, เวลาเรดาร์, สิทธิ์)')
+    )
+    .addSubcommand(sub =>
+      sub.setName('radar')
+        .setDescription('ตั้งเวลาดึงกระทู้อัตโนมัติประจำวัน')
+        .addStringOption(opt =>
+          opt.setName('time')
+            .setDescription('เวลา HH:MM เช่น 08:30 หรือ 09:00 (เวลาไทย)')
+            .setRequired(false)
+        )
+        .addBooleanOption(opt =>
+          opt.setName('enabled')
+            .setDescription('เปิดหรือปิดระบบดึงอัตโนมัติ')
+            .setRequired(false)
+        )
+        .addIntegerOption(opt =>
+          opt.setName('limit')
+            .setDescription('จำนวนกระทู้เป้าหมาย (5-25 รายการ)')
+            .setRequired(false)
+            .setMinValue(5)
+            .setMaxValue(25)
         )
     )
-    .addStringOption(option =>
-      option.setName('keyword')
-        .setDescription('คำค้นหา (หากเลือกทำออโต้ สามารถเว้นว่างได้ หรือเลือกหมวดหมู่ออโต้)')
-        .setRequired(false)
-        .setAutocomplete(true)
-    )
-    .addStringOption(option =>
-      option.setName('platform')
-        .setDescription('เลือกแพลตฟอร์มที่ต้องการค้นหา (ค่าเริ่มต้น: ทุกแพลตฟอร์ม)')
-        .setRequired(false)
-        .addChoices(
-          { name: '🌐 ทุกแพลตฟอร์ม (Pantip, LinkedIn, Facebook)', value: 'all' },
-          { name: '🟣 Pantip', value: 'pantip' },
-          { name: '💼 LinkedIn', value: 'linkedin' },
-          { name: '🔵 Facebook', value: 'facebook' }
+    .addSubcommand(sub =>
+      sub.setName('channel')
+        .setDescription('ตั้งค่าห้องนี้ (หรือห้องที่เลือก) เป็นห้องรับแจ้งเตือน')
+        .addChannelOption(opt =>
+          opt.setName('channel')
+            .setDescription('ห้องที่ต้องการ (เว้นว่างเพื่อใช้ห้องปัจจุบัน)')
+            .setRequired(false)
         )
     )
-    .addIntegerOption(option =>
-      option.setName('limit')
-        .setDescription('จำนวนผลลัพธ์ที่ต้องการ (1-10 รายการ, ค่าเริ่มต้น: 5)')
+    .addSubcommand(sub =>
+      sub.setName('admin')
+        .setDescription('ตั้งค่า Discord User IDs ที่มีสิทธิ์อนุมัติ/เผยแพร่')
+        .addStringOption(opt =>
+          opt.setName('ids')
+            .setDescription('User IDs คั่นด้วย comma')
+            .setRequired(true)
+        )
+    )
+    .addSubcommand(sub =>
+      sub.setName('devto')
+        .setDescription('ตั้งค่า Dev.to API Key หรือ Cookie (เปิดหน้าต่างกรอก)')
+    ),
+
+  // 4. /status - รวมการดูภาพรวมสถิติ, รายการรอรีวิว, และรายการที่โพสต์แล้ว
+  new SlashCommandBuilder()
+    .setName('status')
+    .setDescription('ดูภาพรวมจำนวนรายการ หรือดูรายการที่รอตรวจสอบ/โพสต์แล้ว')
+    .addStringOption(opt =>
+      opt.setName('view')
+        .setDescription('เลือกประเภทข้อมูลที่ต้องการดู (ค่าเริ่มต้น: สรุปภาพรวม)')
+        .setRequired(false)
+        .addChoices(
+          { name: '📊 สรุปภาพรวมสถิติ (Overview)', value: 'overview' },
+          { name: '⏳ รายการที่รอรีวิว (Pending Review)', value: 'pending' },
+          { name: '✅ รายการที่โพสต์สำเร็จแล้ว (Posted)', value: 'posted' }
+        )
+    )
+    .addIntegerOption(opt =>
+      opt.setName('limit')
+        .setDescription('จำนวนรายการที่ต้องการแสดง (1-10 รายการ)')
         .setRequired(false)
         .setMinValue(1)
         .setMaxValue(10)
     ),
 
+  // 5. /idea - ขอไอเดียโซลูชันใหม่จาก Flow 1
   new SlashCommandBuilder()
-    .setName('radar')
-    .setDescription('ดึงเรดาร์กระทู้/โพสต์น่าสนใจประจำวัน (~20 รายการ) พร้อมเมนูเลือกให้ AI ร่างคำตอบ')
-    .addIntegerOption(option =>
-      option.setName('limit')
-        .setDescription('จำนวนกระทู้ที่ต้องการดึง (5-25 รายการ, ค่าเริ่มต้น: 20)')
-        .setRequired(false)
-        .setMinValue(5)
-        .setMaxValue(25)
-    ),
+    .setName('idea')
+    .setDescription('ขอไอเดียโซลูชันใหม่จาก Flow 1 (วิเคราะห์ข่าวสารและเทคโนโลยี Enterprise)'),
 
+  // 6. /health - ตรวจสอบความเร็วและสถานะระบบ (Ping, DB, n8n, AI, APIs)
   new SlashCommandBuilder()
-    .setName('set-radar-time')
-    .setDescription('ตั้งเวลาดึงเรดาร์กระทู้อัตโนมัติในแต่ละวัน (เวลาไทย เช่น 08:30)')
-    .addStringOption(option =>
-      option.setName('time')
-        .setDescription('เวลาในรูปแบบ HH:MM (เช่น 08:30 หรือ 09:00)')
-        .setRequired(true)
-    )
-    .addBooleanOption(option =>
-      option.setName('enabled')
-        .setDescription('เปิดหรือปิดการทำงานอัตโนมัติ')
-        .setRequired(false)
-    ),
+    .setName('health')
+    .setDescription('ตรวจสอบความเร็วและสถานะระบบ (Ping, DB, n8n, AI, APIs)'),
 
-  new SlashCommandBuilder()
-    .setName('radar-status')
-    .setDescription('ดูสถานะการตั้งเวลาเรดาร์กระทู้อัตโนมัติ (เวลา, ช่องที่ส่ง, สถานะเปิด/ปิด)'),
-
+  // 7. /help - แสดงคู่มือการใช้งาน
   new SlashCommandBuilder()
     .setName('help')
     .setDescription('แสดงรายการคำสั่งทั้งหมดและวิธีใช้งาน')
@@ -549,17 +520,497 @@ async function registerCommands(client) {
 async function handleCommand(interaction, { pool, client }) {
   const { commandName } = interaction;
 
-  // คำสั่ง /ping
-  if (commandName === 'ping') {
-    const wsPing = client.ws.ping >= 0 ? `${client.ws.ping}ms` : 'กำลังคำนวณ...';
-    return await interaction.reply({
-      content: `🏓 **Pong!**\n- WebSocket Latency: \`${wsPing}\``,
-      ephemeral: true
-    });
+  // 1. คำสั่ง /find (ค้นหากระทู้/โพสต์น่าสนใจ หรือดึงเรดาร์ประจำวัน 20 รายการ)
+  if (commandName === 'find' || commandName === 'find-threads' || commandName === 'radar') {
+    const rawKeyword = (interaction.options?.getString?.('keyword') || '').trim();
+    const platform = interaction.options?.getString?.('platform') || 'all';
+    const limit = interaction.options?.getInteger?.('limit') || 20;
+
+    await interaction.deferReply();
+
+    try {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS thread_search_cache (
+          id SERIAL PRIMARY KEY,
+          platform VARCHAR(50) NOT NULL,
+          post_url TEXT NOT NULL,
+          post_title TEXT NOT NULL,
+          snippet TEXT,
+          search_keyword TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+      `);
+
+      const { collectDailyRadarThreads, searchRecentThreads } = require('./thread-search');
+
+      const isRadar = !rawKeyword || rawKeyword === 'auto';
+      let results = [];
+      let solutionsCovered = [];
+
+      if (isRadar) {
+        const radarRes = await collectDailyRadarThreads(limit);
+        results = radarRes.results;
+        solutionsCovered = radarRes.solutionsCovered;
+      } else {
+        const isAutoCategory = rawKeyword.startsWith('auto:');
+        const mode = isAutoCategory ? 'auto' : 'manual';
+        const searchRes = await searchRecentThreads({
+          keyword: rawKeyword,
+          mode,
+          platform,
+          limit
+        });
+        results = searchRes.results;
+        if (searchRes.autoMeta?.solutionTitle) {
+          solutionsCovered = [searchRes.autoMeta.solutionTitle];
+        } else {
+          solutionsCovered = [rawKeyword];
+        }
+      }
+
+      if (!results.length) {
+        return await interaction.editReply('🔍 ไม่พบกระทู้หรือโพสต์ใหม่ที่ตรงกับเงื่อนไขในช่วง 1 ปีนี้ กรุณาลองใหม่อีกครั้ง');
+      }
+
+      // บันทึกลง thread_search_cache เพื่อเชื่อมกับ Select Menu
+      const savedRows = [];
+      for (const item of results) {
+        const { rows } = await pool.query(
+          `INSERT INTO thread_search_cache (platform, post_url, post_title, snippet, search_keyword)
+           VALUES ($1, $2, $3, $4, $5)
+           RETURNING *`,
+          [item.platform, item.url, item.title, item.snippet || '', item.solutionCategory || rawKeyword || 'find_search']
+        );
+        savedRows.push({
+          ...rows[0],
+          solutionCategory: item.solutionCategory
+        });
+      }
+
+      const { embeds, components } = buildRadarEmbedsAndMenu(savedRows, solutionsCovered);
+      if (embeds.length <= 2) {
+        return await interaction.editReply({ embeds, components });
+      } else {
+        const half = Math.ceil(embeds.length / 2);
+        await interaction.editReply({
+          content: `🌅 **ผลการค้นหากระทู้/เรดาร์ (ส่วนที่ 1/2) — ทั้งหมด ${savedRows.length} รายการ**`,
+          embeds: embeds.slice(0, half)
+        });
+        return await interaction.followUp({
+          content: `(ส่วนที่ 2/2) 👇 **เลือกกระทู้ที่ต้องการให้ AI ช่วยร่างคำตอบจากเมนูด้านล่างได้ทันทีครับ:**`,
+          embeds: embeds.slice(half),
+          components
+        });
+      }
+    } catch (err) {
+      console.error('[find] Error:', err);
+      return await interaction.editReply(`⚠️ เกิดข้อผิดพลาดในการค้นหากระทู้: ${err.message}`);
+    }
   }
 
-  // คำสั่ง /status
-  if (commandName === 'status') {
+  // 2. คำสั่ง /answer (ส่งคำถามกระทู้ให้ AI ช่วยตอบ)
+  if (commandName === 'answer') {
+    const platform = interaction.options.getString('platform');
+    const modal = new ModalBuilder()
+      .setCustomId(`modal_answer_${platform}`)
+      .setTitle(`ส่งคำถามกระทู้ [${platform}]`);
+
+    const urlInput = new TextInputBuilder()
+      .setCustomId('post_url')
+      .setLabel('ลิงก์กระทู้ (URL)')
+      .setPlaceholder('https://pantip.com/topic/43000000')
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true);
+
+    const questionInput = new TextInputBuilder()
+      .setCustomId('question_text')
+      .setLabel('ข้อความคำถามในกระทู้ (คัดลอกมาวาง)')
+      .setPlaceholder('วางข้อความคำถามที่ต้องการให้ AI วิเคราะห์ที่นี่...')
+      .setStyle(TextInputStyle.Paragraph)
+      .setMaxLength(2000)
+      .setRequired(true);
+
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(urlInput),
+      new ActionRowBuilder().addComponents(questionInput)
+    );
+    return await interaction.showModal(modal);
+  }
+
+  // 3. คำสั่ง /settings (จัดการการตั้งค่าทั้งหมดในที่เดียว)
+  if (commandName === 'settings') {
+    const subcommand = interaction.options.getSubcommand();
+
+    // 3.1 /settings view
+    if (subcommand === 'view') {
+      await interaction.deferReply({ ephemeral: true });
+      try {
+        const { rows: settingsRows } = await pool.query('SELECT key, value FROM bot_settings');
+        const getSetting = (k, def = '') => settingsRows.find(r => r.key === k)?.value || process.env[k] || def;
+
+        const radarTime = getSetting('DAILY_RADAR_TIME', '08:30');
+        const radarEnabled = getSetting('DAILY_RADAR_ENABLED', 'true') !== 'false';
+        const radarLimit = getSetting('DAILY_RADAR_LIMIT', '20');
+        const channelId = getSetting('DISCORD_CHANNEL_ID', '');
+        const adminRaw = getSetting('DISCORD_ADMIN_IDS', '');
+        const devtoKey = getSetting('DEVTO_API_KEY', '');
+        const devtoCookie = getSetting('DEVTO_COOKIE', '');
+
+        const adminIds = adminRaw.split(/[,;\s]+/).filter(Boolean);
+        const channelText = channelId ? `<#${channelId}> (\`${channelId}\`)` : '`ยังไม่ได้ระบุ (ใช้ /settings channel เพื่อตั้งค่า)`';
+        const adminText = adminIds.length > 0
+          ? adminIds.map(id => `<@${id}>`).join(', ')
+          : '`ทุกคนในเซิร์ฟเวอร์มีสิทธิ์ (ไม่ได้จำกัด)`';
+
+        const embed = new EmbedBuilder()
+          .setTitle('⚙️ การตั้งค่าระบบบอทในปัจจุบัน (Bot Settings)')
+          .setColor(0x5865f2)
+          .addFields(
+            { name: '📢 ห้องแจ้งเตือน', value: channelText, inline: false },
+            { name: '⏰ เวลาเรดาร์กระทู้อัตโนมัติ', value: `\`${radarTime} น.\` (สถานะ: ${radarEnabled ? '🟢 เปิดใช้งาน' : '🔴 ปิด'})`, inline: true },
+            { name: '🎯 จำนวนกระทู้เรดาร์', value: `\`${radarLimit} กระทู้\``, inline: true },
+            { name: '🛡️ รายชื่อผู้ดูแลระบบ (Admin IDs)', value: adminText, inline: false },
+            { name: '💻 Dev.to Integration', value: `API Key: ${devtoKey ? '🟢 บันทึกแล้ว' : '⚪ ยังไม่มี'} | Cookie: ${devtoCookie ? '🟢 บันทึกแล้ว' : '⚪ ยังไม่มี'}`, inline: false }
+          )
+          .setFooter({ text: 'พิมพ์ /settings [subcommand] เพื่อแก้ไขการตั้งค่า' })
+          .setTimestamp();
+
+        return await interaction.editReply({ embeds: [embed] });
+      } catch (err) {
+        return await interaction.editReply(`⚠️ เกิดข้อผิดพลาดในการดึงการตั้งค่า: ${err.message}`);
+      }
+    }
+
+    // 3.2 /settings radar
+    if (subcommand === 'radar') {
+      const rawTime = interaction.options.getString('time');
+      const enabled = interaction.options.getBoolean('enabled');
+      const limit = interaction.options.getInteger('limit');
+
+      if (!rawTime && enabled === null && !limit) {
+        const { rows: tRows } = await pool.query("SELECT value FROM bot_settings WHERE key = 'DAILY_RADAR_TIME'");
+        const { rows: eRows } = await pool.query("SELECT value FROM bot_settings WHERE key = 'DAILY_RADAR_ENABLED'");
+        const { rows: lRows } = await pool.query("SELECT value FROM bot_settings WHERE key = 'DAILY_RADAR_LIMIT'");
+
+        const curTime = tRows[0]?.value || '08:30';
+        const curEnabled = eRows[0]?.value !== 'false';
+        const curLimit = lRows[0]?.value || '20';
+
+        const embed = new EmbedBuilder()
+          .setTitle('⚙️ สถานะการตั้งค่า Daily Thread Radar')
+          .setColor(curEnabled ? 0x57f287 : 0xed4245)
+          .addFields(
+            { name: '⏰ เวลาดึงกระทู้อัตโนมัติ', value: `\`${curTime} น.\` (เวลาไทย Asia/Bangkok)`, inline: true },
+            { name: '📊 สถานะระบบอัตโนมัติ', value: curEnabled ? '🟢 เปิดใช้งาน (Active)' : '🔴 ปิดใช้งาน (Disabled)', inline: true },
+            { name: '🎯 จำนวนกระทู้เป้าหมาย', value: `\`${curLimit} กระทู้\``, inline: true }
+          )
+          .setFooter({ text: 'ใช้ /settings radar time:08:30 enabled:true เพื่อปรับเปลี่ยน' });
+
+        return await interaction.reply({ embeds: [embed], ephemeral: true });
+      }
+
+      await interaction.deferReply({ ephemeral: true });
+
+      if (rawTime) {
+        const match = rawTime.trim().match(/^([01]?[0-9]|2[0-3]):([0-5][0-9])$/);
+        if (!match) {
+          return await interaction.editReply('⚠️ รูปแบบเวลาไม่ถูกต้อง กรุณากรอกเป็น `HH:MM` เช่น `08:30` หรือ `09:00`');
+        }
+        const hour = match[1].padStart(2, '0');
+        const min = match[2];
+        const timeFormatted = `${hour}:${min}`;
+        await pool.query(
+          "INSERT INTO bot_settings (key, value, updated_at) VALUES ('DAILY_RADAR_TIME', $1, NOW()) ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()",
+          [timeFormatted]
+        );
+      }
+
+      if (enabled !== null) {
+        await pool.query(
+          "INSERT INTO bot_settings (key, value, updated_at) VALUES ('DAILY_RADAR_ENABLED', $1, NOW()) ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()",
+          [enabled ? 'true' : 'false']
+        );
+      }
+
+      if (limit) {
+        await pool.query(
+          "INSERT INTO bot_settings (key, value, updated_at) VALUES ('DAILY_RADAR_LIMIT', $1, NOW()) ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()",
+          [String(limit)]
+        );
+      }
+
+      return await interaction.editReply('✅ **บันทึกการตั้งค่า Daily Thread Radar เรียบร้อยแล้ว!**');
+    }
+
+    // 3.3 /settings channel
+    if (subcommand === 'channel') {
+      await interaction.deferReply({ ephemeral: true });
+      try {
+        const targetChannel = interaction.options.getChannel('channel') || interaction.channel;
+        if (!targetChannel) {
+          return await interaction.editReply('❌ ไม่พบห้องที่ต้องการตั้งค่า');
+        }
+
+        await pool.query(`
+          CREATE TABLE IF NOT EXISTS bot_settings (
+            key TEXT PRIMARY KEY,
+            value TEXT,
+            updated_at TIMESTAMPTZ DEFAULT NOW()
+          );
+        `);
+        await pool.query(`
+          INSERT INTO bot_settings (key, value, updated_at)
+          VALUES ('DISCORD_CHANNEL_ID', $1, NOW())
+          ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW();
+        `, [targetChannel.id]);
+
+        process.env.DISCORD_CHANNEL_ID = targetChannel.id;
+        updateEnvFile('DISCORD_CHANNEL_ID', targetChannel.id);
+
+        const embed = new EmbedBuilder()
+          .setTitle('✅ ตั้งค่าห้องแจ้งเตือนสำเร็จ!')
+          .setColor(0x57f287)
+          .setDescription(`ต่อไปนี้รายการ Backlink Candidates และผลการวิจัยจะถูกส่งมาที่ห้องนี้ครับ 🎉`)
+          .addFields(
+            { name: '📢 ห้องแจ้งเตือน', value: `<#${targetChannel.id}> (\`${targetChannel.name || targetChannel.id}\`)`, inline: true },
+            { name: '🏠 เซิร์ฟเวอร์', value: interaction.guild ? `${interaction.guild.name}` : '-', inline: true }
+          )
+          .setTimestamp();
+
+        return await interaction.editReply({ embeds: [embed] });
+      } catch (err) {
+        return await interaction.editReply(`⚠️ เกิดข้อผิดพลาด: ${err.message}`);
+      }
+    }
+
+    // 3.4 /settings admin
+    if (subcommand === 'admin') {
+      await interaction.deferReply({ ephemeral: true });
+      try {
+        const rawIds = interaction.options.getString('ids');
+        const parsedIds = rawIds
+          .split(/[,;\s]+/)
+          .map(id => id.trim())
+          .filter(Boolean);
+
+        const currentAdmins = (process.env.DISCORD_ADMIN_IDS || '').split(/[,;\s]+/).map(s => s.trim()).filter(Boolean);
+        if (currentAdmins.length > 0 && !currentAdmins.includes(interaction.user.id)) {
+          return await interaction.editReply('⛔ คุณไม่มีสิทธิ์แก้ไขรายชื่อ Admin (เฉพาะแอดมินปัจจุบันเท่านั้น)');
+        }
+
+        const newVal = parsedIds.join(',');
+        await pool.query(`
+          CREATE TABLE IF NOT EXISTS bot_settings (
+            key TEXT PRIMARY KEY,
+            value TEXT,
+            updated_at TIMESTAMPTZ DEFAULT NOW()
+          );
+        `);
+        await pool.query(`
+          INSERT INTO bot_settings (key, value, updated_at)
+          VALUES ('DISCORD_ADMIN_IDS', $1, NOW())
+          ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW();
+        `, [newVal]);
+
+        process.env.DISCORD_ADMIN_IDS = newVal;
+        updateEnvFile('DISCORD_ADMIN_IDS', newVal);
+
+        return await interaction.editReply(`✅ **ตั้งค่า DISCORD_ADMIN_IDS สำเร็จ!**\nรายชื่อผู้มีสิทธิ์ (${parsedIds.length} คน):\n${parsedIds.map(id => `• <@${id}> (\`${id}\`)`).join('\n')}`);
+      } catch (err) {
+        return await interaction.editReply(`⚠️ บันทึกไม่สำเร็จ: ${err.message}`);
+      }
+    }
+
+    // 3.5 /settings devto
+    if (subcommand === 'devto') {
+      const embed = new EmbedBuilder()
+        .setTitle('⚙️ ตั้งค่าการเชื่อมต่อ Dev.to (API Key & Cookie)')
+        .setColor(0x5865f2)
+        .setDescription('เลือกรายการที่ต้องการตั้งค่าด้านล่าง ระบบจะเปิดหน้าต่าง Popup กรอกข้อมูลอย่างปลอดภัย:')
+        .addFields(
+          { name: '🔑 Dev.to API Key', value: 'ใช้สำหรับการเผยแพร่บทความอัตโนมัติ (Publish Article)', inline: true },
+          { name: '🍪 Dev.to Session Cookie', value: 'ใช้สำหรับการโพสต์ความคิดเห็นในบทความ (Comment)', inline: true }
+        );
+
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId('btn_settings_devto_key')
+          .setLabel('🔑 ตั้งค่า API Key')
+          .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+          .setCustomId('btn_settings_devto_cookie')
+          .setLabel('🍪 ตั้งค่า Cookie')
+          .setStyle(ButtonStyle.Secondary)
+      );
+
+      return await interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
+    }
+  }
+
+  // Legacy command fallbacks for settings
+  if (commandName === 'set-channel') {
+    const targetChannel = interaction.options.getChannel('channel') || interaction.channel;
+    await interaction.deferReply({ ephemeral: true });
+    try {
+      await pool.query(`
+        INSERT INTO bot_settings (key, value, updated_at)
+        VALUES ('DISCORD_CHANNEL_ID', $1, NOW())
+        ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW();
+      `, [targetChannel.id]);
+      process.env.DISCORD_CHANNEL_ID = targetChannel.id;
+      updateEnvFile('DISCORD_CHANNEL_ID', targetChannel.id);
+      return await interaction.editReply(`✅ ตั้งค่าห้องแจ้งเตือนเป็น <#${targetChannel.id}> เรียบร้อยครับ`);
+    } catch (e) {
+      return await interaction.editReply(`⚠️ เกิดข้อผิดพลาด: ${e.message}`);
+    }
+  }
+  if (commandName === 'set-admin-ids') {
+    const rawIds = interaction.options.getString('ids');
+    const parsedIds = rawIds.split(/[,;\s]+/).map(id => id.trim()).filter(Boolean);
+    await interaction.deferReply({ ephemeral: true });
+    const newVal = parsedIds.join(',');
+    await pool.query(`
+      INSERT INTO bot_settings (key, value, updated_at)
+      VALUES ('DISCORD_ADMIN_IDS', $1, NOW())
+      ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW();
+    `, [newVal]);
+    process.env.DISCORD_ADMIN_IDS = newVal;
+    updateEnvFile('DISCORD_ADMIN_IDS', newVal);
+    return await interaction.editReply(`✅ ตั้งค่า Admin IDs สำเร็จ (${parsedIds.length} คน)`);
+  }
+  if (commandName === 'set-devto-key') {
+    const modal = new ModalBuilder().setCustomId('modal_devto_key').setTitle('ตั้งค่า DEVTO_API_KEY');
+    const keyInput = new TextInputBuilder().setCustomId('key_value').setLabel('Dev.to API Key').setStyle(TextInputStyle.Short).setRequired(true);
+    modal.addComponents(new ActionRowBuilder().addComponents(keyInput));
+    return await interaction.showModal(modal);
+  }
+  if (commandName === 'set-devto-cookie') {
+    const modal = new ModalBuilder().setCustomId('modal_devto_cookie').setTitle('ตั้งค่า DEVTO_COOKIE');
+    const cookieInput = new TextInputBuilder().setCustomId('cookie_value').setLabel('Dev.to Cookie').setStyle(TextInputStyle.Paragraph).setRequired(true);
+    modal.addComponents(new ActionRowBuilder().addComponents(cookieInput));
+    return await interaction.showModal(modal);
+  }
+  if (commandName === 'set-radar-time') {
+    const rawTime = interaction.options.getString('time');
+    const enabled = interaction.options.getBoolean('enabled');
+    const match = (rawTime || '').trim().match(/^([01]?[0-9]|2[0-3]):([0-5][0-9])$/);
+    if (!match) return await interaction.reply({ content: '⚠️ กรุณาระบุเวลาเป็น HH:MM เช่น 08:30', ephemeral: true });
+    const timeFormatted = `${match[1].padStart(2, '0')}:${match[2]}`;
+    await pool.query("INSERT INTO bot_settings (key, value, updated_at) VALUES ('DAILY_RADAR_TIME', $1, NOW()) ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()", [timeFormatted]);
+    if (enabled !== null) {
+      await pool.query("INSERT INTO bot_settings (key, value, updated_at) VALUES ('DAILY_RADAR_ENABLED', $1, NOW()) ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()", [enabled ? 'true' : 'false']);
+    }
+    return await interaction.reply({ content: `✅ บันทึกเวลาเรดาร์เป็น ${timeFormatted} น. เรียบร้อยครับ`, ephemeral: true });
+  }
+  if (commandName === 'radar-status') {
+    const { rows: tRows } = await pool.query("SELECT value FROM bot_settings WHERE key = 'DAILY_RADAR_TIME'");
+    const { rows: eRows } = await pool.query("SELECT value FROM bot_settings WHERE key = 'DAILY_RADAR_ENABLED'");
+    const curTime = tRows[0]?.value || '08:30';
+    const curEnabled = eRows[0]?.value !== 'false';
+    return await interaction.reply({ content: `⚙️ **Daily Radar:** เวลา \`${curTime} น.\` | สถานะ: ${curEnabled ? '🟢 เปิดใช้งาน' : '🔴 ปิดใช้งาน'}`, ephemeral: true });
+  }
+
+  // 4. คำสั่ง /status (ภาพรวม, รายการรอรีวิว, หรือรายการที่โพสต์แล้ว)
+  if (commandName === 'status' || commandName === 'pending' || commandName === 'posted' || commandName === 'recent-posted' || commandName === 'latest' || commandName === 'get') {
+    let view = interaction.options?.getString?.('view') || 'overview';
+    if (commandName === 'pending') view = 'pending';
+    if (commandName === 'posted' || commandName === 'recent-posted') view = 'posted';
+
+    const limit = interaction.options?.getInteger?.('limit') || 5;
+
+    // Handle legacy /get [id]
+    if (commandName === 'get') {
+      const candidateId = interaction.options.getString('id')?.trim();
+      await interaction.deferReply();
+      try {
+        const { rows } = await pool.query('SELECT * FROM backlink_candidates WHERE id::text = $1', [candidateId]);
+        if (!rows.length) return await interaction.editReply(`❌ ไม่พบข้อมูล Candidate ID: ${candidateId}`);
+        const row = rows[0];
+        const embed = createCandidateEmbed(row);
+        const actionRow = createActionButtons(row.id);
+        return await interaction.editReply({
+          content: `🔍 **Candidate ID: \`${row.id}\`** (สถานะ: \`${row.status}\`)`,
+          embeds: [embed],
+          components: [actionRow]
+        });
+      } catch (err) {
+        return await interaction.editReply(`⚠️ เกิดข้อผิดพลาด: ${err.message}`);
+      }
+    }
+
+    // View: pending
+    if (view === 'pending') {
+      await interaction.deferReply();
+      try {
+        const { rows } = await pool.query(`
+          SELECT *
+          FROM backlink_candidates
+          WHERE status = 'pending_review'
+          ORDER BY created_at DESC, id DESC
+          LIMIT $1
+        `, [limit]);
+
+        if (!rows.length) {
+          return await interaction.editReply('🎉 **ไม่มีรายการค้างที่รอรีวิวในขณะนี้!** (Pending Review: 0)');
+        }
+
+        await interaction.editReply({
+          content: `⏳ **รายการที่รอรีวิว (${rows.length} รายการล่าสุด):**`
+        });
+
+        await Promise.all(
+          rows.map((row, i) => {
+            const embed = createCandidateEmbed(row);
+            const actionRow = createActionButtons(row.id);
+            return interaction.followUp({
+              content: `📋 **[${i + 1}/${rows.length}] Candidate ID: \`${row.id}\`** | Platform: **${row.platform}** | Score: \`${row.match_score || '-'}\``,
+              embeds: [embed],
+              components: [actionRow]
+            });
+          })
+        );
+        return;
+      } catch (err) {
+        return await interaction.editReply(`⚠️ เกิดข้อผิดพลาด: ${err.message}`);
+      }
+    }
+
+    // View: posted
+    if (view === 'posted') {
+      await interaction.deferReply();
+      try {
+        const { rows } = await pool.query(`
+          SELECT id, platform, post_title, post_url, posted_url, posted_at
+          FROM backlink_candidates
+          WHERE status = 'posted'
+          ORDER BY posted_at DESC NULLS LAST, id DESC
+          LIMIT $1
+        `, [limit]);
+
+        if (!rows.length) {
+          return await interaction.editReply('📋 ยังไม่มีรายการที่โพสต์สำเร็จในระบบ (สถานะ `posted`)');
+        }
+
+        const embed = new EmbedBuilder()
+          .setTitle(`✅ รายการที่โพสต์สำเร็จ (${rows.length} รายการล่าสุด)`)
+          .setColor(0x57f287)
+          .setDescription(
+            rows.map((r, i) => {
+              const title = r.post_title ? (r.post_title.length > 50 ? r.post_title.slice(0, 47) + '...' : r.post_title) : 'No Title';
+              const postedLink = r.posted_url ? `[เปิดโพสต์/คอมเมนต์จริง](${r.posted_url})` : 'ไม่มีลิงก์โพสต์';
+              const dateStr = r.posted_at ? new Date(r.posted_at).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' }) : '-';
+              return `**${i + 1}. [${r.platform}]** [${title}](${r.post_url})\n└ ID: \`${r.id}\` | 🔗 ${postedLink}\n└ 🕒 ${dateStr}`;
+            }).join('\n\n')
+          )
+          .setTimestamp();
+
+        return await interaction.editReply({ embeds: [embed] });
+      } catch (err) {
+        return await interaction.editReply(`⚠️ เกิดข้อผิดพลาด: ${err.message}`);
+      }
+    }
+
+    // Default View: overview
     await interaction.deferReply();
     try {
       const { rows } = await pool.query(`
@@ -590,213 +1041,20 @@ async function handleCommand(interaction, { pool, client }) {
       }));
 
       const embed = new EmbedBuilder()
-        .setTitle('📊 ภาพรวม Backlink Candidates')
+        .setTitle('📊 ภาพรวมสถานะ Backlink Candidates ทั้งหมด')
         .setColor(0x5865f2)
         .addFields(fields)
+        .setFooter({ text: 'พิมพ์ /status view:pending หรือ view:posted เพื่อดูรายการเจาะจง' })
         .setTimestamp();
 
       return await interaction.editReply({ embeds: [embed] });
     } catch (err) {
-      console.error('Error fetching status:', err);
       return await interaction.editReply(`⚠️ เกิดข้อผิดพลาด: ${err.message}`);
     }
   }
 
-  // คำสั่ง /pending (ดึงรายการที่รอรีวิว พร้อมปุ่ม Action)
-  if (commandName === 'pending') {
-    await interaction.deferReply();
-    try {
-      const limit = interaction.options.getInteger('limit') || 5;
-      const { rows } = await pool.query(`
-        SELECT *
-        FROM backlink_candidates
-        WHERE status = 'pending_review'
-        ORDER BY created_at DESC, id DESC
-        LIMIT $1
-      `, [limit]);
-
-      if (!rows.length) {
-        return await interaction.editReply('🎉 **ไม่มีรายการค้างที่รอรีวิวในขณะนี้!** (Pending Review: 0)');
-      }
-
-      await interaction.editReply({
-        content: `⏳ **รายการที่รอรีวิว (${rows.length} รายการล่าสุด):**`
-      });
-
-      // ส่งทุกรายการออกไปพร้อมปุ่ม Approve / Edit / Reject ทันที
-      await Promise.all(
-        rows.map((row, i) => {
-          const embed = createCandidateEmbed(row);
-          const actionRow = createActionButtons(row.id);
-          return interaction.followUp({
-            content: `📋 **[${i + 1}/${rows.length}] Candidate ID: \`${row.id}\`** | Platform: **${row.platform}** | Score: \`${row.match_score || '-'}\``,
-            embeds: [embed],
-            components: [actionRow]
-          });
-        })
-      );
-    } catch (err) {
-      console.error('Error fetching pending items:', err);
-      return await interaction.editReply(`⚠️ เกิดข้อผิดพลาด: ${err.message}`);
-    }
-  }
-
-  // คำสั่ง /posted หรือ /recent-posted (ดู 5 รายการล่าสุดที่โพสต์สำเร็จ)
-  if (commandName === 'posted' || commandName === 'recent-posted') {
-    await interaction.deferReply();
-    try {
-      const { rows } = await pool.query(`
-        SELECT id, platform, post_title, post_url, posted_url, posted_at
-        FROM backlink_candidates
-        WHERE status = 'posted'
-        ORDER BY posted_at DESC NULLS LAST, id DESC
-        LIMIT 5
-      `);
-
-      if (!rows.length) {
-        return await interaction.editReply('📋 ยังไม่มีรายการที่โพสต์สำเร็จในระบบ (สถานะ `posted`)');
-      }
-
-      const embed = new EmbedBuilder()
-        .setTitle('✅ รายการที่โพสต์สำเร็จ (5 รายการล่าสุด)')
-        .setColor(0x57f287)
-        .setDescription(
-          rows.map((r, i) => {
-            const title = r.post_title ? (r.post_title.length > 50 ? r.post_title.slice(0, 47) + '...' : r.post_title) : 'No Title';
-            const postedLink = r.posted_url ? `[เปิดโพสต์/คอมเมนต์จริง](${r.posted_url})` : 'ไม่มีลิงก์โพสต์';
-            const dateStr = r.posted_at ? new Date(r.posted_at).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' }) : '-';
-            return `**${i + 1}. [${r.platform}]** [${title}](${r.post_url})\n└ ID: \`${r.id}\` | 🔗 ${postedLink}\n└ 🕒 ${dateStr}`;
-          }).join('\n\n')
-        )
-        .setTimestamp();
-
-      return await interaction.editReply({ embeds: [embed] });
-    } catch (err) {
-      console.error('Error in recent-posted:', err);
-      return await interaction.editReply(`⚠️ เกิดข้อผิดพลาด: ${err.message}`);
-    }
-  }
-
-  // คำสั่ง /get [id] (ดึง Candidate ตาม ID พร้อมปุ่ม Action)
-  if (commandName === 'get') {
-    const candidateId = interaction.options.getString('id').trim();
-    await interaction.deferReply();
-    try {
-      const { rows } = await pool.query('SELECT * FROM backlink_candidates WHERE id::text = $1', [candidateId]);
-      if (!rows.length) {
-        return await interaction.editReply(`❌ ไม่พบข้อมูล Candidate ID: \`${candidateId}\``);
-      }
-
-      const row = rows[0];
-      const embed = createCandidateEmbed(row);
-      const actionRow = createActionButtons(row.id);
-
-      if (row.status === 'pending_review') {
-        return await interaction.editReply({
-          content: `🔍 **Candidate ID: \`${row.id}\`** (สถานะ: ⏳ \`${row.status}\`)`,
-          embeds: [embed],
-          components: [actionRow]
-        });
-      } else {
-        const postedMsg = row.posted_url ? `\n🔗 [ลิงก์ที่โพสต์ไว้](${row.posted_url})` : '';
-        return await interaction.editReply({
-          content: `🔍 **Candidate ID: \`${row.id}\`** (สถานะปัจจุบัน: **${row.status}**)${postedMsg}\n*(กดปุ่มด้านล่างหากต้องการเปลี่ยนสถานะใหม่)*`,
-          embeds: [embed],
-          components: [actionRow]
-        });
-      }
-    } catch (err) {
-      console.error('Error in get command:', err);
-      return await interaction.editReply(`⚠️ เกิดข้อผิดพลาด: ${err.message}`);
-    }
-  }
-
-  // คำสั่ง /latest หรือ /review-latest (ดึง Candidate ทั้งหมดในรอบเวลาล่าสุดที่รอรีวิวขึ้นมาแสดงในห้องแชท)
-  if (commandName === 'latest' || commandName === 'review-latest') {
-    await interaction.deferReply();
-    try {
-      // ค้นหารอบเวลาล่าสุดที่มี candidate สถานะ pending_review
-      const { rows } = await pool.query(`
-        WITH latest_time AS (
-          SELECT created_at
-          FROM backlink_candidates
-          WHERE status = 'pending_review'
-          ORDER BY created_at DESC
-          LIMIT 1
-        )
-        SELECT *
-        FROM backlink_candidates
-        WHERE status = 'pending_review'
-          AND created_at >= (SELECT created_at FROM latest_time) - INTERVAL '1 minute'
-        ORDER BY match_score DESC NULLS LAST, id ASC
-      `);
-
-      if (!rows.length) {
-        return await interaction.editReply('🎉 **ไม่มี Candidate ที่รอตรวจสอบในขณะนี้!** (Pending Review: 0)');
-      }
-
-      const requestedLimit = interaction.options.getInteger('limit');
-      const maxLimit = requestedLimit && requestedLimit > 0 ? requestedLimit : 25;
-      const targetRows = rows.slice(0, maxLimit);
-      const batchTime = new Date(rows[0].created_at).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' });
-
-      await interaction.editReply({
-        content: `⏳ **ดึงรายการในรอบเวลาล่าสุด (${batchTime}) ทั้งหมด ${targetRows.length} รายการ เรียบร้อยแล้ว:**`
-      });
-
-      // ส่งทุกรายการออกไปเป็นการ์ดแยกพร้อมกันทันที (ไม่หน่วงเวลา)
-      await Promise.all(
-        targetRows.map((row, i) => {
-          const embed = createCandidateEmbed(row);
-          const actionRow = createActionButtons(row.id);
-          return interaction.followUp({
-            content: `📋 **[${i + 1}/${targetRows.length}] Candidate ID: \`${row.id}\`** | Platform: **${row.platform}** | Score: \`${row.match_score || '-'}\``,
-            embeds: [embed],
-            components: [actionRow]
-          });
-        })
-      );
-    } catch (err) {
-      console.error('Error in review-latest:', err);
-      return await interaction.editReply(`⚠️ เกิดข้อผิดพลาด: ${err.message}`);
-    }
-  }
-
-  // คำสั่ง /run หรือ /run-research (สั่ง n8n เริ่มค้นหา Backlink รอบใหม่)
-  if (commandName === 'run' || commandName === 'run-research') {
-    await interaction.deferReply();
-    const webhookUrl = process.env.N8N_RESEARCH_WEBHOOK_URL || 'http://n8n:5678/webhook/run-research';
-
-    try {
-      const res = await fetch(webhookUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          triggered_by: interaction.user.tag,
-          user_id: interaction.user.id,
-          requested_at: new Date().toISOString()
-        }),
-        signal: AbortSignal.timeout(8000)
-      });
-
-      if (res.ok) {
-        return await interaction.editReply(
-          '🚀 **สั่งรัน Backlink Research บน n8n สำเร็จแล้ว!**\nระบบกำลังเริ่มค้นหากระทู้และคัดเลือกเนื้อหา หากพบรายการที่ตรงเป้าหมายจะแจ้งเตือนเข้ามาในห้องนี้ทันทีครับ'
-        );
-      } else {
-        return await interaction.editReply(
-          `⚠️ **n8n ตอบกลับสถานะ HTTP ${res.status}**\nปลายทาง: \`${webhookUrl}\`\n💡 *คำแนะนำ: ตรวจสอบว่าใน n8n มี Webhook Node (POST, path: \`/webhook/run-research\`) และเปิด Active หรือยัง*`
-        );
-      }
-    } catch (err) {
-      return await interaction.editReply(
-        `⚠️ **ไม่สามารถเรียก n8n ได้:** ${err.message}\nปลายทาง: \`${webhookUrl}\`\n💡 *คำแนะนำ: สามารถเพิ่ม Webhook Node ใน n8n Workflow เชื่อมกับจุดเริ่มต้นของ Research Flow เพื่อรองรับคำสั่งนี้ได้ครับ*`
-      );
-    }
-  }
-
-  // คำสั่ง /request-idea (ขอไอเดียโซลูชันใหม่จาก Flow 1)
-  if (commandName === 'request-idea') {
+  // 5. คำสั่ง /idea (และ alias /request-idea, /run)
+  if (commandName === 'idea' || commandName === 'request-idea' || commandName === 'run' || commandName === 'run-research') {
     await interaction.deferReply();
     const webhookUrl = process.env.N8N_FLOW1_IDEA_WEBHOOK_URL || 'http://n8n:5678/webhook/flow1-request-idea';
 
@@ -828,9 +1086,11 @@ async function handleCommand(interaction, { pool, client }) {
     }
   }
 
-  // คำสั่ง /health (ตรวจสอบสุขภาพระบบ)
-  if (commandName === 'health') {
+  // 6. คำสั่ง /health (และ alias /ping)
+  if (commandName === 'health' || commandName === 'ping') {
     await interaction.deferReply();
+
+    const wsPing = client.ws.ping >= 0 ? `${client.ws.ping}ms` : 'กำลังคำนวณ...';
 
     // 1. Check PostgreSQL
     let pgStatus = '🔴 Disconnected';
@@ -880,7 +1140,7 @@ async function handleCommand(interaction, { pool, client }) {
       }
     }
 
-    // 4. Check Dev.to API Key & Session Cookie
+    // 4. Check Dev.to
     let devtoStatus = '⚪ Not Configured';
     const devApiKey = (process.env.DEVTO_API_KEY || '').trim();
     const devCookie = (process.env.DEVTO_COOKIE || '').trim();
@@ -946,451 +1206,62 @@ async function handleCommand(interaction, { pool, client }) {
 
     // 6. Notification Channel
     const currentChannelId = process.env.DISCORD_CHANNEL_ID;
-    const channelDisplay = currentChannelId ? `<#${currentChannelId}> (\`${currentChannelId}\`)` : '⚪ Not Set (พิมพ์ `/set-channel` เพื่อตั้งค่า)';
-
-    // 7. Admin Allowlist
-    const adminRaw = process.env.DISCORD_ADMIN_IDS || '';
-    const adminIds = adminRaw.split(/[,;\s]+/).map(s => s.trim()).filter(Boolean);
-    const adminDisplay = adminIds.length > 0
-      ? `🟢 Enforced (${adminIds.length} users: ${adminIds.map(id => `<@${id}>`).join(', ')})`
-      : '⚪ Not Enforced (ทุกคนสามารถอนุมัติได้ — พิมพ์ `/set-admin-ids` เพื่อจำกัดสิทธิ์)';
+    const channelDisplay = currentChannelId ? `<#${currentChannelId}> (\`${currentChannelId}\`)` : '⚪ Not Set (ใช้ `/settings channel` เพื่อตั้งค่า)';
 
     const embed = new EmbedBuilder()
-      .setTitle('🩺 รายงานสถานะสุขภาพระบบ (System Health)')
+      .setTitle('🩺 รายงานสถานะสุขภาพระบบ (System Health & Ping)')
       .setColor(0x5865f2)
       .addFields(
-        { name: '🐘 PostgreSQL', value: pgStatus, inline: false },
-        { name: '⚡ n8n Service', value: n8nStatus, inline: false },
-        { name: '🦋 Bluesky Account', value: bskyStatus, inline: false },
-        { name: '💻 Dev.to Session', value: devtoStatus, inline: false },
+        { name: '🏓 Discord Gateway Latency', value: `\`${wsPing}\``, inline: true },
+        { name: '🐘 PostgreSQL Database', value: pgStatus, inline: true },
+        { name: '⚡ n8n Service', value: n8nStatus, inline: true },
         { name: '🤖 Gemini AI', value: geminiStatus, inline: false },
-        { name: '📢 Notification Channel', value: channelDisplay, inline: false },
-        { name: '🛡️ Admin Allowlist', value: adminDisplay, inline: false }
+        { name: '🦋 Bluesky Account', value: bskyStatus, inline: true },
+        { name: '💻 Dev.to Connection', value: devtoStatus, inline: true },
+        { name: '📢 Notification Channel', value: channelDisplay, inline: false }
       )
       .setTimestamp();
 
     return await interaction.editReply({ embeds: [embed] });
   }
 
-  // คำสั่ง /set-admin-ids (ตั้งค่า Allowlist ผู้มีสิทธิ์กดปุ่มและอนุมัติ)
-  if (commandName === 'set-admin-ids') {
-    await interaction.deferReply({ ephemeral: true });
-    try {
-      const rawIds = interaction.options.getString('ids');
-      const parsedIds = rawIds
-        .split(/[,;\s]+/)
-        .map(id => id.trim())
-        .filter(Boolean);
-
-      const currentAdmins = (process.env.DISCORD_ADMIN_IDS || '').split(/[,;\s]+/).map(s => s.trim()).filter(Boolean);
-      if (currentAdmins.length > 0 && !currentAdmins.includes(interaction.user.id)) {
-        return await interaction.editReply('⛔ คุณไม่มีสิทธิ์แก้ไขรายชื่อ Admin (เฉพาะแอดมินปัจจุบันเท่านั้น)');
-      }
-
-      const newVal = parsedIds.join(',');
-      await pool.query(`
-        CREATE TABLE IF NOT EXISTS bot_settings (
-          key TEXT PRIMARY KEY,
-          value TEXT,
-          updated_at TIMESTAMPTZ DEFAULT NOW()
-        );
-      `);
-      await pool.query(`
-        INSERT INTO bot_settings (key, value, updated_at)
-        VALUES ('DISCORD_ADMIN_IDS', $1, NOW())
-        ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW();
-      `, [newVal]);
-
-      process.env.DISCORD_ADMIN_IDS = newVal;
-      updateEnvFile('DISCORD_ADMIN_IDS', newVal);
-
-      return await interaction.editReply(`✅ **ตั้งค่า DISCORD_ADMIN_IDS สำเร็จ!**\nรายชื่อผู้มีสิทธิ์ (${parsedIds.length} คน):\n${parsedIds.map(id => `• <@${id}> (\`${id}\`)`).join('\n')}\n*(บันทึกลงฐานข้อมูลและมีผลทันที)*`);
-    } catch (err) {
-      console.error('Error in set-admin-ids command:', err);
-      return await interaction.editReply(`⚠️ บันทึกไม่สำเร็จ: ${err.message}`);
-    }
-  }
-
-  // คำสั่ง /set-channel (ตั้งค่าห้องรับแจ้งเตือน)
-  if (commandName === 'set-channel') {
-    await interaction.deferReply({ ephemeral: true });
-    try {
-      const targetChannel = interaction.options.getChannel('channel') || interaction.channel;
-      if (!targetChannel) {
-        return await interaction.editReply('❌ ไม่พบห้องที่ต้องการตั้งค่า');
-      }
-
-      await pool.query(`
-        CREATE TABLE IF NOT EXISTS bot_settings (
-          key TEXT PRIMARY KEY,
-          value TEXT,
-          updated_at TIMESTAMPTZ DEFAULT NOW()
-        );
-      `);
-      await pool.query(`
-        INSERT INTO bot_settings (key, value, updated_at)
-        VALUES ('DISCORD_CHANNEL_ID', $1, NOW())
-        ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW();
-      `, [targetChannel.id]);
-
-      process.env.DISCORD_CHANNEL_ID = targetChannel.id;
-      updateEnvFile('DISCORD_CHANNEL_ID', targetChannel.id);
-
-      const embed = new EmbedBuilder()
-        .setTitle('✅ ตั้งค่าห้องแจ้งเตือนสำเร็จ!')
-        .setColor(0x57f287)
-        .setDescription(`ต่อไปนี้รายการ Backlink Candidates และผลการวิจัยจะถูกส่งมาที่ห้องนี้ครับ 🎉`)
-        .addFields(
-          { name: '📢 ห้องแจ้งเตือน', value: `<#${targetChannel.id}> (\`${targetChannel.name || targetChannel.id}\`)`, inline: true },
-          { name: '🏠 เซิร์ฟเวอร์', value: interaction.guild ? `${interaction.guild.name}` : '-', inline: true },
-          { name: '💾 สถานะการบันทึก', value: 'บันทึกลง Database เรียบร้อย (ย้ายห้องได้ทันที ไม่ต้องรีสตาร์ทบอท)', inline: false }
-        )
-        .setTimestamp();
-
-      return await interaction.editReply({ embeds: [embed] });
-    } catch (err) {
-      console.error('Error in set-channel command:', err);
-      return await interaction.editReply(`⚠️ เกิดข้อผิดพลาด: ${err.message}`);
-    }
-  }
-
-  // คำสั่ง /set-devto-key (เปิด Modal ให้กรอก API Key อย่างปลอดภัย ไม่แสดงค่าในแชท)
-  if (commandName === 'set-devto-key') {
-    const modal = new ModalBuilder()
-      .setCustomId('modal_devto_key')
-      .setTitle('ตั้งค่า DEVTO_API_KEY');
-
-    const keyInput = new TextInputBuilder()
-      .setCustomId('key_value')
-      .setLabel('Dev.to API Key')
-      .setPlaceholder('วาง Dev.to API Key เช่น GPzyFieTByvp2TJeNmoyKD4W')
-      .setStyle(TextInputStyle.Short)
-      .setRequired(true);
-
-    modal.addComponents(new ActionRowBuilder().addComponents(keyInput));
-    return await interaction.showModal(modal);
-  }
-
-  // คำสั่ง /set-devto-cookie (เปิด Modal ให้กรอกอย่างปลอดภัย ไม่แสดงค่าในแชท)
-  if (commandName === 'set-devto-cookie') {
-    const modal = new ModalBuilder()
-      .setCustomId('modal_devto_cookie')
-      .setTitle('ตั้งค่า DEVTO_COOKIE');
-
-    const cookieInput = new TextInputBuilder()
-      .setCustomId('cookie_value')
-      .setLabel('Dev.to Cookie')
-      .setPlaceholder('วาง Cookie ทั้งหมด หรือ remember_user_token=...')
-      .setStyle(TextInputStyle.Paragraph)
-      .setRequired(true);
-
-    modal.addComponents(new ActionRowBuilder().addComponents(cookieInput));
-    return await interaction.showModal(modal);
-  }
-
-  // คำสั่ง /answer (ส่งคำถามกระทู้ให้ AI ช่วยตอบ)
-  if (commandName === 'answer') {
-    const platform = interaction.options.getString('platform');
-    const modal = new ModalBuilder()
-      .setCustomId(`modal_answer_${platform}`)
-      .setTitle(`ส่งคำถามกระทู้ [${platform}]`);
-
-    const urlInput = new TextInputBuilder()
-      .setCustomId('post_url')
-      .setLabel('ลิงก์กระทู้ (URL)')
-      .setPlaceholder('https://pantip.com/topic/43000000')
-      .setStyle(TextInputStyle.Short)
-      .setRequired(true);
-
-    const questionInput = new TextInputBuilder()
-      .setCustomId('question_text')
-      .setLabel('ข้อความคำถามในกระทู้ (คัดลอกมาวาง)')
-      .setPlaceholder('วางข้อความคำถามที่ต้องการให้ AI วิเคราะห์ที่นี่...')
-      .setStyle(TextInputStyle.Paragraph)
-      .setMaxLength(2000)
-      .setRequired(true);
-
-    modal.addComponents(
-      new ActionRowBuilder().addComponents(urlInput),
-      new ActionRowBuilder().addComponents(questionInput)
-    );
-    return await interaction.showModal(modal);
-  }
-
-  // คำสั่ง /find-threads (ค้นหากระทู้/โพสต์ที่น่าสนใจในช่วง 1 ปี)
-  if (commandName === 'find-threads') {
-    const rawMode = interaction.options.getString('mode');
-    const rawKeyword = (interaction.options.getString('keyword') || '').trim();
-    const platform = interaction.options.getString('platform') || 'all';
-    const limit = interaction.options.getInteger('limit') || 5;
-
-    // ตรวจสอบว่าเป็นโหมด Auto หรือไม่:
-    // 1. ระบุ mode === 'auto'
-    // 2. หรือเลือกตัวเลือกจาก autocomplete เช่น 'auto', 'auto:warehouse'
-    // 3. หรือไม่ได้กรอกทั้ง mode และ keyword (default เข้า auto)
-    const isAuto = rawMode === 'auto' || rawKeyword.startsWith('auto') || (!rawMode && !rawKeyword);
-    const mode = isAuto ? 'auto' : 'manual';
-
-    await interaction.deferReply();
-
-    try {
-      // 1. ตรวจสอบและสร้างตารางแคชหากยังไม่มี
-      await pool.query(`
-        CREATE TABLE IF NOT EXISTS thread_search_cache (
-          id SERIAL PRIMARY KEY,
-          platform VARCHAR(50) NOT NULL,
-          post_url TEXT NOT NULL,
-          post_title TEXT NOT NULL,
-          snippet TEXT,
-          search_keyword TEXT,
-          created_at TIMESTAMPTZ DEFAULT NOW()
-        );
-      `);
-
-      // 2. ค้นหากระทู้ผ่าน SearXNG (จำกัดไม่เกิน 1 ปี)
-      const { autoMeta, results } = await searchRecentThreads({
-        keyword: rawKeyword,
-        mode,
-        platform,
-        limit
-      });
-
-      if (!results.length) {
-        const noResultEmbed = new EmbedBuilder()
-          .setTitle('🔍 ไม่พบกระทู้หรือโพสต์ที่ตรงกับเงื่อนไข')
-          .setColor(0xfee75c)
-          .setDescription(
-            isAuto
-              ? `AI ได้สร้างคำค้นหาจากโซลูชัน **"${autoMeta?.solutionTitle}"** (\`${autoMeta?.queries?.join('`, `')}\`) แต่ไม่พบโพสต์ล่าสุดที่ตรงเงื่อนไขในช่วง 1 ปีที่ผ่านมา\n\n💡 **คำแนะนำ:** ลองกดค้นหาแบบออโต้อีกครั้งเพื่อให้ AI สุ่มโซลูชันอื่น หรือพิมพ์ Keyword ที่ต้องการค้นหาโดยตรงครับ`
-              : `ไม่พบโพสต์ที่ตรงกับคำค้นหา **"${rawKeyword}"** ในช่วง 1 ปีที่ผ่านมา (แพลตฟอร์ม: \`${platform.toUpperCase()}\`)\n\n💡 **คำแนะนำ:**\n• ลองใช้คีย์เวิร์ดที่กว้างขึ้น เช่น \`ERP\`, \`สต็อก\`, \`บัญชี\`, \`SAP\`, \`Automation\`\n• หรือปล่อยช่อง Keyword ว่างเพื่อให้ AI ทำออโต้`
-          )
-          .setTimestamp();
-        return await interaction.editReply({ embeds: [noResultEmbed] });
-      }
-
-      // 3. บันทึกผลลัพธ์ลง thread_search_cache เพื่อใช้เชื่อมกับปุ่ม Action
-      const savedItems = [];
-      const loggedKeyword = isAuto ? `[Auto: ${autoMeta?.solutionTitle}]` : rawKeyword;
-      for (const item of results) {
-        const ins = await pool.query(`
-          INSERT INTO thread_search_cache (platform, post_url, post_title, snippet, search_keyword, created_at)
-          VALUES ($1, $2, $3, $4, $5, NOW())
-          RETURNING id;
-        `, [item.platform, item.url, item.title, item.snippet, loggedKeyword]);
-        savedItems.push({
-          cacheId: ins.rows[0].id,
-          ...item
-        });
-      }
-
-      // 4. สร้าง Discord Embed
-      const platformBadge = {
-        pantip: '🟣 Pantip',
-        linkedin: '💼 LinkedIn',
-        facebook: '🔵 Facebook'
-      };
-
-      const embed = new EmbedBuilder()
-        .setColor(isAuto ? 0x57f287 : 0x5865f2)
-        .setTimestamp();
-
-      if (isAuto && autoMeta) {
-        embed.setTitle('🤖 ผลการค้นหากระทู้ด้วย AI (SyaCo Auto-Lead Discovery)')
-          .setDescription(
-            `🎯 **โซลูชัน SyaCo:** \`${autoMeta.solutionTitle}\`\n` +
-            `⚠️ **โจทย์/ปัญหาที่ค้นหา:** ${autoMeta.targetProblem}\n` +
-            `💡 **คำค้นหาที่ AI ใช้:** \`${autoMeta.queries.join('`, `')}\`\n` +
-            `🌐 **แพลตฟอร์ม:** \`${platform === 'all' ? 'ทุกแพลตฟอร์ม' : platform.toUpperCase()}\` | **พบ:** \`${savedItems.length}\` รายการ\n\n` +
-            `💡 *กดปุ่ม **[🤖 ร่างคำตอบ]** ด้านล่าง เพื่อให้ AI วิเคราะห์ปัญหาและร่างคำตอบเข้าสู่ Flow 3 ทันที*`
-          );
-      } else {
-        embed.setTitle('🔍 ผลการค้นหากระทู้และโพสต์ที่น่าสนใจ (ระยะไม่เกิน 1 ปี)')
-          .setDescription(
-            `🔎 **คำค้นหา:** \`${rawKeyword}\` (โหมด: กำหนดเอง)\n` +
-            `🌐 **แพลตฟอร์ม:** \`${platform === 'all' ? 'ทุกแพลตฟอร์ม' : platform.toUpperCase()}\` | **พบ:** \`${savedItems.length}\` รายการ\n\n` +
-            `💡 *กดปุ่ม **[🤖 ร่างคำตอบ]** ด้านล่าง เพื่อให้ AI วิเคราะห์ปัญหาและร่างคำตอบเข้าสู่ Flow 3 ทันที*`
-          );
-      }
-
-      savedItems.forEach((item, index) => {
-        const pBadge = platformBadge[item.platform] || item.platform;
-        const cleanSnippet = item.snippet ? (item.snippet.length > 200 ? item.snippet.slice(0, 197) + '...' : item.snippet) : 'ไม่มีคำอธิบายย่อ';
-        embed.addFields({
-          name: `${index + 1}. [${pBadge}] ${item.title.slice(0, 200)}`,
-          value: `📝 ${cleanSnippet}\n🔗 [เปิดดูกระทู้ต้นทาง](${item.url})`,
-          inline: false
-        });
-      });
-
-      // 5. สร้างปุ่ม Action (Row ละไม่เกิน 5 ปุ่ม)
-      const actionRows = [];
-      let currentRow = new ActionRowBuilder();
-
-      savedItems.forEach((item, index) => {
-        if (currentRow.components.length === 5) {
-          actionRows.push(currentRow);
-          currentRow = new ActionRowBuilder();
-        }
-        currentRow.addComponents(
-          new ButtonBuilder()
-            .setCustomId(`lead_draft_${item.cacheId}`)
-            .setLabel(`🤖 ร่างคำตอบ #${index + 1}`)
-            .setStyle(ButtonStyle.Primary)
-        );
-      });
-
-      if (currentRow.components.length > 0) {
-        actionRows.push(currentRow);
-      }
-
-      return await interaction.editReply({
-        embeds: [embed],
-        components: actionRows
-      });
-    } catch (err) {
-      console.error('[find-threads] Error:', err);
-      return await interaction.editReply(`⚠️ เกิดข้อผิดพลาดในการค้นหา: ${err.message}`);
-    }
-  }
-
-  // คำสั่ง /radar (ดึงเรดาร์กระทู้ประจำวัน ~20 รายการ)
-  if (commandName === 'radar') {
-    const limit = interaction.options.getInteger('limit') || 20;
-    await interaction.deferReply();
-
-    try {
-      const { collectDailyRadarThreads } = require('./thread-search');
-      const { solutionsCovered, results } = await collectDailyRadarThreads(limit);
-
-      if (!results.length) {
-        return await interaction.editReply('🔍 ไม่พบกระทู้หรือโพสต์ใหม่ที่ตรงกับเงื่อนไขในช่วง 1 ปีนี้ กรุณาลองใหม่อีกครั้ง');
-      }
-
-      // บันทึกลง thread_search_cache
-      const savedRows = [];
-      for (const item of results) {
-        const { rows } = await pool.query(
-          `INSERT INTO thread_search_cache (platform, post_url, post_title, snippet, search_keyword)
-           VALUES ($1, $2, $3, $4, $5)
-           RETURNING *`,
-          [item.platform, item.url, item.title, item.snippet || '', item.solutionCategory || 'daily_radar']
-        );
-        savedRows.push({
-          ...rows[0],
-          solutionCategory: item.solutionCategory
-        });
-      }
-
-      const { embeds, components } = buildRadarEmbedsAndMenu(savedRows, solutionsCovered);
-      if (embeds.length <= 2) {
-        return await interaction.editReply({ embeds, components });
-      } else {
-        const half = Math.ceil(embeds.length / 2);
-        await interaction.editReply({
-          content: `🌅 **เรดาร์กระทู้/โพสต์น่าสนใจประจำวัน (ส่วนที่ 1/2) — ทั้งหมด ${savedRows.length} รายการ**`,
-          embeds: embeds.slice(0, half)
-        });
-        return await interaction.followUp({
-          content: `(ส่วนที่ 2/2) 👇 **เลือกกระทู้ที่ต้องการให้ AI ช่วยร่างคำตอบจากเมนูด้านล่างได้ทันทีครับ:**`,
-          embeds: embeds.slice(half),
-          components
-        });
-      }
-    } catch (err) {
-      console.error('[radar] Error:', err);
-      return await interaction.editReply(`⚠️ เกิดข้อผิดพลาดในการดึงเรดาร์กระทู้: ${err.message}`);
-    }
-  }
-
-  // คำสั่ง /set-radar-time (ตั้งเวลาดึงเรดาร์อัตโนมัติ)
-  if (commandName === 'set-radar-time') {
-    const rawTime = interaction.options.getString('time').trim();
-    const enabled = interaction.options.getBoolean('enabled');
-
-    const match = rawTime.match(/^([01]?[0-9]|2[0-3]):([0-5][0-9])$/);
-    if (!match) {
-      return await interaction.reply({
-        content: '⚠️ รูปแบบเวลาไม่ถูกต้อง กรุณากรอกเป็น `HH:MM` เช่น `08:30` หรือ `09:00`',
-        ephemeral: true
-      });
-    }
-
-    const hour = match[1].padStart(2, '0');
-    const min = match[2];
-    const timeFormatted = `${hour}:${min}`;
-
-    await pool.query(
-      "INSERT INTO bot_settings (key, value, updated_at) VALUES ('DAILY_RADAR_TIME', $1, NOW()) ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()",
-      [timeFormatted]
-    );
-
-    if (enabled !== null) {
-      await pool.query(
-        "INSERT INTO bot_settings (key, value, updated_at) VALUES ('DAILY_RADAR_ENABLED', $1, NOW()) ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()",
-        [enabled ? 'true' : 'false']
-      );
-    }
-
-    const statusText = (enabled === false) ? '🔴 ปิดใช้งานชั่วคราว' : '🟢 เปิดใช้งาน';
-    return await interaction.reply({
-      content: `✅ **บันทึกการตั้งค่าเวลาเรดาร์ประจำวันเรียบร้อย!**\n⏰ **เวลาดึงข้อมูล:** \`${timeFormatted} น.\` (เวลาไทย)\n📊 **สถานะ:** ${statusText}\n💡 ระบบจะรวบรวมกระทู้ ~20 รายการส่งเข้าห้องแจ้งเตือนอัตโนมัติทุกวันเมื่อถึงเวลาครับ`,
-      ephemeral: true
-    });
-  }
-
-  // คำสั่ง /radar-status (ดูสถานะการตั้งค่าเรดาร์อัตโนมัติ)
-  if (commandName === 'radar-status') {
-    const { rows: timeRows } = await pool.query("SELECT value FROM bot_settings WHERE key = 'DAILY_RADAR_TIME'");
-    const { rows: enabledRows } = await pool.query("SELECT value FROM bot_settings WHERE key = 'DAILY_RADAR_ENABLED'");
-    const { rows: channelRows } = await pool.query("SELECT value FROM bot_settings WHERE key = 'DISCORD_CHANNEL_ID'");
-    const { rows: limitRows } = await pool.query("SELECT value FROM bot_settings WHERE key = 'DAILY_RADAR_LIMIT'");
-
-    const radarTime = timeRows[0]?.value || '08:30';
-    const isEnabled = enabledRows[0]?.value !== 'false';
-    const channelId = channelRows[0]?.value || process.env.DISCORD_CHANNEL_ID || '';
-    const limit = limitRows[0]?.value || '20';
-
-    const embed = new EmbedBuilder()
-      .setTitle('⚙️ สถานะการตั้งค่า Daily Thread Radar')
-      .setColor(isEnabled ? 0x57f287 : 0xed4245)
-      .addFields(
-        { name: '⏰ เวลาดึงกระทู้อัตโนมัติ', value: `\`${radarTime} น.\` (เวลาไทย Asia/Bangkok)`, inline: true },
-        { name: '📊 สถานะระบบอัตโนมัติ', value: isEnabled ? '🟢 เปิดใช้งาน (Active)' : '🔴 ปิดใช้งาน (Disabled)', inline: true },
-        { name: '🎯 จำนวนกระทู้เป้าหมาย', value: `\`${limit} กระทู้\``, inline: true },
-        { name: '📢 ห้องแจ้งเตือน', value: channelId && channelId !== '123456789012345678' ? `<#${channelId}>` : '`ยังไม่ได้ระบุ (ใช้ /set-channel เพื่อตั้งค่า)`', inline: false }
-      )
-      .setFooter({ text: 'ใช้คำสั่ง /set-radar-time เพื่อปรับเวลา หรือ /radar เพื่อทดสอบดึงทันที' });
-
-    return await interaction.reply({ embeds: [embed], ephemeral: true });
-  }
-
-  // คำสั่ง /help
+  // 7. คำสั่ง /help (แสดงคู่มือคำสั่งทั้ง 7)
   if (commandName === 'help') {
     const embed = new EmbedBuilder()
-      .setTitle('📖 คู่มือคำสั่ง Discord Bot')
+      .setTitle('📖 คู่มือคำสั่ง Discord Bot (SyaCo Community & Content Stack)')
       .setColor(0x57f287)
-      .setDescription('คำสั่งที่สามารถใช้งานได้ในเซิร์ฟเวอร์:')
+      .setDescription('คำสั่งทั้งหมด 7 คำสั่งหลัก สั้น กระชับ จำง่าย ครบทุกฟังก์ชัน:')
       .addFields(
-        { name: '`/radar [limit]`', value: 'ดึงเรดาร์กระทู้/โพสต์น่าสนใจประจำวัน (~20 รายการ) พร้อมเมนู Dropdown เลือกให้ AI ช่วยร่างคำตอบ' },
-        { name: '`/set-radar-time <time> [enabled]`', value: 'ตั้งเวลาดึงเรดาร์กระทู้อัตโนมัติประจำวัน เช่น `08:30` หรือ `09:00` (เวลาไทย)' },
-        { name: '`/radar-status`', value: 'ดูสถานะการตั้งเวลาเรดาร์กระทู้อัตโนมัติ (เวลา, ช่องที่ส่ง, สถานะเปิด/ปิด)' },
-        { name: '`/find-threads [mode] [keyword] [platform] [limit]`', value: 'ค้นหากระทู้/โพสต์ที่น่าสนใจ (ระยะไม่เกิน 1 ปี) รองรับทั้งใส่ Keyword เอง และทำออโต้ด้วย AI' },
-        { name: '`/latest [limit]`', value: 'ดึง Candidate ทั้งหมดในรอบเวลาล่าสุดขึ้นมาพร้อมปุ่มจัดการ' },
-        { name: '`/get <id>`', value: 'ดึง Candidate ตาม ID ที่ระบุขึ้นมาดู/กด Approve/Reject' },
-        { name: '`/posted`', value: 'ดู 5 รายการล่าสุดที่โพสต์ Backlink สำเร็จ' },
-        { name: '`/status`', value: 'ดูสรุปสถิติจำนวนรายการในแต่ละสถานะ' },
-        { name: '`/pending [limit]`', value: 'ดึงรายการที่รอรีวิวขึ้นมาพร้อมปุ่ม Approve / Edit / Reject' },
-        { name: '`/run`', value: 'สั่งเริ่มกระบวนการค้นหา Backlink ใน n8n ทันที' },
-        { name: '`/request-idea`', value: 'ขอไอเดียโซลูชันใหม่จาก Flow 1' },
-        { name: '`/answer <platform>`', value: 'ส่งลิงก์กระทู้หรือโพสต์จาก Pantip, LinkedIn, Facebook ให้ AI ช่วยร่างคำตอบ' },
-        { name: '`/set-devto-key`', value: 'อัปเดต API Key ของ Dev.to สำหรับเผยแพร่บทความ (เปิด Modal กรอกข้อมูล)' },
-        { name: '`/set-devto-cookie`', value: 'อัปเดต Cookie ของ Dev.to สำหรับโพสต์คอมเมนต์ (เปิด Modal กรอกข้อมูล)' },
-        { name: '`/set-channel [channel]`', value: 'ตั้งค่าห้องรับการแจ้งเตือน Candidates (เดินไปพิมพ์ในห้องที่ต้องการได้เลย)' },
-        { name: '`/set-admin-ids <ids>`', value: 'ตั้งค่า Discord User IDs ที่มีสิทธิ์อนุมัติ/เผยแพร่ (คั่นด้วย comma)' },
-        { name: '`/health`', value: 'ตรวจสอบสถานะการเชื่อมต่อ (DB, n8n, Bluesky, Dev.to, Gemini, Channel)' },
-        { name: '`/ping`', value: 'ทดสอบความเร็วและการเชื่อมต่อของบอท' }
+        {
+          name: '1. `/find [keyword] [platform] [limit]`',
+          value: '• ค้นหากระทู้/โพสต์น่าสนใจ (ไม่เกิน 1 ปี) พร้อม Dropdown ให้ AI ร่างคำตอบทันที\n• **เว้นช่อง keyword ว่าง:** ดึงเรดาร์ออโต้ ~20 รายการครอบคลุมทุกหมวดโซลูชัน SyaCo\n• **ใส่ keyword:** ค้นหาคำที่ต้องการ หรือเลือกหมวดหมู่อัตโนมัติ'
+        },
+        {
+          name: '2. `/answer <platform>`',
+          value: '• ส่งลิงก์กระทู้หรือคำถามจาก Pantip, LinkedIn, Facebook ให้ AI ช่วยวิเคราะห์และร่างคำตอบ'
+        },
+        {
+          name: '3. `/settings <view | radar | channel | admin | devto>`',
+          value: '• ศูนย์กลางจัดการการตั้งค่าทั้งหมด:\n  - `/settings view`: ดูค่าปัจจุบันทั้งหมด\n  - `/settings radar time:08:30 enabled:true`: ตั้งเวลาเรดาร์ประจำวัน\n  - `/settings channel`: ตั้งห้องนี้เป็นห้องแจ้งเตือน\n  - `/settings admin ids:...`: กำหนดสิทธิ์แอดมิน\n  - `/settings devto`: ตั้งค่า Dev.to API Key & Cookie'
+        },
+        {
+          name: '4. `/status [view] [limit]`',
+          value: '• ดูสถานะงาน:\n  - `overview`: สรุปจำนวนรายการทั้งหมดในระบบ\n  - `pending`: แสดงรายการที่รอรีวิวพร้อมปุ่ม Approve / Edit / Reject\n  - `posted`: แสดงรายการที่โพสต์สำเร็จพร้อมลิงก์'
+        },
+        {
+          name: '5. `/idea`',
+          value: '• ขอไอเดียโซลูชันใหม่จาก Flow 1 (วิเคราะห์ Gap ข่าวสาร Enterprise Tech)'
+        },
+        {
+          name: '6. `/health`',
+          value: '• ตรวจสอบความเร็ว Latency และความพร้อมของระบบ (DB, n8n, AI, Bluesky, Dev.to)'
+        },
+        {
+          name: '7. `/help`',
+          value: '• แสดงคู่มือการใช้งานคำสั่งทั้งหมด'
+        }
       )
-      .setFooter({ text: 'SyaCo Content & Backlink Automation Stack' });
+      .setFooter({ text: 'SyaCo Enterprise Solution Hunter • v2.0 Clean Edition' });
 
     return await interaction.reply({ embeds: [embed], ephemeral: true });
   }
