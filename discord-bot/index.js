@@ -533,6 +533,29 @@ client.on('interactionCreate', async (interaction) => {
           return await interaction.respond(filtered.slice(0, 10));
         }
       }
+
+      if (commandName === 'idea' || commandName === 'request-idea') {
+        const focused = interaction.options.getFocused(true);
+        if (focused.name === 'solution') {
+          const val = (focused.value || '').toLowerCase().trim();
+          try {
+            const { rows } = await pool.query(
+              'SELECT solution_id, solution_title FROM processed_solutions ORDER BY solution_id'
+            );
+            const filtered = val
+              ? rows.filter(r => (r.solution_title && r.solution_title.toLowerCase().includes(val)) || String(r.solution_id).includes(val))
+              : rows;
+            const choices = filtered.slice(0, 25).map(r => ({
+              name: r.solution_title,
+              value: r.solution_title
+            }));
+            return await interaction.respond(choices);
+          } catch (dbErr) {
+            console.error('Error in idea autocomplete:', dbErr);
+            return await interaction.respond([]);
+          }
+        }
+      }
       return;
     }
 
@@ -1286,12 +1309,26 @@ app.post('/notify', async (req, res) => {
     if (body.type === 'flow1_suggestion' && body.suggestion) {
       const s = body.suggestion;
       const cut = (str, len) => (String(str || '').length > len ? str.slice(0, len - 3) + '...' : str || '-');
+
+      let baseSolutionText = String(s.base_solution_id || '-');
+      if (s.base_solution_id) {
+        try {
+          const { rows } = await pool.query(
+            'SELECT solution_title FROM processed_solutions WHERE solution_id = $1 LIMIT 1',
+            [String(s.base_solution_id)]
+          );
+          if (rows.length && rows[0].solution_title) {
+            baseSolutionText = `${rows[0].solution_title} (ID: ${s.base_solution_id})`;
+          }
+        } catch (_) {}
+      }
+
       const embed = new EmbedBuilder()
         .setTitle(`💡 [AI Solution Proposal] ${cut(s.title_th, 100)}`)
         .setColor(0x57f287)
         .setDescription(`**Title (EN):** ${s.title_en}\n\n**คำอธิบาย:** ${cut(s.description_th, 500)}\n\n**Rationale:** ${cut(s.rationale, 500)}`)
         .addFields(
-          { name: '🎯 Base Solution ID', value: String(s.base_solution_id || '-'), inline: true },
+          { name: '🎯 Base Solution', value: baseSolutionText, inline: true },
           { name: 'สถานะ', value: 'รอการอนุมัติเพื่อสร้างเป็น Draft บนเว็บ', inline: true }
         )
         .setTimestamp();

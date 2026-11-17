@@ -457,7 +457,13 @@ const commands = [
   // 5. /idea - ขอไอเดียโซลูชันใหม่จาก Flow 1
   new SlashCommandBuilder()
     .setName('idea')
-    .setDescription('ขอไอเดียโซลูชันใหม่จาก Flow 1 (วิเคราะห์ข่าวสารและเทคโนโลยี Enterprise)'),
+    .setDescription('ขอไอเดียโซลูชันใหม่จาก Flow 1 (วิเคราะห์ข่าวสารและเทคโนโลยี Enterprise)')
+    .addStringOption(opt =>
+      opt.setName('solution')
+        .setDescription('เลือกโซลูชันหลักที่ต้องการต่อยอด (แสดงชื่อจากระบบ SyaCo)')
+        .setRequired(false)
+        .setAutocomplete(true)
+    ),
 
   // 6. /health - ตรวจสอบความเร็วและสถานะระบบ (Ping, DB, n8n, AI, APIs)
   new SlashCommandBuilder()
@@ -1058,6 +1064,35 @@ async function handleCommand(interaction, { pool, client }) {
     await interaction.deferReply();
     const webhookUrl = process.env.N8N_FLOW1_IDEA_WEBHOOK_URL || 'http://n8n:5678/webhook/flow1-request-idea';
 
+    const solutionInput = interaction.options.getString('solution');
+    let targetSolutionId = null;
+    let targetSolutionTitle = null;
+
+    if (solutionInput) {
+      try {
+        const trimmed = solutionInput.trim();
+        const { rows } = await pool.query(
+          'SELECT solution_id, solution_title FROM processed_solutions WHERE LOWER(solution_title) = LOWER($1) OR solution_id = $1 LIMIT 1',
+          [trimmed]
+        );
+        if (rows.length > 0) {
+          targetSolutionId = rows[0].solution_id;
+          targetSolutionTitle = rows[0].solution_title;
+        } else {
+          const { rows: partialRows } = await pool.query(
+            'SELECT solution_id, solution_title FROM processed_solutions WHERE LOWER(solution_title) LIKE LOWER($1) LIMIT 1',
+            [`%${trimmed}%`]
+          );
+          if (partialRows.length > 0) {
+            targetSolutionId = partialRows[0].solution_id;
+            targetSolutionTitle = partialRows[0].solution_title;
+          }
+        }
+      } catch (dbErr) {
+        console.error('Error resolving solution for /idea:', dbErr);
+      }
+    }
+
     try {
       const res = await fetch(webhookUrl, {
         method: 'POST',
@@ -1065,14 +1100,20 @@ async function handleCommand(interaction, { pool, client }) {
         body: JSON.stringify({
           triggered_by: interaction.user.tag,
           user_id: interaction.user.id,
-          requested_at: new Date().toISOString()
+          requested_at: new Date().toISOString(),
+          target_solution_id: targetSolutionId || null,
+          target_solution_title: targetSolutionTitle || null
         }),
         signal: AbortSignal.timeout(10000)
       });
 
       if (res.ok) {
+        const targetMsg = targetSolutionTitle
+          ? `\n🎯 **เจาะจงโซลูชันหลัก:** \`${targetSolutionTitle}\` (ID: ${targetSolutionId})`
+          : '\n🎲 **โหมด:** สำรวจและกระจายไอเดียตามแนวโน้มเทคโนโลยี (ครอบคลุมทุกโซลูชัน)';
+
         return await interaction.editReply(
-          '💡 **สั่งขอไอเดียโซลูชันใหม่บน n8n สำเร็จแล้ว!**\nระบบกำลังดึงข้อมูลฟีด TechTalkThai & Blognone เพื่อวิเคราะห์ Gap และสร้าง Adjacent Solution ผ่าน Gemini AI\nเมื่อประมวลผลเสร็จแล้วจะส่งการแจ้งเตือนมายังห้องนี้ครับ'
+          `💡 **สั่งขอไอเดียโซลูชันใหม่บน n8n สำเร็จแล้ว!**${targetMsg}\nระบบกำลังดึงข้อมูลฟีด TechTalkThai & Blognone เพื่อวิเคราะห์ Gap และสร้าง Adjacent Solution ผ่าน Gemini AI\nเมื่อประมวลผลเสร็จแล้วจะส่งการแจ้งเตือนมายังห้องนี้ครับ`
         );
       } else {
         return await interaction.editReply(
@@ -1249,8 +1290,8 @@ async function handleCommand(interaction, { pool, client }) {
           value: '• ดูสถานะงาน:\n  - `overview`: สรุปจำนวนรายการทั้งหมดในระบบ\n  - `pending`: แสดงรายการที่รอรีวิวพร้อมปุ่ม Approve / Edit / Reject\n  - `posted`: แสดงรายการที่โพสต์สำเร็จพร้อมลิงก์'
         },
         {
-          name: '5. `/idea`',
-          value: '• ขอไอเดียโซลูชันใหม่จาก Flow 1 (วิเคราะห์ Gap ข่าวสาร Enterprise Tech)'
+          name: '5. `/idea [solution]`',
+          value: '• ขอไอเดียโซลูชันใหม่จาก Flow 1 (สามารถเลือกต่อยอดจากโซลูชัน เช่น Smart Inventory & Warehouse หรือเว้นว่างเพื่อให้ AI สุ่มวิเคราะห์)'
         },
         {
           name: '6. `/health`',
