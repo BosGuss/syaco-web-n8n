@@ -393,7 +393,7 @@ const commands = [
         .setDescription('ตั้งเวลาดึงกระทู้อัตโนมัติประจำวัน')
         .addStringOption(opt =>
           opt.setName('time')
-            .setDescription('เวลา HH:MM เช่น 08:30 หรือ 09:00 (เวลาไทย)')
+            .setDescription('เวลา HH:MM เช่น 11:00 หรือ 09:00 (เวลาไทย)')
             .setRequired(false)
         )
         .addBooleanOption(opt =>
@@ -648,7 +648,7 @@ async function handleCommand(interaction, { pool, client }) {
         const { rows: settingsRows } = await pool.query('SELECT key, value FROM bot_settings');
         const getSetting = (k, def = '') => settingsRows.find(r => r.key === k)?.value || process.env[k] || def;
 
-        const radarTime = getSetting('DAILY_RADAR_TIME', '08:30');
+        const radarTime = getSetting('DAILY_RADAR_TIME', '11:00');
         const radarEnabled = getSetting('DAILY_RADAR_ENABLED', 'true') !== 'false';
         const radarLimit = getSetting('DAILY_RADAR_LIMIT', '20');
         const channelId = getSetting('DISCORD_CHANNEL_ID', '');
@@ -692,7 +692,7 @@ async function handleCommand(interaction, { pool, client }) {
         const { rows: eRows } = await pool.query("SELECT value FROM bot_settings WHERE key = 'DAILY_RADAR_ENABLED'");
         const { rows: lRows } = await pool.query("SELECT value FROM bot_settings WHERE key = 'DAILY_RADAR_LIMIT'");
 
-        const curTime = tRows[0]?.value || '08:30';
+        const curTime = tRows[0]?.value || '11:00';
         const curEnabled = eRows[0]?.value !== 'false';
         const curLimit = lRows[0]?.value || '20';
 
@@ -704,7 +704,7 @@ async function handleCommand(interaction, { pool, client }) {
             { name: '📊 สถานะระบบอัตโนมัติ', value: curEnabled ? '🟢 เปิดใช้งาน (Active)' : '🔴 ปิดใช้งาน (Disabled)', inline: true },
             { name: '🎯 จำนวนกระทู้เป้าหมาย', value: `\`${curLimit} กระทู้\``, inline: true }
           )
-          .setFooter({ text: 'ใช้ /settings radar time:08:30 enabled:true เพื่อปรับเปลี่ยน' });
+          .setFooter({ text: 'ใช้ /settings radar time:11:00 enabled:true เพื่อปรับเปลี่ยน' });
 
         return await interaction.reply({ embeds: [embed], ephemeral: true });
       }
@@ -714,7 +714,7 @@ async function handleCommand(interaction, { pool, client }) {
       if (rawTime) {
         const match = rawTime.trim().match(/^([01]?[0-9]|2[0-3]):([0-5][0-9])$/);
         if (!match) {
-          return await interaction.editReply('⚠️ รูปแบบเวลาไม่ถูกต้อง กรุณากรอกเป็น `HH:MM` เช่น `08:30` หรือ `09:00`');
+          return await interaction.editReply('⚠️ รูปแบบเวลาไม่ถูกต้อง กรุณากรอกเป็น `HH:MM` เช่น `11:00` หรือ `09:00`');
         }
         const hour = match[1].padStart(2, '0');
         const min = match[2];
@@ -894,7 +894,7 @@ async function handleCommand(interaction, { pool, client }) {
     const rawTime = interaction.options.getString('time');
     const enabled = interaction.options.getBoolean('enabled');
     const match = (rawTime || '').trim().match(/^([01]?[0-9]|2[0-3]):([0-5][0-9])$/);
-    if (!match) return await interaction.reply({ content: '⚠️ กรุณาระบุเวลาเป็น HH:MM เช่น 08:30', ephemeral: true });
+    if (!match) return await interaction.reply({ content: '⚠️ กรุณาระบุเวลาเป็น HH:MM เช่น 11:00', ephemeral: true });
     const timeFormatted = `${match[1].padStart(2, '0')}:${match[2]}`;
     await pool.query("INSERT INTO bot_settings (key, value, updated_at) VALUES ('DAILY_RADAR_TIME', $1, NOW()) ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()", [timeFormatted]);
     if (enabled !== null) {
@@ -905,7 +905,7 @@ async function handleCommand(interaction, { pool, client }) {
   if (commandName === 'radar-status') {
     const { rows: tRows } = await pool.query("SELECT value FROM bot_settings WHERE key = 'DAILY_RADAR_TIME'");
     const { rows: eRows } = await pool.query("SELECT value FROM bot_settings WHERE key = 'DAILY_RADAR_ENABLED'");
-    const curTime = tRows[0]?.value || '08:30';
+    const curTime = tRows[0]?.value || '11:00';
     const curEnabled = eRows[0]?.value !== 'false';
     return await interaction.reply({ content: `⚙️ **Daily Radar:** เวลา \`${curTime} น.\` | สถานะ: ${curEnabled ? '🟢 เปิดใช้งาน' : '🔴 ปิดใช้งาน'}`, ephemeral: true });
   }
@@ -1242,7 +1242,7 @@ async function handleCommand(interaction, { pool, client }) {
         },
         {
           name: '3. `/settings <view | radar | channel | admin | devto>`',
-          value: '• ศูนย์กลางจัดการการตั้งค่าทั้งหมด:\n  - `/settings view`: ดูค่าปัจจุบันทั้งหมด\n  - `/settings radar time:08:30 enabled:true`: ตั้งเวลาเรดาร์ประจำวัน\n  - `/settings channel`: ตั้งห้องนี้เป็นห้องแจ้งเตือน\n  - `/settings admin ids:...`: กำหนดสิทธิ์แอดมิน\n  - `/settings devto`: ตั้งค่า Dev.to API Key & Cookie'
+          value: '• ศูนย์กลางจัดการการตั้งค่าทั้งหมด:\n  - `/settings view`: ดูค่าปัจจุบันทั้งหมด\n  - `/settings radar time:11:00 enabled:true`: ตั้งเวลาเรดาร์ประจำวัน\n  - `/settings channel`: ตั้งห้องนี้เป็นห้องแจ้งเตือน\n  - `/settings admin ids:...`: กำหนดสิทธิ์แอดมิน\n  - `/settings devto`: ตั้งค่า Dev.to API Key & Cookie'
         },
         {
           name: '4. `/status [view] [limit]`',

@@ -108,6 +108,8 @@ services:
     ports:
       - "5678:5678"
     environment:
+      - GENERIC_TIMEZONE=Asia/Bangkok
+      - TZ=Asia/Bangkok
       - N8N_LOG_LEVEL=info
       - N8N_HOST=${N8N_HOST:-localhost}
       - N8N_PORT=5678

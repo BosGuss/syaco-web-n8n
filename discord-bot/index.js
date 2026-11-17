@@ -477,7 +477,7 @@ function startRadarCronScheduler() {
       const currentTime = `${getVal('hour')}:${getVal('minute')}`;
 
       const { rows: timeRows } = await pool.query("SELECT value FROM bot_settings WHERE key = 'DAILY_RADAR_TIME'");
-      const targetTime = timeRows[0]?.value || '08:30';
+      const targetTime = timeRows[0]?.value || '11:00';
 
       if (currentTime === targetTime && lastRadarRunDate !== todayStr) {
         lastRadarRunDate = todayStr;

@@ -6,17 +6,15 @@
         "rule": {
           "interval": [
             {
-              "field": "weeks",
-              "triggerAtDay": [
-                1
-              ],
-              "triggerAtHour": 9
+              "field": "days",
+              "triggerAtHour": 11,
+              "triggerAtMinute": 0
             }
           ]
         }
       },
       "id": "f1-node-schedule",
-      "name": "Weekly Trigger (Monday 9AM)",
+      "name": "Daily Trigger (11:00 AM)",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
@@ -228,7 +226,7 @@
     }
   ],
   "connections": {
-    "Weekly Trigger (Monday 9AM)": {
+    "Daily Trigger (11:00 AM)": {
       "main": [
         [
           {
@@ -347,6 +345,7 @@
   "settings": {
     "executionOrder": "v1",
     "saveDataErrorExecution": "all",
-    "saveExecutionProgress": true
+    "saveExecutionProgress": true,
+    "timezone": "Asia/Bangkok"
   }
 }

@@ -7,14 +7,14 @@
           "interval": [
             {
               "field": "days",
-              "triggerAtHour": 8,
-              "triggerAtMinute": 0
+              "triggerAtHour": 11,
+              "triggerAtMinute": 30
             }
           ]
         }
       },
       "id": "f2-node-schedule",
-      "name": "Daily Trigger (08:00 AM)",
+      "name": "Daily Trigger (11:30 AM)",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
@@ -304,7 +304,7 @@
     }
   ],
   "connections": {
-    "Daily Trigger (08:00 AM)": {
+    "Daily Trigger (11:30 AM)": {
       "main": [
         [
           {
@@ -485,6 +485,7 @@
     "executionOrder": "v1",
     "saveDataErrorExecution": "all",
     "saveDataSuccessExecution": "all",
-    "saveExecutionProgress": true
+    "saveExecutionProgress": true,
+    "timezone": "Asia/Bangkok"
   }
 }
