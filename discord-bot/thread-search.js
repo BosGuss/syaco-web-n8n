@@ -405,6 +405,61 @@ function detectPlatform(url) {
 }
 
 /**
+ * ตรวจสอบอย่างเข้มงวดว่า URL ของ Facebook เป็น "โพสต์" (Post) จริงๆ
+ * ไม่ใช่หน้าโฮมเพจของกลุ่ม (Group root) หรือหน้าโฮมเพจของเพจ (Page root)
+ */
+function isFacebookPost(rawUrl) {
+  if (!rawUrl) return false;
+  let pathname = '';
+  let search = '';
+  try {
+    const u = new URL(rawUrl);
+    pathname = u.pathname.toLowerCase();
+    search = u.search.toLowerCase();
+  } catch (_) {
+    pathname = String(rawUrl).toLowerCase();
+  }
+
+  // ไม่เอาหน้าระบบ, ความช่วยเหลือ, กฎหมาย หรือหน้า About ทั่วไป
+  const isJunk = pathname.includes('/help/') ||
+                 pathname.includes('/login') ||
+                 pathname.includes('/policies') ||
+                 pathname.includes('/recover') ||
+                 pathname.includes('/legal') ||
+                 pathname.includes('/about') ||
+                 pathname.includes('developers.facebook.com');
+  if (isJunk) return false;
+
+  // 1. โพสต์ในกลุ่ม (Group Post): /groups/<name_or_id>/posts/<post_id> หรือ /permalink/<post_id>
+  if (pathname.includes('/groups/')) {
+    return /\/groups\/[^/?#]+\/(?:posts|permalink)\/(\d+|[a-zA-Z0-9._-]+)/.test(pathname) ||
+           (pathname.includes('/groups/') && (search.includes('story_fbid=') || search.includes('post_id=')));
+  }
+
+  // 2. โพสต์ของเพจหรือโปรไฟล์: /<name>/posts/<post_id>
+  if (/\/posts\/(\d+|[a-zA-Z0-9._-]+)/.test(pathname)) {
+    return true;
+  }
+
+  // 3. Permalink หรือ Story: /permalink.php?story_fbid=... หรือ /story.php?story_fbid=...
+  if ((pathname.includes('permalink.php') || pathname.includes('story.php')) && (search.includes('story_fbid=') || search.includes('id='))) {
+    return true;
+  }
+
+  // 4. รูปภาพหรือวิดีโอที่มี ID ชัดเจน (มักเป็นโพสต์สื่อที่มีคอมเมนต์)
+  if (/\/photos\/(?:a\.\d+\/)?\d+/.test(pathname) || /\/videos\/\d+/.test(pathname) || (pathname.includes('/watch') && search.includes('v='))) {
+    return true;
+  }
+
+  // 5. ลิงก์แชร์โพสต์: /share/p/<id>/ หรือ /share/v/<id>/
+  if (/\/share\/[pv]\/[a-zA-Z0-9_-]+/.test(pathname)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
  * ตรวจสอบความถูกต้องของ URL และกรองระยะเวลาไม่เกิน 1 ปี
  */
 function isValidCandidate(item, targetPlatform = 'all') {
@@ -434,28 +489,9 @@ function isValidCandidate(item, targetPlatform = 'all') {
     return true;
   }
 
-  // 3. Facebook: ต้องเป็นโพสต์ กลุ่ม หรือวิดีโอที่มีเนื้อหา (ไม่เอาหน้า login, help, policy, developers)
+  // 3. Facebook: ต้องเป็น "โพสต์" เท่านั้น (ไม่เอาหน้ากลุ่มหลัก ไม่เอาหน้าเพจหลัก เพื่อให้สามารถเข้าไปตอบ/ทำ Backlink ได้จริง)
   if (platform === 'facebook') {
-    const isJunk = url.includes('developers.facebook.com') ||
-                   url.includes('/help/') ||
-                   url.includes('/login') ||
-                   url.includes('/policies') ||
-                   url.includes('/recover') ||
-                   url.includes('/legal');
-    if (isJunk) return false;
-
-    const isPostOrGroup = url.includes('/posts/') ||
-                          url.includes('/groups/') ||
-                          url.includes('/permalink') ||
-                          url.includes('story_fbid') ||
-                          url.includes('story.php') ||
-                          url.includes('/photos/') ||
-                          url.includes('/videos/') ||
-                          url.includes('/watch/') ||
-                          url.includes('/share/');
-
-    if (!isPostOrGroup) return false;
-    return true;
+    return isFacebookPost(url);
   }
 
   return false;
@@ -485,17 +521,52 @@ async function querySearxng(query) {
   }
 }
 
-/**
- * ค้นหาเฉพาะ Facebook พร้อม Unfurl Title และ Description
- */
+function formatFacebookContent(rawTitle, rawSnippet, primaryTerm) {
+  let title = (rawTitle || '').trim();
+  let snippet = (rawSnippet || '').trim();
+
+  const isGeneric = (str) => {
+    if (!str) return true;
+    const s = str.toLowerCase();
+    return s.includes('link to facebook.com') ||
+           s.includes('the site owner hides') ||
+           s === 'facebook' ||
+           s === 'log into facebook';
+  };
+
+  if (isGeneric(snippet)) snippet = '';
+  if (isGeneric(title)) title = '';
+
+  if (snippet && snippet.length > 10) {
+    const firstLine = snippet.split('\n')[0].trim();
+    if (!title) {
+      title = firstLine.slice(0, 110);
+    } else if (title.length < 35 && !firstLine.toLowerCase().includes(title.toLowerCase())) {
+      title = `${title}: ${firstLine.slice(0, 90)}`;
+    }
+  }
+
+  if (!title) {
+    title = `โพสต์ข้อความบน Facebook เกี่ยวกับ "${primaryTerm}"`;
+  }
+  if (!snippet) {
+    snippet = `โพสต์และข้อความแลกเปลี่ยนความคิดเห็นบน Facebook เกี่ยวกับ "${primaryTerm}"`;
+  }
+
+  return { title, snippet };
+}
 async function searchFacebookThreads(terms, limit = 5, solutionCategory = '') {
   const primary = terms[0] || 'Business Solution';
+  // คำค้นเจาะจงเฉพาะหน้าโพสต์ (inurl:posts หรือ inurl:permalink)
   const queries = [
-    `site:facebook.com ${primary}`,
-    `site:facebook.com/groups ${primary}`
+    `site:facebook.com inurl:posts ${primary}`,
+    `site:facebook.com/groups inurl:posts ${primary}`,
+    `site:facebook.com "posts" ${primary}`,
+    `site:facebook.com inurl:permalink ${primary}`
   ];
   if (terms[1]) {
-    queries.push(`site:facebook.com ${terms[1]}`);
+    queries.push(`site:facebook.com inurl:posts ${terms[1]}`);
+    queries.push(`site:facebook.com/groups inurl:posts ${terms[1]}`);
   }
 
   const results = [];
@@ -522,25 +593,13 @@ async function searchFacebookThreads(terms, limit = 5, solutionCategory = '') {
         if (unfurled?.snippet) snippet = unfurled.snippet;
       }
 
-      // Fallback title from path
-      if (!title || title.includes('Link to facebook.com') || title === 'Facebook') {
-        const mGroup = item.url.match(/facebook\.com\/groups\/([^/?]+)/);
-        const mPage = item.url.match(/facebook\.com\/([^/?]+)/);
-        if (mGroup) {
-          title = `กลุ่ม Facebook: ${decodeURIComponent(mGroup[1])}`;
-        } else if (mPage) {
-          title = `เพจ Facebook: ${decodeURIComponent(mPage[1])}`;
-        } else {
-          title = `โพสต์ข้อความสนทนาบน Facebook (${primary})`;
-        }
-      }
+      const formatted = formatFacebookContent(title, snippet, primary);
+      title = formatted.title;
+      snippet = formatted.snippet;
 
-      if (!snippet || snippet.includes('The site owner hides')) {
-        snippet = `ชุมชนและโพสต์แลกเปลี่ยนความคิดเห็นบน Facebook เกี่ยวกับ "${primary}"`;
-      }
-
-      // กรองเฉพาะกระทู้/โพสต์/กลุ่มที่มีความเกี่ยวข้องกับธุรกิจ ไอที โรงงาน ซอฟต์แวร์
-      const isRelevant = /(?:erp|sap|wms|สต็อก|คลัง|ขนส่ง|logistics|จัดซื้อ|โรงงาน|การผลิต|โปรแกรม|ระบบ|pos|dashboard|bi|plc|automation|ซอฟต์แวร์|ไอที|ธุรกิจ|sme|บาร์โค้ด|barcode|database|api|scada|data|engineer|developer|computer)/i.test(`${title} ${snippet}`);
+      // กรองเฉพาะกระทู้/โพสต์ที่มีความเกี่ยวข้องกับธุรกิจ ไอที โรงงาน ซอฟต์แวร์ และโซลูชัน
+      const fullText = `${title} ${snippet}`;
+      const isRelevant = /(?:erp|sap|wms|สต็อก|คลัง|ขนส่ง|logistics|จัดซื้อ|โรงงาน|การผลิต|โปรแกรม|ระบบ|pos|dashboard|bi|plc|automation|ซอฟต์แวร์|ไอที|ธุรกิจ|sme|บาร์โค้ด|barcode|database|api|scada|data|engineer|developer|management)/i.test(fullText);
       if (!isRelevant) continue;
 
       results.push({
@@ -556,18 +615,46 @@ async function searchFacebookThreads(terms, limit = 5, solutionCategory = '') {
     if (results.length >= limit) break;
   }
 
-  // หากยังไม่เต็ม limit และมี Curated Communities ให้เติมเข้ามา
-  if (results.length < limit && solutionCategory && CURATED_FACEBOOK_COMMUNITIES[solutionCategory]) {
-    for (const c of CURATED_FACEBOOK_COMMUNITIES[solutionCategory]) {
+  // หากผลลัพธ์ยังไม่เต็ม limit ให้ค้นหาด้วยคำค้นสำรองที่เจาะจงโพสต์
+  if (results.length < limit) {
+    const backupQueries = [
+      `site:facebook.com inurl:posts "${primary}"`,
+      `site:facebook.com/groups inurl:posts "ระบบ"`,
+      `site:facebook.com inurl:posts "โปรแกรม"`,
+      `site:facebook.com inurl:posts "โรงงาน"`
+    ];
+    for (const bq of backupQueries) {
       if (results.length >= limit) break;
-      if (!seenUrls.has(c.url)) {
-        seenUrls.add(c.url);
+      const rawList = await querySearxng(bq);
+      for (const item of rawList) {
+        if (!isValidCandidate(item, 'facebook')) continue;
+        const clean = cleanUrl(item.url, 'facebook');
+        if (seenUrls.has(clean)) continue;
+        seenUrls.add(clean);
+
+        let title = item.title || '';
+        let snippet = item.content || '';
+        if (!title || title.includes('Link to facebook.com') || title === 'Facebook' || !snippet || snippet.includes('The site owner hides')) {
+          const unfurled = await unfurlFacebookMetadata(item.url);
+          if (unfurled?.title) title = unfurled.title;
+          if (unfurled?.snippet) snippet = unfurled.snippet;
+        }
+
+        const formatted = formatFacebookContent(title, snippet, primary);
+        title = formatted.title;
+        snippet = formatted.snippet;
+
+        const fullText = `${title} ${snippet}`;
+        const isRelevant = /(?:erp|sap|wms|สต็อก|คลัง|ขนส่ง|logistics|จัดซื้อ|โรงงาน|การผลิต|โปรแกรม|ระบบ|pos|dashboard|bi|plc|automation|ซอฟต์แวร์|ไอที|ธุรกิจ|sme|บาร์โค้ด|barcode|database|api|scada|data|engineer|developer)/i.test(fullText);
+        if (!isRelevant) continue;
+
         results.push({
           platform: 'facebook',
-          title: c.title,
-          url: c.url,
-          snippet: c.snippet
+          title: title.slice(0, 150),
+          url: clean,
+          snippet: snippet.slice(0, 250)
         });
+        if (results.length >= limit) break;
       }
     }
   }
@@ -855,6 +942,7 @@ module.exports = {
   cleanUrl,
   detectPlatform,
   isValidCandidate,
+  isFacebookPost,
   unfurlFacebookMetadata,
   SYACO_CATALOG,
   CURATED_FACEBOOK_COMMUNITIES
