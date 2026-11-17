@@ -270,6 +270,32 @@ function formatReviewedBy(user) {
   return `${name} (${user.id})`;
 }
 
+function buildFlow1Card(s, baseSolutionText, reviewedBy = null) {
+  const cut = (str, len) => (String(str || '').length > len ? str.slice(0, len - 3) + '...' : str || '-');
+  const embed = new EmbedBuilder()
+    .setTitle(`💡 [AI Solution Proposal] ${cut(s.title_th, 100)}`)
+    .setColor(0x57f287)
+    .setDescription(`**Title (EN):** ${s.title_en}\n\n**คำอธิบาย:** ${cut(s.description_th, 500)}\n\n**Rationale:** ${cut(s.rationale, 500)}`)
+    .addFields(
+      { name: '🎯 Base Solution', value: baseSolutionText || '-', inline: true },
+      { name: 'สถานะ', value: reviewedBy ? 'รอการอนุมัติเพื่อสร้างเป็น Draft บนเว็บ (แก้ไขแล้ว)' : 'รอการอนุมัติเพื่อสร้างเป็น Draft บนเว็บ', inline: true }
+    )
+    .setTimestamp();
+
+  if (reviewedBy) {
+    embed.setFooter({ text: `แก้ไขล่าสุดโดย: ${reviewedBy}` });
+  }
+
+  const actionRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`flow1_approve_${s.id}`).setLabel('✅ อนุมัติสร้าง Draft บนเว็บ').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId(`flow1_edit_${s.id}`).setLabel('✏️ แก้ไข').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`flow1_retry_${s.id}`).setLabel('🔄 ลองใหม่').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(`flow1_reject_${s.id}`).setLabel('❌ ปฏิเสธ').setStyle(ButtonStyle.Danger)
+  );
+
+  return { embed, actionRow };
+}
+
 function buildFlow2Card(d, fallbackSolutionTitle) {
   const cut = (str, len) => (String(str || '').length > len ? str.slice(0, len - 3) + '...' : str || '-');
   const tagsFormatted = (d.tags || []).length > 0 ? (d.tags || []).map(t => `\`${t}\``).join(' ') : '`-`';
@@ -748,6 +774,142 @@ client.on('interactionCreate', async (interaction) => {
         return;
       }
 
+      if (interaction.customId.startsWith('flow1_retry_')) {
+        const id = interaction.customId.replace('flow1_retry_', '');
+        await interaction.deferReply();
+        const reviewedBy = formatReviewedBy(interaction.user);
+
+        let targetSolutionId = null;
+        let targetSolutionTitle = null;
+        try {
+          const { rows } = await pool.query(
+            'SELECT base_solution_id FROM solution_suggestions WHERE id = $1',
+            [parseInt(id, 10)]
+          );
+          if (rows.length && rows[0].base_solution_id) {
+            const baseId = String(rows[0].base_solution_id);
+            const { rows: solRows } = await pool.query(
+              'SELECT solution_id, solution_title FROM processed_solutions WHERE solution_id = $1 LIMIT 1',
+              [baseId]
+            );
+            if (solRows.length && solRows[0].solution_title) {
+              targetSolutionId = solRows[0].solution_id;
+              targetSolutionTitle = solRows[0].solution_title;
+            }
+          }
+        } catch (e) {
+          console.error('Error fetching base solution for retry:', e);
+        }
+
+        const webhookUrl = process.env.N8N_FLOW1_IDEA_WEBHOOK_URL || 'http://n8n:5678/webhook/flow1-request-idea';
+        try {
+          const res = await fetch(webhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              triggered_by: interaction.user.tag,
+              user_id: interaction.user.id,
+              requested_at: new Date().toISOString(),
+              target_solution_id: targetSolutionId || null,
+              target_solution_title: targetSolutionTitle || null
+            }),
+            signal: AbortSignal.timeout(10000)
+          });
+
+          if (res.ok) {
+            const targetMsg = targetSolutionTitle
+              ? `\n🎯 **ต่อยอดจากโซลูชันเดิม:** \`${targetSolutionTitle}\` (ID: ${targetSolutionId})`
+              : '\n🎲 **โหมด:** สำรวจและกระจายไอเดียตามแนวโน้มเทคโนโลยี';
+
+            return await interaction.editReply(
+              `🔄 **สั่งลองขอไอเดียโซลูชันใหม่จาก Flow 1 สำเร็จแล้ว!** (อ้างอิงจากไอเดีย #${id})${targetMsg}\n👤 **สั่งโดย:** \`${reviewedBy}\`\nระบบกำลังดึงข้อมูลฟีดและวิเคราะห์ Adjacent Solution ใหม่ผ่าน Gemini AI\nเมื่อประมวลผลเสร็จแล้วจะส่งการแจ้งเตือนมายังห้องนี้ครับ`
+            );
+          } else {
+            return await interaction.editReply(
+              `⚠️ **n8n ตอบกลับสถานะ HTTP ${res.status}**\nปลายทาง: \`${webhookUrl}\``
+            );
+          }
+        } catch (err) {
+          return await interaction.editReply(
+            `⚠️ **ไม่สามารถเรียก n8n ได้:** ${err.message}\nปลายทาง: \`${webhookUrl}\``
+          );
+        }
+      }
+
+      if (interaction.customId.startsWith('flow1_edit_')) {
+        const id = parseInt(interaction.customId.replace('flow1_edit_', ''), 10);
+        const { rows } = await pool.query(
+          'SELECT id, base_solution_id, title_th, title_en, description_th, description_en, rationale, status FROM solution_suggestions WHERE id = $1',
+          [id]
+        );
+
+        if (!rows.length) {
+          return await interaction.reply({ content: '❌ ไม่พบข้อมูลไอเดียโซลูชันนี้', ephemeral: true });
+        }
+
+        const item = rows[0];
+        if (item.status === 'published_as_draft' || item.status === 'publishing') {
+          return await interaction.reply({
+            content: `⚠️ ไอเดียนี้ได้รับการอนุมัติ/สร้างบนเว็บแล้ว ไม่สามารถแก้ไขได้`,
+            ephemeral: true
+          });
+        }
+
+        const modal = new ModalBuilder()
+          .setCustomId(`modal_flow1_edit_${id}`)
+          .setTitle(`✏️ แก้ไขไอเดียโซลูชัน #${id}`.slice(0, 45));
+
+        const titleThInput = new TextInputBuilder()
+          .setCustomId('title_th')
+          .setLabel('ชื่อโซลูชัน (ภาษาไทย)')
+          .setStyle(TextInputStyle.Short)
+          .setValue((item.title_th || '').slice(0, 150))
+          .setMaxLength(150)
+          .setRequired(true);
+
+        const titleEnInput = new TextInputBuilder()
+          .setCustomId('title_en')
+          .setLabel('Title (English)')
+          .setStyle(TextInputStyle.Short)
+          .setValue((item.title_en || '').slice(0, 150))
+          .setMaxLength(150)
+          .setRequired(true);
+
+        const descThInput = new TextInputBuilder()
+          .setCustomId('description_th')
+          .setLabel('คำอธิบาย (ภาษาไทย)')
+          .setStyle(TextInputStyle.Paragraph)
+          .setValue((item.description_th || '').slice(0, 1000))
+          .setMaxLength(1000)
+          .setRequired(true);
+
+        const descEnInput = new TextInputBuilder()
+          .setCustomId('description_en')
+          .setLabel('Description (English)')
+          .setStyle(TextInputStyle.Paragraph)
+          .setValue((item.description_en || '').slice(0, 1000))
+          .setMaxLength(1000)
+          .setRequired(false);
+
+        const rationaleInput = new TextInputBuilder()
+          .setCustomId('rationale')
+          .setLabel('เหตุผลเชิงกลยุทธ์ (Rationale)')
+          .setStyle(TextInputStyle.Paragraph)
+          .setValue((item.rationale || '').slice(0, 1000))
+          .setMaxLength(1000)
+          .setRequired(false);
+
+        modal.addComponents(
+          new ActionRowBuilder().addComponents(titleThInput),
+          new ActionRowBuilder().addComponents(titleEnInput),
+          new ActionRowBuilder().addComponents(descThInput),
+          new ActionRowBuilder().addComponents(descEnInput),
+          new ActionRowBuilder().addComponents(rationaleInput)
+        );
+
+        return await interaction.showModal(modal);
+      }
+
       if (interaction.customId.startsWith('flow2_publish_')) {
         const id = interaction.customId.replace('flow2_publish_', '');
         await interaction.deferUpdate();
@@ -1008,6 +1170,68 @@ client.on('interactionCreate', async (interaction) => {
         const rawCookie = interaction.fields.getTextInputValue('cookie_value');
         await interaction.deferReply({ ephemeral: true });
         return await saveAndVerifyDevtoCookie(interaction, rawCookie, pool);
+      }
+
+      if (interaction.customId.startsWith('modal_flow1_edit_')) {
+        const id = parseInt(interaction.customId.replace('modal_flow1_edit_', ''), 10);
+        const { rows: existingRows } = await pool.query(
+          'SELECT id, base_solution_id, status FROM solution_suggestions WHERE id = $1',
+          [id]
+        );
+
+        if (!existingRows.length) {
+          return await interaction.reply({ content: '❌ ไม่พบข้อมูลไอเดียนี้ในระบบ', ephemeral: true });
+        }
+
+        const newTitleTh = interaction.fields.getTextInputValue('title_th').trim();
+        const newTitleEn = interaction.fields.getTextInputValue('title_en').trim();
+        const newDescTh = interaction.fields.getTextInputValue('description_th').trim();
+        const newDescEn = interaction.fields.getTextInputValue('description_en')?.trim() || '';
+        const newRationale = interaction.fields.getTextInputValue('rationale')?.trim() || '';
+        const reviewedBy = formatReviewedBy(interaction.user);
+
+        const updateRes = await pool.query(
+          `UPDATE solution_suggestions
+           SET title_th = $1,
+               title_en = $2,
+               description_th = $3,
+               description_en = COALESCE(NULLIF($4, ''), description_en),
+               rationale = COALESCE(NULLIF($5, ''), rationale),
+               reviewed_at = NOW(),
+               reviewed_by = $6
+           WHERE id = $7 AND status IN ('pending_review', 'failed')
+           RETURNING *;`,
+          [newTitleTh, newTitleEn, newDescTh, newDescEn, newRationale, reviewedBy, id]
+        );
+
+        if (!updateRes.rows.length) {
+          return await interaction.reply({
+            content: '⚠️ ไม่สามารถบันทึกได้ อาจเนื่องจากไอเดียนี้มีสถานะไม่พร้อมแก้ไข',
+            ephemeral: true
+          });
+        }
+
+        const updated = updateRes.rows[0];
+        let baseSolutionText = String(updated.base_solution_id || '-');
+        if (updated.base_solution_id) {
+          try {
+            const { rows: solRows } = await pool.query(
+              'SELECT solution_title FROM processed_solutions WHERE solution_id = $1 LIMIT 1',
+              [String(updated.base_solution_id)]
+            );
+            if (solRows.length && solRows[0].solution_title) {
+              baseSolutionText = `${solRows[0].solution_title} (ID: ${updated.base_solution_id})`;
+            }
+          } catch (_) {}
+        }
+
+        const { embed, actionRow } = buildFlow1Card(updated, baseSolutionText, reviewedBy);
+
+        await interaction.update({
+          embeds: [embed],
+          components: [actionRow]
+        });
+        return;
       }
 
       if (interaction.customId.startsWith('modal_flow2_edit_')) {
@@ -1323,22 +1547,9 @@ app.post('/notify', async (req, res) => {
         } catch (_) {}
       }
 
-      const embed = new EmbedBuilder()
-        .setTitle(`💡 [AI Solution Proposal] ${cut(s.title_th, 100)}`)
-        .setColor(0x57f287)
-        .setDescription(`**Title (EN):** ${s.title_en}\n\n**คำอธิบาย:** ${cut(s.description_th, 500)}\n\n**Rationale:** ${cut(s.rationale, 500)}`)
-        .addFields(
-          { name: '🎯 Base Solution', value: baseSolutionText, inline: true },
-          { name: 'สถานะ', value: 'รอการอนุมัติเพื่อสร้างเป็น Draft บนเว็บ', inline: true }
-        )
-        .setTimestamp();
+      const { embed, actionRow } = buildFlow1Card(s, baseSolutionText);
 
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`flow1_approve_${s.id}`).setLabel('✅ อนุมัติสร้าง Draft บนเว็บ').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId(`flow1_reject_${s.id}`).setLabel('❌ ปฏิเสธ').setStyle(ButtonStyle.Danger)
-      );
-
-      await channel.send({ embeds: [embed], components: [row] });
+      await channel.send({ embeds: [embed], components: [actionRow] });
       return res.json({ ok: true, type: 'flow1_suggestion', id: s.id });
     }
 
