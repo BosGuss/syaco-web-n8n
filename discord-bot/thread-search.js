@@ -459,39 +459,131 @@ function isFacebookPost(rawUrl) {
   return false;
 }
 
+// คำค้น/เจตนาที่ไม่เกี่ยวข้องกับการหาโซลูชันหรือบริการทางธุรกิจ B2B
+// (กรองทิ้ง เช่น รับสมัครงาน/หางาน, ขายรถบรรทุก/ของมือสอง, สื่อการสอน/การบ้านเด็ก, สุขภาพ/บันเทิง, สินเชื่อ/อสังหา)
+const NEGATIVE_INTENT = [
+  // รับสมัครงาน / หางาน
+  'รับสมัคร', 'ตามหาคน', 'หางาน', 'เปิดรับสมัคร', 'recruiter', 'เงินเดือน', 'สัมภาษณ์', 'resume', 'เรซูเม่', 'job description', 'สมัครงาน', 'หาคนร่วมงาน', 'ร่วมงานกับเรา',
+  // ซื้อขายของมือสอง / รถบรรทุก / อสังหา / สินเชื่อ
+  'ขายครับ', 'ขายด่วน', 'มือสอง', 'รถบรรทุก', 'รถพ่วง', 'รถดั้ม', 'สภาพสวย', 'ราคา...', 'ดาวน์', 'ผ่อน', 'ให้เช่า', 'ขายที่ดิน', 'ส่งฟรี', 'พร้อมส่ง',
+  'mortgage', 'zoning', 'เงินกู้', 'สินเชื่อ', 'คอนโด', 'บ้านเดี่ยว', 'ทาวน์เฮ้าส์', 'อสังหาริมทรัพย์',
+  // สื่อการสอน / การบ้าน
+  'แบบฝึกหัด', 'สื่อการสอน', 'วิชาคณิตศาสตร์', 'การบ้าน', 'เฉลย', 'ชั้น ป.', 'ชั้น ม.',
+  // สุขภาพ / อาหาร / แฟชั่น / บันเทิง
+  'เปลี่ยนเส้นเอ็น', 'ลดน้ำหนัก', 'อาหารเสริม', 'รีวิวหนัง', 'trailer', 'สิว', 'ผิวขาว', 'เสื้อผ้า'
+];
+
+// คำระบุหัวข้อระบบ / ซอฟต์แวร์ / ดิจิทัลทรานส์ฟอร์เมชัน B2B (ใช้ \b สำหรับตัวย่อสั้นภาษาอังกฤษเพื่อไม่ให้ชนคำทั่วไป เช่น proposed)
+const B2B_SOLUTION_TOPICS_REGEX = /(?:\b(?:erp|sap|wms|tms|plc|scada|pos|iot|ocr|api|cloud|database)\b|dashboard|power\s*bi|automation|สต็อก|สต๊อก|คลังสินค้า|ขนส่ง|logistics|ระบบโรงงาน|ตัดสต็อก|บาร์โค้ด|barcode|ซอฟต์แวร์|แอปพลิเคชัน|line\s*oa|workflow|อนุมัติ|defect|วางระบบ|จัดซื้อ|การผลิต|จัดการข้อมูล|supply\s*chain|smart\s*warehouse|digital\s*transformation)/i;
+
+// คำระบุเจตนาการสอบถาม / แก้ปัญหา / เปรียบเทียบ / ขอคำแนะนำด้านโซลูชันหรือบริการ
+const SOLUTION_INQUIRY_INTENT_REGEX = /(?:แนะนำ|ปัญหา|ทำไม|อย่างไร|ช่วย|ระบบ|โปรแกรม|พัฒนา|เชื่อมต่อ|เปรียบเทียบ|เทียบ|เจ้าไหน|ดีไหม|สอบถาม|วางระบบ|จัดการ|โซลูชัน|solution|service|แนวคิด|เทคนิค|ข้อดี|ข้อเสีย|ปรึกษา|แนะนำหน่อย|หาบริษัท|หาคนทำ|รับทำ|ใช้งานยังไง|เลือกยังไง|\b(?:vs|versus|difference|compare|comparison|guide|how|tips|best|problem|challenge|challenges|solutions?|implement(?:ation)?|optimize|transform|architecture|overview|review)\b)/i;
+
 /**
- * ตรวจสอบความถูกต้องของ URL และกรองระยะเวลาไม่เกิน 1 ปี
+ * ตรวจสอบความสดใหม่ของโพสต์/กระทู้ ย้อนหลังไม่เกินประมาณ 1 ปี นิดๆ (~12-14 เดือน)
+ * - Pantip: กระทู้ต้องมี Topic ID >= 42900000 (เริ่มปี 2024 เป็นต้นไป)
+ * - LinkedIn: ถอด Snowflake timestamp จาก Activity ID (บิต 41 ms) ต้องไม่เกิน 400 วัน (~1.1 ปี)
+ * - Facebook & ทั่วไป: ตรวจสอบปี ถ้ามีปีเก่า (2015-2023 / 2558-2566 / ปี 60-66) และไม่มีปีใหม่ (2024-2026 / 2567-2569 / ปี 67-69) ให้ตัดออก
+ */
+function isRecentPost(item) {
+  const url = item.url || '';
+  const text = `${item.title || ''} ${item.content || item.snippet || ''}`;
+  const now = Date.now();
+  const ONE_YEAR_AND_A_BIT_MS = 400 * 24 * 60 * 60 * 1000; // ~13 เดือน
+
+  // A. Pantip topic ID check
+  if (url.includes('pantip.com')) {
+    const m = url.match(/\/topic\/(\d+)/);
+    if (m) {
+      const topicId = parseInt(m[1], 10);
+      // กระทู้ Pantip ต่ำกว่า 42900000 เป็นกระทู้เก่าก่อนปี 2024
+      if (topicId < 42900000) return false;
+    }
+  }
+
+  // B. LinkedIn Snowflake timestamp check
+  if (url.includes('linkedin.com')) {
+    const m = url.match(/activity[a-zA-Z0-9_-]*?(\d{18,20})/);
+    if (m) {
+      try {
+        const idBig = BigInt(m[1]);
+        const ms = Number(idBig >> 22n);
+        if (ms > 1000000000000 && ms < now + 86400000) {
+          const age = now - ms;
+          if (age > ONE_YEAR_AND_A_BIT_MS) return false;
+        }
+      } catch (_) {}
+    }
+  }
+
+  // C. กรองปีเก่าที่ระบุในข้อความ (ทุกแพลตฟอร์ม รวมถึง Facebook)
+  const hasOldYear = /(?:201[0-9]|202[0-3]|255[0-9]|256[0-6]|ปี\s*6[0-6]|ปี\s*5[0-9])/.test(text);
+  const hasRecentYear = /(?:202[4-6]|256[7-9]|ปี\s*6[7-9])/.test(text);
+
+  if (hasOldYear && !hasRecentYear) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * ตรวจสอบว่าเป็นโพสต์ที่เกี่ยวกับ B2B Solution / Service จริงๆ
+ * 1. ปฏิเสธ Negative Intent (รับสมัครงาน, ขายรถ/ของมือสอง, การบ้านเด็ก, บันเทิง/สุขภาพ)
+ * 2. ตรวจสอบหัวข้อทางเทคโนโลยี/โรงงาน/ซอฟต์แวร์
+ * 3. ตรวจสอบเจตนาการสอบถาม/ปัญหา/ปรึกษา/เปรียบเทียบ/วางระบบ
+ */
+function isSolutionPost(item) {
+  const text = `${item.title || ''} ${item.content || item.snippet || ''}`.toLowerCase();
+  if (!text.trim()) return false;
+
+  // 1. Negative Intent Check
+  for (const neg of NEGATIVE_INTENT) {
+    if (text.includes(neg.toLowerCase())) {
+      return false;
+    }
+  }
+
+  // 2. B2B Solution / System Topic Check
+  if (!B2B_SOLUTION_TOPICS_REGEX.test(text)) {
+    return false;
+  }
+
+  // 3. Solution Inquiry / Problem / Service Intent Check
+  if (!SOLUTION_INQUIRY_INTENT_REGEX.test(text)) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * ตรวจสอบความถูกต้องของ URL และกรองระยะเวลาไม่เกิน 1 ปีนิดๆ
  */
 function isValidCandidate(item, targetPlatform = 'all') {
   const url = item.url || '';
-  const title = item.title || '';
-  const content = item.content || '';
-  const fullText = `${title} ${content}`;
-
   const platform = detectPlatform(url);
   if (!platform) return false;
   if (targetPlatform !== 'all' && platform !== targetPlatform) return false;
 
-  // 1. Pantip: ต้องเป็นกระทู้จริง (/topic/XXXXX) และมีอายุไม่เกิน ~1 ปี
+  // 1. Pantip: ต้องเป็นกระทู้จริง (/topic/XXXXX) และสดใหม่ภายใน ~1 ปี
   if (platform === 'pantip') {
     const topicMatch = url.match(/\/topic\/(\d+)/);
     if (!topicMatch) return false;
-    const topicId = parseInt(topicMatch[1], 10);
-    if (topicId >= 42800000) return true;
-    const hasRecentYear = /(?:202[4-6]|256[7-9])/.test(fullText);
-    return hasRecentYear;
+    return isRecentPost(item);
   }
 
-  // 2. LinkedIn: ต้องเป็นโพสต์หรือบทความ Pulse (ไม่เอาหน้า login หรือ directory)
+  // 2. LinkedIn: ต้องเป็นโพสต์หรือบทความ Pulse และสดใหม่ภายใน ~1 ปี
   if (platform === 'linkedin') {
     const isPostOrPulse = url.includes('/posts/') || url.includes('/pulse/') || url.includes('/feed/update/');
     if (!isPostOrPulse) return false;
-    return true;
+    return isRecentPost(item);
   }
 
-  // 3. Facebook: ต้องเป็น "โพสต์" เท่านั้น (ไม่เอาหน้ากลุ่มหลัก ไม่เอาหน้าเพจหลัก เพื่อให้สามารถเข้าไปตอบ/ทำ Backlink ได้จริง)
+  // 3. Facebook: ต้องเป็น "โพสต์" เท่านั้น และสดใหม่ภายใน ~1 ปี
   if (platform === 'facebook') {
-    return isFacebookPost(url);
+    if (!isFacebookPost(url)) return false;
+    return isRecentPost(item);
   }
 
   return false;
@@ -557,16 +649,21 @@ function formatFacebookContent(rawTitle, rawSnippet, primaryTerm) {
 }
 async function searchFacebookThreads(terms, limit = 5, solutionCategory = '') {
   const primary = terms[0] || 'Business Solution';
-  // คำค้นเจาะจงเฉพาะหน้าโพสต์ (inurl:posts หรือ inurl:permalink)
+  // คำค้นเจาะจงเฉพาะหน้าโพสต์ พร้อมระบุคำค้นที่เน้นโซลูชัน
   const queries = [
-    `site:facebook.com inurl:posts ${primary}`,
     `site:facebook.com/groups inurl:posts ${primary}`,
-    `site:facebook.com "posts" ${primary}`,
+    `site:facebook.com inurl:posts ${primary} แนะนำ`,
+    `site:facebook.com inurl:posts ${primary} ปัญหา`,
+    `site:facebook.com inurl:posts ${primary} ระบบ`,
+    `site:facebook.com inurl:posts ${primary} 2567`,
+    `site:facebook.com inurl:posts ${primary} 2568`,
+    `site:facebook.com inurl:posts ${primary}`,
     `site:facebook.com inurl:permalink ${primary}`
   ];
   if (terms[1]) {
-    queries.push(`site:facebook.com inurl:posts ${terms[1]}`);
     queries.push(`site:facebook.com/groups inurl:posts ${terms[1]}`);
+    queries.push(`site:facebook.com inurl:posts ${terms[1]} แนะนำ`);
+    queries.push(`site:facebook.com inurl:posts ${terms[1]}`);
   }
 
   const results = [];
@@ -593,14 +690,30 @@ async function searchFacebookThreads(terms, limit = 5, solutionCategory = '') {
         if (unfurled?.snippet) snippet = unfurled.snippet;
       }
 
+      // ตรวจสอบว่าสามารถดึงเนื้อหาจริงได้หรือไม่ (ถ้ายังคงว่างหรือเป็นข้อความของระบบ Facebook แสดงว่าเป็นโพสต์ปิด/ดูไม่ได้)
+      const isStillGeneric = !title ||
+                             title.includes('Link to facebook.com') ||
+                             title === 'Facebook' ||
+                             title === 'Log into Facebook' ||
+                             !snippet ||
+                             snippet.includes('The site owner hides') ||
+                             snippet.length < 15;
+      if (isStillGeneric) continue;
+
+      const postItem = {
+        url: clean,
+        title,
+        content: snippet,
+        snippet
+      };
+
+      // ตรวจสอบความสดใหม่ (~1 ปี) และเจตนาว่าเป็น B2B Solution/Service จริงๆ จากเนื้อหาจริง
+      if (!isRecentPost(postItem)) continue;
+      if (!isSolutionPost(postItem)) continue;
+
       const formatted = formatFacebookContent(title, snippet, primary);
       title = formatted.title;
       snippet = formatted.snippet;
-
-      // กรองเฉพาะกระทู้/โพสต์ที่มีความเกี่ยวข้องกับธุรกิจ ไอที โรงงาน ซอฟต์แวร์ และโซลูชัน
-      const fullText = `${title} ${snippet}`;
-      const isRelevant = /(?:erp|sap|wms|สต็อก|คลัง|ขนส่ง|logistics|จัดซื้อ|โรงงาน|การผลิต|โปรแกรม|ระบบ|pos|dashboard|bi|plc|automation|ซอฟต์แวร์|ไอที|ธุรกิจ|sme|บาร์โค้ด|barcode|database|api|scada|data|engineer|developer|management)/i.test(fullText);
-      if (!isRelevant) continue;
 
       results.push({
         platform: 'facebook',
@@ -618,10 +731,10 @@ async function searchFacebookThreads(terms, limit = 5, solutionCategory = '') {
   // หากผลลัพธ์ยังไม่เต็ม limit ให้ค้นหาด้วยคำค้นสำรองที่เจาะจงโพสต์
   if (results.length < limit) {
     const backupQueries = [
-      `site:facebook.com inurl:posts "${primary}"`,
-      `site:facebook.com/groups inurl:posts "ระบบ"`,
-      `site:facebook.com inurl:posts "โปรแกรม"`,
-      `site:facebook.com inurl:posts "โรงงาน"`
+      `site:facebook.com/groups inurl:posts "${primary}"`,
+      `site:facebook.com inurl:posts "${primary}" แนะนำ`,
+      `site:facebook.com inurl:posts "${primary}" ปัญหา`,
+      `site:facebook.com inurl:posts "ระบบ" "${primary}"`
     ];
     for (const bq of backupQueries) {
       if (results.length >= limit) break;
@@ -640,13 +753,28 @@ async function searchFacebookThreads(terms, limit = 5, solutionCategory = '') {
           if (unfurled?.snippet) snippet = unfurled.snippet;
         }
 
+        const isStillGeneric = !title ||
+                               title.includes('Link to facebook.com') ||
+                               title === 'Facebook' ||
+                               title === 'Log into Facebook' ||
+                               !snippet ||
+                               snippet.includes('The site owner hides') ||
+                               snippet.length < 15;
+        if (isStillGeneric) continue;
+
+        const postItem = {
+          url: clean,
+          title,
+          content: snippet,
+          snippet
+        };
+
+        if (!isRecentPost(postItem)) continue;
+        if (!isSolutionPost(postItem)) continue;
+
         const formatted = formatFacebookContent(title, snippet, primary);
         title = formatted.title;
         snippet = formatted.snippet;
-
-        const fullText = `${title} ${snippet}`;
-        const isRelevant = /(?:erp|sap|wms|สต็อก|คลัง|ขนส่ง|logistics|จัดซื้อ|โรงงาน|การผลิต|โปรแกรม|ระบบ|pos|dashboard|bi|plc|automation|ซอฟต์แวร์|ไอที|ธุรกิจ|sme|บาร์โค้ด|barcode|database|api|scada|data|engineer|developer)/i.test(fullText);
-        if (!isRelevant) continue;
 
         results.push({
           platform: 'facebook',
@@ -668,10 +796,16 @@ async function searchFacebookThreads(terms, limit = 5, solutionCategory = '') {
 async function searchPantipThreads(terms, limit = 5) {
   const primary = terms[0] || 'Business Solution';
   const queries = [
-    `site:pantip.com/topic ${primary}`,
-    `pantip ${primary}`
+    `site:pantip.com/topic ${primary} แนะนำ`,
+    `site:pantip.com/topic ${primary} ปัญหา`,
+    `site:pantip.com/topic ${primary} ระบบ`,
+    `site:pantip.com/topic ${primary} 2567`,
+    `site:pantip.com/topic ${primary} 2568`,
+    `site:pantip.com/topic ${primary}`
   ];
   if (terms[1]) {
+    queries.push(`site:pantip.com/topic ${terms[1]} แนะนำ`);
+    queries.push(`site:pantip.com/topic ${terms[1]} ปัญหา`);
     queries.push(`site:pantip.com/topic ${terms[1]}`);
   }
 
@@ -684,6 +818,8 @@ async function searchPantipThreads(terms, limit = 5) {
 
     for (const item of rawList) {
       if (!isValidCandidate(item, 'pantip')) continue;
+      if (!isSolutionPost(item)) continue;
+
       const clean = cleanUrl(item.url, 'pantip');
       if (seenUrls.has(clean)) continue;
       seenUrls.add(clean);
@@ -709,10 +845,15 @@ async function searchPantipThreads(terms, limit = 5) {
 async function searchLinkedInThreads(terms, limit = 5) {
   const primary = terms[0] || 'Business Solution';
   const queries = [
-    `site:linkedin.com/posts ${primary}`,
+    `site:linkedin.com/posts ${primary} Thailand`,
+    `site:linkedin.com/posts ${primary} solution`,
+    `site:linkedin.com/posts ${primary} ระบบ`,
+    `site:linkedin.com/posts ${primary} 2024`,
+    `site:linkedin.com/posts ${primary} 2025`,
     `site:linkedin.com/pulse ${primary}`
   ];
   if (terms[1]) {
+    queries.push(`site:linkedin.com/posts ${terms[1]} Thailand`);
     queries.push(`site:linkedin.com/posts ${terms[1]}`);
   }
 
@@ -725,6 +866,8 @@ async function searchLinkedInThreads(terms, limit = 5) {
 
     for (const item of rawList) {
       if (!isValidCandidate(item, 'linkedin')) continue;
+      if (!isSolutionPost(item)) continue;
+
       const clean = cleanUrl(item.url, 'linkedin');
       if (seenUrls.has(clean)) continue;
       seenUrls.add(clean);
@@ -943,6 +1086,9 @@ module.exports = {
   detectPlatform,
   isValidCandidate,
   isFacebookPost,
+  isRecentPost,
+  isSolutionPost,
+  NEGATIVE_INTENT,
   unfurlFacebookMetadata,
   SYACO_CATALOG,
   CURATED_FACEBOOK_COMMUNITIES
