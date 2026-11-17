@@ -108,6 +108,7 @@ services:
     ports:
       - "5678:5678"
     environment:
+      - N8N_LOG_LEVEL=info
       - N8N_HOST=${N8N_HOST:-localhost}
       - N8N_PORT=5678
       - N8N_PROTOCOL=${N8N_PROTOCOL:-http}
@@ -117,7 +118,7 @@ services:
       - BLUESKY_HANDLE=${BLUESKY_HANDLE}
       - BLUESKY_APP_PASSWORD=${BLUESKY_APP_PASSWORD}
       - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.5-flash-lite}
-      - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true
+      - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=false
       - N8N_AI_ASSISTANT_ENABLED=true
       - N8N_AI_ASSISTANT_SANDBOX_URL=http://sandbox-api:8080
       - N8N_AI_ASSISTANT_SANDBOX_API_KEY=${N8N_SANDBOX_SERVICE_API_KEY}
