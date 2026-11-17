@@ -746,16 +746,74 @@ client.on('interactionCreate', async (interaction) => {
               components: []
             });
           } else {
+            const { rows: curRows } = await pool.query('SELECT * FROM solution_suggestions WHERE id = $1', [parseInt(id, 10)]);
+            if (curRows.length) {
+              const currentItem = curRows[0];
+              let baseSolutionText = String(currentItem.base_solution_id || '-');
+              if (currentItem.base_solution_id) {
+                try {
+                  const { rows: solRows } = await pool.query(
+                    'SELECT solution_title FROM processed_solutions WHERE solution_id = $1 LIMIT 1',
+                    [String(currentItem.base_solution_id)]
+                  );
+                  if (solRows.length && solRows[0].solution_title) {
+                    baseSolutionText = `${solRows[0].solution_title} (ID: ${currentItem.base_solution_id})`;
+                  }
+                } catch (_) {}
+              }
+              const { embed, actionRow } = buildFlow1Card(currentItem, baseSolutionText, reviewedBy);
+              embed.setColor(0xed4245);
+              embed.addFields({
+                name: '⚠️ สาเหตุที่ไม่สามารถสร้าง Draft ได้',
+                value: String(result.message || result.error || 'Unknown error').slice(0, 1024),
+                inline: false
+              });
+              await interaction.editReply({
+                content: `⚠️ **สร้าง Draft บน SyaCo ไม่สำเร็จ:** ${result.message || result.error || 'Server error'}\n*(สามารถกดปุ่ม **"✅ อนุมัติสร้าง Draft บนเว็บ"** ด้านล่างเพื่อลองใหม่ หรือกด **"✏️ แก้ไข"** / **"🔄 ลองใหม่"** ได้ครับ)*`,
+                embeds: [embed],
+                components: [actionRow]
+              });
+            } else {
+              await interaction.editReply({
+                content: `⚠️ ไม่สามารถสร้าง Draft ได้: ${result.message || result.error || 'Unknown error'}`,
+                components: []
+              });
+            }
+          }
+        } catch (err) {
+          const { rows: curRows } = await pool.query('SELECT * FROM solution_suggestions WHERE id = $1', [parseInt(id, 10)]).catch(() => ({ rows: [] }));
+          if (curRows.length) {
+            const currentItem = curRows[0];
+            let baseSolutionText = String(currentItem.base_solution_id || '-');
+            if (currentItem.base_solution_id) {
+              try {
+                const { rows: solRows } = await pool.query(
+                  'SELECT solution_title FROM processed_solutions WHERE solution_id = $1 LIMIT 1',
+                  [String(currentItem.base_solution_id)]
+                );
+                if (solRows.length && solRows[0].solution_title) {
+                  baseSolutionText = `${solRows[0].solution_title} (ID: ${currentItem.base_solution_id})`;
+                }
+              } catch (_) {}
+            }
+            const { embed, actionRow } = buildFlow1Card(currentItem, baseSolutionText);
+            embed.setColor(0xed4245);
+            embed.addFields({
+              name: '⚠️ ข้อผิดพลาดของระบบ',
+              value: String(err.message || 'Unknown error').slice(0, 1024),
+              inline: false
+            });
             await interaction.editReply({
-              content: `⚠️ ไม่สามารถสร้าง Draft ได้: ${result.message || result.error || 'Unknown error'}`,
+              content: `⚠️ **เกิดข้อผิดพลาดในการสร้าง Draft:** ${err.message}\n*(สามารถกดลองอนุมัติใหม่ได้จากปุ่มด้านล่าง)*`,
+              embeds: [embed],
+              components: [actionRow]
+            });
+          } else {
+            await interaction.editReply({
+              content: `⚠️ เกิดข้อผิดพลาดในการสร้าง Draft: ${err.message}`,
               components: []
             });
           }
-        } catch (err) {
-          await interaction.editReply({
-            content: `⚠️ เกิดข้อผิดพลาดในการสร้าง Draft: ${err.message}`,
-            components: []
-          });
         }
         return;
       }

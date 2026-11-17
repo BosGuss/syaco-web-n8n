@@ -238,17 +238,39 @@ async function approveAndCreateDraft({
   // 3. Build SyaCo draft payload
   const payload = buildSyacoPayload(item, nextOrder);
 
-  // 3. Call SyaCo Solutions API
+  // 3. Call SyaCo Solutions API (with transient retry on 5xx or network drops)
   try {
-    const response = await fetchFn(apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(15000)
-    });
+    let response = null;
+    const maxRetries = 2;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        if (attempt > 0) {
+          await new Promise(r => setTimeout(r, 1500 * attempt));
+        }
+        response = await fetchFn(apiUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(payload),
+          signal: AbortSignal.timeout(15000)
+        });
+
+        if (response.status >= 500 && attempt < maxRetries) {
+          console.warn(`[SolutionDraft] SyaCo API returned HTTP ${response.status}. Retrying attempt ${attempt + 1}/${maxRetries}...`);
+          continue;
+        }
+        break;
+      } catch (err) {
+        if (attempt < maxRetries) {
+          console.warn(`[SolutionDraft] Fetch attempt ${attempt + 1} failed: ${err.message}. Retrying...`);
+          continue;
+        }
+        throw err;
+      }
+    }
 
     let resData = null;
     try {
