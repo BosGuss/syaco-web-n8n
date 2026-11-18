@@ -351,7 +351,14 @@ async function unfurlFacebookMetadata(url) {
     if (title === 'Facebook' || title === 'Log into Facebook' || title.includes('Link to facebook.com')) {
       title = '';
     }
-    return { title, snippet };
+
+    // ถอด Timestamp วันเวลาที่โพสต์จาก Metadata ของ Facebook (creation_time, created_time, data-utime)
+    const timeMatch = html.match(/"creation_time"\s*:\s*(\d{10})/i) ||
+                      html.match(/"created_time"\s*:\s*(\d{10})/i) ||
+                      html.match(/data-utime="(\d{10})"/i);
+    const publishTime = timeMatch ? parseInt(timeMatch[1], 10) * 1000 : null;
+
+    return { title, snippet, publishTime };
   } catch (_) {
     return null;
   }
@@ -480,28 +487,39 @@ const B2B_SOLUTION_TOPICS_REGEX = /(?:\b(?:erp|sap|wms|tms|plc|scada|pos|iot|ocr
 const SOLUTION_INQUIRY_INTENT_REGEX = /(?:แนะนำ|ปัญหา|ทำไม|อย่างไร|ช่วย|ระบบ|โปรแกรม|พัฒนา|เชื่อมต่อ|เปรียบเทียบ|เทียบ|เจ้าไหน|ดีไหม|สอบถาม|วางระบบ|จัดการ|โซลูชัน|solution|service|แนวคิด|เทคนิค|ข้อดี|ข้อเสีย|ปรึกษา|แนะนำหน่อย|หาบริษัท|หาคนทำ|รับทำ|ใช้งานยังไง|เลือกยังไง|\b(?:vs|versus|difference|compare|comparison|guide|how|tips|best|problem|challenge|challenges|solutions?|implement(?:ation)?|optimize|transform|architecture|overview|review)\b)/i;
 
 /**
- * ตรวจสอบความสดใหม่ของโพสต์/กระทู้ ย้อนหลังไม่เกินประมาณ 1 ปี นิดๆ (~12-14 เดือน)
- * - Pantip: กระทู้ต้องมี Topic ID >= 42900000 (เริ่มปี 2024 เป็นต้นไป)
- * - LinkedIn: ถอด Snowflake timestamp จาก Activity ID (บิต 41 ms) ต้องไม่เกิน 400 วัน (~1.1 ปี)
- * - Facebook & ทั่วไป: ตรวจสอบปี ถ้ามีปีเก่า (2015-2023 / 2558-2566 / ปี 60-66) และไม่มีปีใหม่ (2024-2026 / 2567-2569 / ปี 67-69) ให้ตัดออก
+ * ตรวจสอบความสดใหม่ของโพสต์/กระทู้ ย้อนหลังไม่เกิน 1 ปี (<= 365 วัน)
+ * - Exact publishTime / creation_time (จาก OpenGraph/Facebook HTML/JSON): ต้องไม่เกิน 365 วัน
+ * - Pantip: กระทู้ต้องมี Topic ID >= 43300000 (กระทู้ใหม่ภายใน 1 ปี ย้อนหลังจากปลายปี 2026)
+ * - LinkedIn: ถอด Snowflake timestamp จาก Activity ID ต้องไม่เกิน 365 วัน
+ * - Facebook & ทั่วไป: ตรวจสอบปี โดยคำนวณตามปีปัจจุบัน (ถ้ามีปีเก่า <= 2024 / <= 2567 และไม่มีปีใหม่ 2025-2027 / 2568-2570 ให้ตัดออก)
+ * - Facebook permalink: ถ้าไม่มี timestamp และไม่มีการระบุปีใหม่ ให้ตัดออกเนื่องจากเป็นโครงสร้าง URL เก่า
  */
 function isRecentPost(item) {
   const url = item.url || '';
   const text = `${item.title || ''} ${item.content || item.snippet || ''}`;
   const now = Date.now();
-  const ONE_YEAR_AND_A_BIT_MS = 400 * 24 * 60 * 60 * 1000; // ~13 เดือน
+  const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
 
-  // A. Pantip topic ID check
+  // 1. ตรวจสอบ Timestamp ที่ได้จากการ Unfurl / API โดยตรง (แม่นยำ 100%)
+  const publishTime = item.publishTime || item.creationTime;
+  if (publishTime && typeof publishTime === 'number') {
+    const age = now - publishTime;
+    if (age > ONE_YEAR_MS) {
+      return false;
+    }
+  }
+
+  // 2. Pantip topic ID check
   if (url.includes('pantip.com')) {
     const m = url.match(/\/topic\/(\d+)/);
     if (m) {
       const topicId = parseInt(m[1], 10);
-      // กระทู้ Pantip ต่ำกว่า 42900000 เป็นกระทู้เก่าก่อนปี 2024
-      if (topicId < 42900000) return false;
+      // กระทู้ Pantip ต่ำกว่า 43300000 เป็นกระทู้เก่าเกิน 1 ปี
+      if (topicId < 43300000) return false;
     }
   }
 
-  // B. LinkedIn Snowflake timestamp check
+  // 3. LinkedIn Snowflake timestamp check
   if (url.includes('linkedin.com')) {
     const m = url.match(/activity[a-zA-Z0-9_-]*?(\d{18,20})/);
     if (m) {
@@ -510,18 +528,27 @@ function isRecentPost(item) {
         const ms = Number(idBig >> 22n);
         if (ms > 1000000000000 && ms < now + 86400000) {
           const age = now - ms;
-          if (age > ONE_YEAR_AND_A_BIT_MS) return false;
+          if (age > ONE_YEAR_MS) return false;
         }
       } catch (_) {}
     }
   }
 
-  // C. กรองปีเก่าที่ระบุในข้อความ (ทุกแพลตฟอร์ม รวมถึง Facebook)
-  const hasOldYear = /(?:201[0-9]|202[0-3]|255[0-9]|256[0-6]|ปี\s*6[0-6]|ปี\s*5[0-9])/.test(text);
-  const hasRecentYear = /(?:202[4-6]|256[7-9]|ปี\s*6[7-9])/.test(text);
+  // 4. กรองปีเก่าที่ระบุในข้อความ (คำนวณตามปีปัจจุบัน เช่น 2026 / 2569)
+  // ปีเก่า: <= 2024, <= 2567, <= ปี 67
+  // ปีใหม่ (ช่วง 1 ปี): 2025-2027, 2568-2570, ปี 68-70
+  const hasOldYear = /(?:201[0-9]|202[0-4]|255[0-9]|256[0-7]|ปี\s*6[0-7]|ปี\s*5[0-9])/.test(text);
+  const hasRecentYear = /(?:202[5-7]|256[8-9]|2570|ปี\s*6[8-9]|ปี\s*70)/.test(text);
 
   if (hasOldYear && !hasRecentYear) {
     return false;
+  }
+
+  // 5. สำหรับ Facebook permalink ที่ไม่มี timestamp และไม่ระบุปีล่าสุด ให้ตัดออกเพื่อป้องกันกระทู้เก่าหลายปี
+  if (url.includes('facebook.com') && url.includes('/permalink/')) {
+    if (!publishTime && !hasRecentYear) {
+      return false;
+    }
   }
 
   return true;
@@ -649,19 +676,27 @@ function formatFacebookContent(rawTitle, rawSnippet, primaryTerm) {
 }
 async function searchFacebookThreads(terms, limit = 5, solutionCategory = '') {
   const primary = terms[0] || 'Business Solution';
-  // คำค้นเจาะจงเฉพาะหน้าโพสต์ พร้อมระบุคำค้นที่เน้นโซลูชัน
+  const currentYear = new Date().getFullYear(); // e.g. 2026
+  const currentBE = currentYear + 543; // e.g. 2569
+  const prevYear = currentYear - 1; // 2025
+  const prevBE = currentBE - 1; // 2568
+
+  // คำค้นเจาะจงเฉพาะหน้าโพสต์ พร้อมระบุคำค้นที่เน้นโซลูชัน และปีปัจจุบัน/ปีก่อนหน้า (ไม่เกิน 1 ปี)
   const queries = [
-    `site:facebook.com/groups inurl:posts ${primary}`,
+    `site:facebook.com/groups inurl:posts ${primary} ${currentBE}`,
+    `site:facebook.com inurl:posts ${primary} ${currentBE}`,
+    `site:facebook.com/groups inurl:posts ${primary} ${prevBE}`,
+    `site:facebook.com inurl:posts ${primary} ${prevBE}`,
+    `site:facebook.com/groups inurl:posts ${primary} ${currentYear}`,
+    `site:facebook.com/groups inurl:posts ${primary} แนะนำ`,
+    `site:facebook.com/groups inurl:posts ${primary} ปัญหา`,
     `site:facebook.com inurl:posts ${primary} แนะนำ`,
     `site:facebook.com inurl:posts ${primary} ปัญหา`,
-    `site:facebook.com inurl:posts ${primary} ระบบ`,
-    `site:facebook.com inurl:posts ${primary} 2567`,
-    `site:facebook.com inurl:posts ${primary} 2568`,
-    `site:facebook.com inurl:posts ${primary}`,
-    `site:facebook.com inurl:permalink ${primary}`
+    `site:facebook.com inurl:posts ${primary} ระบบ`
   ];
   if (terms[1]) {
-    queries.push(`site:facebook.com/groups inurl:posts ${terms[1]}`);
+    queries.push(`site:facebook.com/groups inurl:posts ${terms[1]} ${currentBE}`);
+    queries.push(`site:facebook.com/groups inurl:posts ${terms[1]} ${prevBE}`);
     queries.push(`site:facebook.com inurl:posts ${terms[1]} แนะนำ`);
     queries.push(`site:facebook.com inurl:posts ${terms[1]}`);
   }
@@ -682,13 +717,13 @@ async function searchFacebookThreads(terms, limit = 5, solutionCategory = '') {
 
       let title = item.title || '';
       let snippet = item.content || '';
+      let publishTime = item.publishedDate ? new Date(item.publishedDate).getTime() : null;
 
-      // Unfurl if title or snippet is generic
-      if (!title || title.includes('Link to facebook.com') || title === 'Facebook' || !snippet || snippet.includes('The site owner hides')) {
-        const unfurled = await unfurlFacebookMetadata(item.url);
-        if (unfurled?.title) title = unfurled.title;
-        if (unfurled?.snippet) snippet = unfurled.snippet;
-      }
+      // ดึง Open Graph Metadata และเวลาโพสต์จริงของ Facebook เสมอ
+      const unfurled = await unfurlFacebookMetadata(item.url);
+      if (unfurled?.title) title = unfurled.title;
+      if (unfurled?.snippet) snippet = unfurled.snippet;
+      if (unfurled?.publishTime) publishTime = unfurled.publishTime;
 
       // ตรวจสอบว่าสามารถดึงเนื้อหาจริงได้หรือไม่ (ถ้ายังคงว่างหรือเป็นข้อความของระบบ Facebook แสดงว่าเป็นโพสต์ปิด/ดูไม่ได้)
       const isStillGeneric = !title ||
@@ -704,10 +739,11 @@ async function searchFacebookThreads(terms, limit = 5, solutionCategory = '') {
         url: clean,
         title,
         content: snippet,
-        snippet
+        snippet,
+        publishTime
       };
 
-      // ตรวจสอบความสดใหม่ (~1 ปี) และเจตนาว่าเป็น B2B Solution/Service จริงๆ จากเนื้อหาจริง
+      // ตรวจสอบความสดใหม่ (ไม่เกิน 1 ปี) และเจตนาว่าเป็น B2B Solution/Service จริงๆ จากเนื้อหาจริง
       if (!isRecentPost(postItem)) continue;
       if (!isSolutionPost(postItem)) continue;
 
@@ -731,9 +767,10 @@ async function searchFacebookThreads(terms, limit = 5, solutionCategory = '') {
   // หากผลลัพธ์ยังไม่เต็ม limit ให้ค้นหาด้วยคำค้นสำรองที่เจาะจงโพสต์
   if (results.length < limit) {
     const backupQueries = [
-      `site:facebook.com/groups inurl:posts "${primary}"`,
-      `site:facebook.com inurl:posts "${primary}" แนะนำ`,
-      `site:facebook.com inurl:posts "${primary}" ปัญหา`,
+      `site:facebook.com/groups inurl:posts "${primary}" ${currentBE}`,
+      `site:facebook.com/groups inurl:posts "${primary}" ${prevBE}`,
+      `site:facebook.com/groups inurl:posts "${primary}" แนะนำ`,
+      `site:facebook.com/groups inurl:posts "${primary}" ปัญหา`,
       `site:facebook.com inurl:posts "ระบบ" "${primary}"`
     ];
     for (const bq of backupQueries) {
@@ -747,11 +784,12 @@ async function searchFacebookThreads(terms, limit = 5, solutionCategory = '') {
 
         let title = item.title || '';
         let snippet = item.content || '';
-        if (!title || title.includes('Link to facebook.com') || title === 'Facebook' || !snippet || snippet.includes('The site owner hides')) {
-          const unfurled = await unfurlFacebookMetadata(item.url);
-          if (unfurled?.title) title = unfurled.title;
-          if (unfurled?.snippet) snippet = unfurled.snippet;
-        }
+        let publishTime = item.publishedDate ? new Date(item.publishedDate).getTime() : null;
+
+        const unfurled = await unfurlFacebookMetadata(item.url);
+        if (unfurled?.title) title = unfurled.title;
+        if (unfurled?.snippet) snippet = unfurled.snippet;
+        if (unfurled?.publishTime) publishTime = unfurled.publishTime;
 
         const isStillGeneric = !title ||
                                title.includes('Link to facebook.com') ||
@@ -766,7 +804,8 @@ async function searchFacebookThreads(terms, limit = 5, solutionCategory = '') {
           url: clean,
           title,
           content: snippet,
-          snippet
+          snippet,
+          publishTime
         };
 
         if (!isRecentPost(postItem)) continue;
@@ -795,12 +834,15 @@ async function searchFacebookThreads(terms, limit = 5, solutionCategory = '') {
  */
 async function searchPantipThreads(terms, limit = 5) {
   const primary = terms[0] || 'Business Solution';
+  const currentYear = new Date().getFullYear();
+  const currentBE = currentYear + 543;
+  const prevBE = currentBE - 1;
   const queries = [
     `site:pantip.com/topic ${primary} แนะนำ`,
     `site:pantip.com/topic ${primary} ปัญหา`,
     `site:pantip.com/topic ${primary} ระบบ`,
-    `site:pantip.com/topic ${primary} 2567`,
-    `site:pantip.com/topic ${primary} 2568`,
+    `site:pantip.com/topic ${primary} ${prevBE}`,
+    `site:pantip.com/topic ${primary} ${currentBE}`,
     `site:pantip.com/topic ${primary}`
   ];
   if (terms[1]) {
@@ -844,12 +886,14 @@ async function searchPantipThreads(terms, limit = 5) {
  */
 async function searchLinkedInThreads(terms, limit = 5) {
   const primary = terms[0] || 'Business Solution';
+  const currentYear = new Date().getFullYear();
+  const prevYear = currentYear - 1;
   const queries = [
     `site:linkedin.com/posts ${primary} Thailand`,
     `site:linkedin.com/posts ${primary} solution`,
     `site:linkedin.com/posts ${primary} ระบบ`,
-    `site:linkedin.com/posts ${primary} 2024`,
-    `site:linkedin.com/posts ${primary} 2025`,
+    `site:linkedin.com/posts ${primary} ${prevYear}`,
+    `site:linkedin.com/posts ${primary} ${currentYear}`,
     `site:linkedin.com/pulse ${primary}`
   ];
   if (terms[1]) {

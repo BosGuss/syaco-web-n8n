@@ -11,13 +11,13 @@ console.log('Testing thread-search filter functions...');
 
 // 1. Pantip Recency
 console.log('\n--- 1. Testing Pantip Recency ---');
-const oldPantip = { url: 'https://pantip.com/topic/41234567', title: 'ERP ปัญหา', content: 'สอบถามเรื่อง ERP' };
-assert.strictEqual(isRecentPost(oldPantip), false, 'Old Pantip topic < 42900000 should be rejected');
-console.log('✔ Old Pantip topic < 42900000 correctly rejected');
+const oldPantip = { url: 'https://pantip.com/topic/42900000', title: 'ERP ปัญหา', content: 'สอบถามเรื่อง ERP' };
+assert.strictEqual(isRecentPost(oldPantip), false, 'Old Pantip topic < 43300000 should be rejected');
+console.log('✔ Old Pantip topic < 43300000 correctly rejected');
 
-const newPantip = { url: 'https://pantip.com/topic/43200000', title: 'ERP ปัญหา', content: 'สอบถามเรื่อง ERP วางระบบ' };
-assert.strictEqual(isRecentPost(newPantip), true, 'New Pantip topic >= 42900000 should pass');
-console.log('✔ New Pantip topic >= 42900000 correctly passed');
+const newPantip = { url: 'https://pantip.com/topic/43500000', title: 'ERP ปัญหา', content: 'สอบถามเรื่อง ERP วางระบบ' };
+assert.strictEqual(isRecentPost(newPantip), true, 'New Pantip topic >= 43300000 should pass');
+console.log('✔ New Pantip topic >= 43300000 correctly passed');
 
 // 2. LinkedIn Snowflake timestamp
 console.log('\n--- 2. Testing LinkedIn Snowflake timestamp ---');
@@ -29,25 +29,51 @@ const recentLi = { url: `https://www.linkedin.com/posts/activity-${recentLiId}`,
 assert.strictEqual(isRecentPost(recentLi), true, 'Recent LinkedIn post (~30 days ago) should pass');
 console.log('✔ Recent LinkedIn post passed');
 
-// 500 days ago (> 400 days)
-const oldMs = BigInt(now - 500 * 24 * 60 * 60 * 1000);
+// 400 days ago (> 365 days)
+const oldMs = BigInt(now - 400 * 24 * 60 * 60 * 1000);
 const oldLiId = (oldMs << 22n).toString();
 const oldLi = { url: `https://www.linkedin.com/posts/activity-${oldLiId}`, title: 'WMS Solution', content: 'แนะนำระบบคลังสินค้า' };
-assert.strictEqual(isRecentPost(oldLi), false, 'Old LinkedIn post (~500 days ago) should be rejected');
+assert.strictEqual(isRecentPost(oldLi), false, 'Old LinkedIn post (~400 days ago) should be rejected');
 console.log('✔ Old LinkedIn post rejected');
 
-// 3. Year pattern check (Facebook & general)
-console.log('\n--- 3. Testing Old Year pattern check ---');
-const oldFb = { url: 'https://www.facebook.com/groups/123/posts/456', title: 'โปรแกรมสต็อก 2564', content: 'มีปัญหาเรื่องตัดสต็อกเมื่อปี 2564' };
-assert.strictEqual(isRecentPost(oldFb), false, 'Post with 2564 and no recent year should be rejected');
+// 3. Facebook exact publishTime / creation_time check
+console.log('\n--- 3. Testing Facebook publishTime / creation_time ---');
+// 60 days ago
+const recentFbTime = {
+  url: 'https://www.facebook.com/groups/thaiadmin/posts/999999999',
+  title: 'ระบบ ERP',
+  content: 'สอบถามระบบ ERP',
+  publishTime: now - (60 * 24 * 60 * 60 * 1000)
+};
+assert.strictEqual(isRecentPost(recentFbTime), true, 'Facebook post with publishTime ~60 days ago should pass');
+console.log('✔ Facebook post ~60 days ago passed');
+
+// 450 days ago (> 365 days)
+const oldFbTime = {
+  url: 'https://www.facebook.com/groups/thaiadmin/posts/7410419648994662',
+  title: 'ขอคำแนะนำระบบ POS',
+  content: 'รบกวนขอคำแนะนำแบบ user ที่ไม่รู้ระบบอะไรเลยหน่อยนะคะ',
+  publishTime: now - (450 * 24 * 60 * 60 * 1000) // ~1.2 years ago
+};
+assert.strictEqual(isRecentPost(oldFbTime), false, 'Facebook post with publishTime > 365 days should be rejected');
+console.log('✔ Facebook post > 365 days ago rejected');
+
+// 4. Year pattern check (Facebook & general)
+console.log('\n--- 4. Testing Old Year pattern check ---');
+const oldFb2564 = { url: 'https://www.facebook.com/groups/123/posts/456', title: 'โปรแกรมสต็อก 2564', content: 'มีปัญหาเรื่องตัดสต็อกเมื่อปี 2564' };
+assert.strictEqual(isRecentPost(oldFb2564), false, 'Post with 2564 and no recent year should be rejected');
 console.log('✔ Post with old year 2564 correctly rejected');
+
+const oldFb2567 = { url: 'https://www.facebook.com/groups/123/posts/457', title: 'วางระบบ ERP 2567', content: 'ระบบโรงงาน ปี 2024' };
+assert.strictEqual(isRecentPost(oldFb2567), false, 'Post with 2567 / 2024 should be rejected in 2026');
+console.log('✔ Post with 2567/2024 correctly rejected in 2026');
 
 const newFb = { url: 'https://www.facebook.com/groups/123/posts/789', title: 'โปรแกรมสต็อก 2568', content: 'วางระบบคลังสินค้า ปี 2025' };
 assert.strictEqual(isRecentPost(newFb), true, 'Post with 2568 / 2025 should pass');
 console.log('✔ Post with recent year 2568/2025 passed');
 
-// 4. Solution Intent Filter
-console.log('\n--- 4. Testing Solution Intent Filter ---');
+// 5. Solution Intent Filter
+console.log('\n--- 5. Testing Solution Intent Filter ---');
 // Negative cases
 const jobRecruiter = { title: 'Jobs for Thai Programmers | ตามหา PM / SA ด่วนค่ะ เงินเดือนดี 70-100K ขอสาย ERP', snippet: 'IT recruiter บริษัท Tribehired ค่ะ...' };
 assert.strictEqual(isSolutionPost(jobRecruiter), false, 'Recruiter post should be rejected');
