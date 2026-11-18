@@ -285,8 +285,12 @@ function buildRadarEmbedsAndMenu(threads, solutionsCovered = []) {
 
     let desc = '';
     if (c === 0) {
+      const nowYear = new Date().getFullYear();
+      const prevYear = nowYear - 1;
+      const nowBE = nowYear + 543;
+      const prevBE = nowBE - 1;
       const solText = solutionsCovered.length > 0 ? cut(solutionsCovered.join(', '), 150) : 'SyaCo Enterprise Solutions';
-      desc += `🎯 **โซลูชันที่สำรวจ:** ${solText}\n📅 **เงื่อนไข:** กระทู้/โพสต์ล่าสุดไม่เกิน 1 ปี (2025 - 2026)\n💡 **คำแนะนำ:** เลือกกระทู้ที่ต้องการจากเมนูด้านล่างเพื่อให้ AI ร่างคำตอบได้ทันที\n\n`;
+      desc += `🎯 **โซลูชันที่สำรวจ:** ${solText}\n📅 **เงื่อนไข:** กระทู้/โพสต์ล่าสุดไม่เกิน 1 ปี (${prevYear} - ${nowYear} / พ.ศ. ${prevBE} - ${nowBE})\n💡 **คำแนะนำ:** เลือกกระทู้ที่ต้องการจากเมนูด้านล่างเพื่อให้ AI ร่างคำตอบได้ทันที\n\n`;
     }
 
     desc += chunk.map((t, idx) => {

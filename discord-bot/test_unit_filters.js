@@ -4,20 +4,24 @@ const {
   isSolutionPost,
   isValidCandidate,
   isFacebookPost,
-  cleanUrl
+  cleanUrl,
+  getDynamicYearFilter,
+  getMinPantipTopicId
 } = require('./thread-search');
 
 console.log('Testing thread-search filter functions...');
 
-// 1. Pantip Recency
-console.log('\n--- 1. Testing Pantip Recency ---');
-const oldPantip = { url: 'https://pantip.com/topic/42900000', title: 'ERP ปัญหา', content: 'สอบถามเรื่อง ERP' };
-assert.strictEqual(isRecentPost(oldPantip), false, 'Old Pantip topic < 43300000 should be rejected');
-console.log('✔ Old Pantip topic < 43300000 correctly rejected');
+// 1. Pantip Recency (Dynamic Topic ID check)
+console.log('\n--- 1. Testing Pantip Recency (Dynamic Topic ID) ---');
+const minTopicId = getMinPantipTopicId();
+console.log(`Current dynamic min Pantip Topic ID: ${minTopicId}`);
+const oldPantip = { url: `https://pantip.com/topic/${minTopicId - 500000}`, title: 'ERP ปัญหา', content: 'สอบถามเรื่อง ERP' };
+assert.strictEqual(isRecentPost(oldPantip), false, 'Old Pantip topic below dynamic min should be rejected');
+console.log('✔ Old Pantip topic below dynamic threshold correctly rejected');
 
-const newPantip = { url: 'https://pantip.com/topic/43500000', title: 'ERP ปัญหา', content: 'สอบถามเรื่อง ERP วางระบบ' };
-assert.strictEqual(isRecentPost(newPantip), true, 'New Pantip topic >= 43300000 should pass');
-console.log('✔ New Pantip topic >= 43300000 correctly passed');
+const newPantip = { url: `https://pantip.com/topic/${minTopicId + 100000}`, title: 'ERP ปัญหา', content: 'สอบถามเรื่อง ERP วางระบบ' };
+assert.strictEqual(isRecentPost(newPantip), true, 'New Pantip topic above dynamic min should pass');
+console.log('✔ New Pantip topic above dynamic threshold correctly passed');
 
 // 2. LinkedIn Snowflake timestamp
 console.log('\n--- 2. Testing LinkedIn Snowflake timestamp ---');
@@ -58,19 +62,49 @@ const oldFbTime = {
 assert.strictEqual(isRecentPost(oldFbTime), false, 'Facebook post with publishTime > 365 days should be rejected');
 console.log('✔ Facebook post > 365 days ago rejected');
 
-// 4. Year pattern check (Facebook & general)
-console.log('\n--- 4. Testing Old Year pattern check ---');
-const oldFb2564 = { url: 'https://www.facebook.com/groups/123/posts/456', title: 'โปรแกรมสต็อก 2564', content: 'มีปัญหาเรื่องตัดสต็อกเมื่อปี 2564' };
-assert.strictEqual(isRecentPost(oldFb2564), false, 'Post with 2564 and no recent year should be rejected');
-console.log('✔ Post with old year 2564 correctly rejected');
+// 4. Year pattern check (Dynamic Year Calculation)
+console.log('\n--- 4. Testing Dynamic Year Pattern Check ---');
+const yf = getDynamicYearFilter();
+console.log(`Current dynamic years: Prev AD=${yf.prevYear}, Current AD=${yf.currentYear}, Prev BE=${yf.prevBE}, Current BE=${yf.currentBE}`);
 
-const oldFb2567 = { url: 'https://www.facebook.com/groups/123/posts/457', title: 'วางระบบ ERP 2567', content: 'ระบบโรงงาน ปี 2024' };
-assert.strictEqual(isRecentPost(oldFb2567), false, 'Post with 2567 / 2024 should be rejected in 2026');
-console.log('✔ Post with 2567/2024 correctly rejected in 2026');
+// Old years (2 years ago) should be rejected
+const oldYearAD = yf.currentYear - 2; // e.g. 2024
+const oldYearBE = yf.currentBE - 2;   // e.g. 2567
+const oldShortBE = String(oldYearBE).slice(-2); // e.g. '67'
 
-const newFb = { url: 'https://www.facebook.com/groups/123/posts/789', title: 'โปรแกรมสต็อก 2568', content: 'วางระบบคลังสินค้า ปี 2025' };
-assert.strictEqual(isRecentPost(newFb), true, 'Post with 2568 / 2025 should pass');
-console.log('✔ Post with recent year 2568/2025 passed');
+const oldFbAD = { url: 'https://www.facebook.com/groups/123/posts/456', title: `โปรแกรมสต็อก ${oldYearAD}`, content: `มีปัญหาเรื่องตัดสต็อกเมื่อปี ${oldYearAD}` };
+assert.strictEqual(isRecentPost(oldFbAD), false, `Post with ${oldYearAD} and no recent year should be rejected`);
+console.log(`✔ Post with old year AD ${oldYearAD} correctly rejected`);
+
+const oldFbBE = { url: 'https://www.facebook.com/groups/123/posts/457', title: `วางระบบ ERP ${oldYearBE}`, content: `ระบบโรงงาน ปี ${oldShortBE}` };
+assert.strictEqual(isRecentPost(oldFbBE), false, `Post with ${oldYearBE} / ปี ${oldShortBE} should be rejected`);
+console.log(`✔ Post with old year BE ${oldYearBE} correctly rejected`);
+
+// Recent years (prevYear & currentYear) should pass
+const recentFbPrev = { url: 'https://www.facebook.com/groups/123/posts/789', title: `โปรแกรมสต็อก ${yf.prevBE}`, content: `วางระบบคลังสินค้า ปี ${yf.prevYear}` };
+assert.strictEqual(isRecentPost(recentFbPrev), true, `Post with ${yf.prevBE} / ${yf.prevYear} should pass`);
+console.log(`✔ Post with recent year ${yf.prevBE}/${yf.prevYear} passed`);
+
+const recentFbCurr = { url: 'https://www.facebook.com/groups/123/posts/790', title: `โปรแกรมสต็อก ${yf.currentBE}`, content: `วางระบบคลังสินค้า ปี ${yf.currentYear}` };
+assert.strictEqual(isRecentPost(recentFbCurr), true, `Post with ${yf.currentBE} / ${yf.currentYear} should pass`);
+console.log(`✔ Post with recent year ${yf.currentBE}/${yf.currentYear} passed`);
+
+// Simulation of Future Year (e.g. Year 2028 / 2571)
+console.log('\n--- 4.1 Testing Future Year Rollover Simulation (Year 2028) ---');
+const futureDate = new Date('2028-06-01T00:00:00Z');
+const futureYf = getDynamicYearFilter(futureDate);
+assert.strictEqual(futureYf.currentYear, 2028);
+assert.strictEqual(futureYf.prevYear, 2027);
+assert.strictEqual(futureYf.currentBE, 2571);
+assert.strictEqual(futureYf.prevBE, 2570);
+// In 2028, 2026 and 2569 should be detected as old
+assert.strictEqual(futureYf.hasOldYearInText('ระบบ ERP ปี 2026'), true, 'In 2028, 2026 must be detected as old');
+assert.strictEqual(futureYf.hasOldYearInText('ระบบ ERP ปี 2569'), true, 'In 2028, 2569 must be detected as old');
+assert.strictEqual(futureYf.isRecentYearInText('ระบบ ERP ปี 2026'), false, 'In 2028, 2026 must not be recent');
+// In 2028, 2027 and 2028 should be detected as recent
+assert.strictEqual(futureYf.isRecentYearInText('ระบบ ERP ปี 2027'), true, 'In 2028, 2027 is recent');
+assert.strictEqual(futureYf.isRecentYearInText('ระบบ ERP ปี 2571'), true, 'In 2028, 2571 is recent');
+console.log('✔ Future year rollover simulation (2028) correctly shifts recency thresholds automatically');
 
 // 5. Solution Intent Filter
 console.log('\n--- 5. Testing Solution Intent Filter ---');

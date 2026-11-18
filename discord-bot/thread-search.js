@@ -487,11 +487,105 @@ const B2B_SOLUTION_TOPICS_REGEX = /(?:\b(?:erp|sap|wms|tms|plc|scada|pos|iot|ocr
 const SOLUTION_INQUIRY_INTENT_REGEX = /(?:แนะนำ|ปัญหา|ทำไม|อย่างไร|ช่วย|ระบบ|โปรแกรม|พัฒนา|เชื่อมต่อ|เปรียบเทียบ|เทียบ|เจ้าไหน|ดีไหม|สอบถาม|วางระบบ|จัดการ|โซลูชัน|solution|service|แนวคิด|เทคนิค|ข้อดี|ข้อเสีย|ปรึกษา|แนะนำหน่อย|หาบริษัท|หาคนทำ|รับทำ|ใช้งานยังไง|เลือกยังไง|\b(?:vs|versus|difference|compare|comparison|guide|how|tips|best|problem|challenge|challenges|solutions?|implement(?:ation)?|optimize|transform|architecture|overview|review)\b)/i;
 
 /**
+ * คำนวณช่วงปีและสร้างตัวกรองปีแบบไดนามิกอัตโนมัติ (ไม่ฮาร์ดโค้ดปี)
+ * ปรับตามเวลาจริงเสมอ แม้ปีจะเปลี่ยนไปในอนาคต (เช่น 2026, 2027, 2028...)
+ */
+function getDynamicYearFilter(date = new Date()) {
+  const currentYear = date.getFullYear();
+  const currentBE = currentYear + 543;
+  const prevYear = currentYear - 1;
+  const prevBE = currentBE - 1;
+  const nextYear = currentYear + 1;
+  const nextBE = currentBE + 1;
+
+  const recentAD = [prevYear, currentYear, nextYear];
+  const recentBE = [prevBE, currentBE, nextBE];
+  const recentShortBE = [
+    String(prevBE).slice(-2),
+    String(currentBE).slice(-2),
+    String(nextBE).slice(-2)
+  ];
+
+  return {
+    currentYear,
+    currentBE,
+    prevYear,
+    prevBE,
+    nextYear,
+    nextBE,
+    recentAD,
+    recentBE,
+    recentShortBE,
+    // ตรวจสอบว่าข้อความมีปีล่าสุดหรือไม่ (ค.ศ., พ.ศ., หรือ ปี XX)
+    isRecentYearInText(text) {
+      if (!text) return false;
+      for (const y of recentAD) {
+        if (text.includes(String(y))) return true;
+      }
+      for (const y of recentBE) {
+        if (text.includes(String(y))) return true;
+      }
+      for (const s of recentShortBE) {
+        const re = new RegExp(`ปี\\s*${s}\\b`);
+        if (re.test(text)) return true;
+      }
+      return false;
+    },
+    // ตรวจสอบว่าข้อความมีปีเก่าที่เกิน 1 ปีหรือไม่
+    hasOldYearInText(text) {
+      if (!text) return false;
+      // 1. ค.ศ. 4 หลัก (1900 ถึง 2099)
+      const adMatches = text.match(/\b(19\d{2}|20\d{2})\b/g);
+      if (adMatches) {
+        for (const m of adMatches) {
+          const y = parseInt(m, 10);
+          if (y < prevYear) return true;
+        }
+      }
+      // 2. พ.ศ. 4 หลัก (2500 ถึง 2599)
+      const beMatches = text.match(/\b(25\d{2})\b/g);
+      if (beMatches) {
+        for (const m of beMatches) {
+          const y = parseInt(m, 10);
+          if (y < prevBE) return true;
+        }
+      }
+      // 3. ปีย่อ เช่น ปี 60, ปี 65, ปี 67
+      const shortBeMatches = text.match(/ปี\s*([4-9]\d)\b/g);
+      if (shortBeMatches) {
+        const threshold = prevBE % 100;
+        for (const m of shortBeMatches) {
+          const numMatch = m.match(/\d+/);
+          if (numMatch) {
+            const shortVal = parseInt(numMatch[0], 10);
+            if (shortVal < threshold && shortVal >= 40) return true;
+          }
+        }
+      }
+      return false;
+    }
+  };
+}
+
+/**
+ * คำนวณขีดจำกัด Topic ID ต่ำสุดของ Pantip แบบไดนามิก (~1 ปีย้อนหลังจากเวลาปัจจุบัน)
+ * อ้างอิงสถิติการสร้างกระทู้ Pantip เฉลี่ย ~600,000 กระทู้ต่อปี (~1,640 กระทู้ต่อวัน)
+ */
+function getMinPantipTopicId(now = Date.now()) {
+  const refTime = new Date('2026-01-01T00:00:00Z').getTime();
+  const refId = 43500000;
+  const topicsPerDay = 1640;
+  const daysDiff = (now - refTime) / (24 * 60 * 60 * 1000);
+  const currentEstimatedId = refId + Math.round(daysDiff * topicsPerDay);
+  return Math.max(43000000, currentEstimatedId - (365 * topicsPerDay));
+}
+
+/**
  * ตรวจสอบความสดใหม่ของโพสต์/กระทู้ ย้อนหลังไม่เกิน 1 ปี (<= 365 วัน)
  * - Exact publishTime / creation_time (จาก OpenGraph/Facebook HTML/JSON): ต้องไม่เกิน 365 วัน
- * - Pantip: กระทู้ต้องมี Topic ID >= 43300000 (กระทู้ใหม่ภายใน 1 ปี ย้อนหลังจากปลายปี 2026)
+ * - Pantip: กระทู้ต้องมี Topic ID >= minPantipTopicId (คำนวณไดนามิกย้อนหลัง ~1 ปี จากเวลาปัจจุบัน)
  * - LinkedIn: ถอด Snowflake timestamp จาก Activity ID ต้องไม่เกิน 365 วัน
- * - Facebook & ทั่วไป: ตรวจสอบปี โดยคำนวณตามปีปัจจุบัน (ถ้ามีปีเก่า <= 2024 / <= 2567 และไม่มีปีใหม่ 2025-2027 / 2568-2570 ให้ตัดออก)
+ * - Facebook & ทั่วไป: ตรวจสอบปี โดยคำนวณตามปีปัจจุบันแบบไดนามิกอัตโนมัติ (ไม่ฮาร์ดโค้ดปี)
  * - Facebook permalink: ถ้าไม่มี timestamp และไม่มีการระบุปีใหม่ ให้ตัดออกเนื่องจากเป็นโครงสร้าง URL เก่า
  */
 function isRecentPost(item) {
@@ -509,13 +603,13 @@ function isRecentPost(item) {
     }
   }
 
-  // 2. Pantip topic ID check
+  // 2. Pantip topic ID check แบบไดนามิกตามเวลาปัจจุบัน
   if (url.includes('pantip.com')) {
     const m = url.match(/\/topic\/(\d+)/);
     if (m) {
       const topicId = parseInt(m[1], 10);
-      // กระทู้ Pantip ต่ำกว่า 43300000 เป็นกระทู้เก่าเกิน 1 ปี
-      if (topicId < 43300000) return false;
+      const minPantipId = getMinPantipTopicId(now);
+      if (topicId < minPantipId) return false;
     }
   }
 
@@ -534,19 +628,18 @@ function isRecentPost(item) {
     }
   }
 
-  // 4. กรองปีเก่าที่ระบุในข้อความ (คำนวณตามปีปัจจุบัน เช่น 2026 / 2569)
-  // ปีเก่า: <= 2024, <= 2567, <= ปี 67
-  // ปีใหม่ (ช่วง 1 ปี): 2025-2027, 2568-2570, ปี 68-70
-  const hasOldYear = /(?:201[0-9]|202[0-4]|255[0-9]|256[0-7]|ปี\s*6[0-7]|ปี\s*5[0-9])/.test(text);
-  const hasRecentYear = /(?:202[5-7]|256[8-9]|2570|ปี\s*6[8-9]|ปี\s*70)/.test(text);
+  // 4. กรองปีในข้อความแบบไดนามิกอัตโนมัติ (ไม่ฮาร์ดโค้ดปี)
+  const yearFilter = getDynamicYearFilter(new Date(now));
+  const hasOld = yearFilter.hasOldYearInText(text);
+  const hasRecent = yearFilter.isRecentYearInText(text);
 
-  if (hasOldYear && !hasRecentYear) {
+  if (hasOld && !hasRecent) {
     return false;
   }
 
   // 5. สำหรับ Facebook permalink ที่ไม่มี timestamp และไม่ระบุปีล่าสุด ให้ตัดออกเพื่อป้องกันกระทู้เก่าหลายปี
   if (url.includes('facebook.com') && url.includes('/permalink/')) {
-    if (!publishTime && !hasRecentYear) {
+    if (!publishTime && !hasRecent) {
       return false;
     }
   }
@@ -1132,6 +1225,8 @@ module.exports = {
   isFacebookPost,
   isRecentPost,
   isSolutionPost,
+  getDynamicYearFilter,
+  getMinPantipTopicId,
   NEGATIVE_INTENT,
   unfurlFacebookMetadata,
   SYACO_CATALOG,
