@@ -553,28 +553,38 @@ async function handleCommand(interaction, { pool, client }) {
 
       const { collectDailyRadarThreads, searchRecentThreads } = require('./thread-search');
 
-      const isRadar = !rawKeyword || rawKeyword === 'auto';
+      // ดึงรายการ URL ที่เคยค้นพบไปแล้ว (จาก cache และ backlink candidates) เพื่อป้องกันการค้นพบซ้ำ
+      const { rows: cachedRows } = await pool.query(`
+        SELECT DISTINCT post_url FROM thread_search_cache WHERE created_at > NOW() - INTERVAL '30 days'
+        UNION
+        SELECT DISTINCT post_url FROM backlink_candidates
+      `);
+      const excludeUrls = new Set(cachedRows.map(r => r.post_url).filter(Boolean));
+
+      // เป็นโหมด Radar เมื่อไม่ได้ระบุคีย์เวิร์ด และเลือกแพลตฟอร์มทั้งหมด (all)
+      const isRadar = (!rawKeyword || rawKeyword === 'auto') && platform === 'all';
       let results = [];
       let solutionsCovered = [];
 
       if (isRadar) {
-        const radarRes = await collectDailyRadarThreads(limit);
+        const radarRes = await collectDailyRadarThreads(limit, excludeUrls);
         results = radarRes.results;
         solutionsCovered = radarRes.solutionsCovered;
       } else {
-        const isAutoCategory = rawKeyword.startsWith('auto:');
+        const isAutoCategory = !rawKeyword || rawKeyword === 'auto' || rawKeyword.startsWith('auto:');
         const mode = isAutoCategory ? 'auto' : 'manual';
         const searchRes = await searchRecentThreads({
           keyword: rawKeyword,
           mode,
           platform,
-          limit
+          limit,
+          excludeUrls
         });
         results = searchRes.results;
         if (searchRes.autoMeta?.solutionTitle) {
           solutionsCovered = [searchRes.autoMeta.solutionTitle];
         } else {
-          solutionsCovered = [rawKeyword];
+          solutionsCovered = [rawKeyword || (platform !== 'all' ? platform.toUpperCase() : 'General')];
         }
       }
 

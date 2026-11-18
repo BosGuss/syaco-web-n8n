@@ -767,37 +767,37 @@ function formatFacebookContent(rawTitle, rawSnippet, primaryTerm) {
 
   return { title, snippet };
 }
-async function searchFacebookThreads(terms, limit = 5, solutionCategory = '') {
-  const primary = terms[0] || 'Business Solution';
-  const currentYear = new Date().getFullYear(); // e.g. 2026
-  const currentBE = currentYear + 543; // e.g. 2569
-  const prevYear = currentYear - 1; // 2025
-  const prevBE = currentBE - 1; // 2568
+async function searchFacebookThreads(terms, limit = 5, solutionCategory = '', excludeUrls = new Set()) {
+  const currentYear = new Date().getFullYear();
+  const currentBE = currentYear + 543;
+  const prevYear = currentYear - 1;
+  const prevBE = currentBE - 1;
 
-  // คำค้นเจาะจงเฉพาะหน้าโพสต์ พร้อมระบุคำค้นที่เน้นโซลูชัน และปีปัจจุบัน/ปีก่อนหน้า (ไม่เกิน 1 ปี)
-  const queries = [
-    `site:facebook.com/groups inurl:posts ${primary} ${currentBE}`,
-    `site:facebook.com inurl:posts ${primary} ${currentBE}`,
-    `site:facebook.com/groups inurl:posts ${primary} ${prevBE}`,
-    `site:facebook.com inurl:posts ${primary} ${prevBE}`,
-    `site:facebook.com/groups inurl:posts ${primary} ${currentYear}`,
-    `site:facebook.com/groups inurl:posts ${primary} แนะนำ`,
-    `site:facebook.com/groups inurl:posts ${primary} ปัญหา`,
-    `site:facebook.com inurl:posts ${primary} แนะนำ`,
-    `site:facebook.com inurl:posts ${primary} ปัญหา`,
-    `site:facebook.com inurl:posts ${primary} ระบบ`
-  ];
-  if (terms[1]) {
-    queries.push(`site:facebook.com/groups inurl:posts ${terms[1]} ${currentBE}`);
-    queries.push(`site:facebook.com/groups inurl:posts ${terms[1]} ${prevBE}`);
-    queries.push(`site:facebook.com inurl:posts ${terms[1]} แนะนำ`);
-    queries.push(`site:facebook.com inurl:posts ${terms[1]}`);
+  const searchTerms = Array.isArray(terms) && terms.length > 0 ? terms : ['Business Solution'];
+  const primary = searchTerms[0];
+
+  // รวบรวมคำค้นหาจากทุก Terms ที่ได้รับ พร้อมระบุปีล่าสุดและคำค้นหาเชิงปัญหา/โซลูชัน
+  const queries = [];
+  for (const t of searchTerms) {
+    queries.push(`site:facebook.com/groups inurl:posts ${t} ${currentBE}`);
+    queries.push(`site:facebook.com inurl:posts ${t} ${currentBE}`);
+    queries.push(`site:facebook.com/groups inurl:posts ${t} ${prevBE}`);
+    queries.push(`site:facebook.com inurl:posts ${t} ${prevBE}`);
+    queries.push(`site:facebook.com/groups inurl:posts ${t} ${currentYear}`);
+    queries.push(`site:facebook.com/groups inurl:posts ${t} แนะนำ`);
+    queries.push(`site:facebook.com/groups inurl:posts ${t} ปัญหา`);
+    queries.push(`site:facebook.com inurl:posts ${t} แนะนำ`);
+    queries.push(`site:facebook.com inurl:posts ${t} ปัญหา`);
+    queries.push(`site:facebook.com inurl:posts ${t} ระบบ`);
   }
+
+  // สลับลำดับคำค้นหาเล็กน้อยเพื่อกระจายและไม่ให้ชนหน้าเดิมซ้ำๆ
+  const shuffledQueries = queries.sort(() => Math.random() - 0.4);
 
   const results = [];
   const seenUrls = new Set();
 
-  for (const q of queries) {
+  for (const q of shuffledQueries) {
     if (results.length >= limit) break;
     const rawList = await querySearxng(q);
 
@@ -805,7 +805,7 @@ async function searchFacebookThreads(terms, limit = 5, solutionCategory = '') {
       if (!isValidCandidate(item, 'facebook')) continue;
 
       const clean = cleanUrl(item.url, 'facebook');
-      if (seenUrls.has(clean)) continue;
+      if (seenUrls.has(clean) || (excludeUrls && excludeUrls.has(clean))) continue;
       seenUrls.add(clean);
 
       let title = item.title || '';
@@ -872,7 +872,7 @@ async function searchFacebookThreads(terms, limit = 5, solutionCategory = '') {
       for (const item of rawList) {
         if (!isValidCandidate(item, 'facebook')) continue;
         const clean = cleanUrl(item.url, 'facebook');
-        if (seenUrls.has(clean)) continue;
+        if (seenUrls.has(clean) || (excludeUrls && excludeUrls.has(clean))) continue;
         seenUrls.add(clean);
 
         let title = item.title || '';
@@ -925,7 +925,7 @@ async function searchFacebookThreads(terms, limit = 5, solutionCategory = '') {
 /**
  * ค้นหาเฉพาะ Pantip
  */
-async function searchPantipThreads(terms, limit = 5) {
+async function searchPantipThreads(terms, limit = 5, excludeUrls = new Set()) {
   const primary = terms[0] || 'Business Solution';
   const currentYear = new Date().getFullYear();
   const currentBE = currentYear + 543;
@@ -956,7 +956,7 @@ async function searchPantipThreads(terms, limit = 5) {
       if (!isSolutionPost(item)) continue;
 
       const clean = cleanUrl(item.url, 'pantip');
-      if (seenUrls.has(clean)) continue;
+      if (seenUrls.has(clean) || (excludeUrls && excludeUrls.has(clean))) continue;
       seenUrls.add(clean);
 
       results.push({
@@ -977,7 +977,7 @@ async function searchPantipThreads(terms, limit = 5) {
 /**
  * ค้นหาเฉพาะ LinkedIn
  */
-async function searchLinkedInThreads(terms, limit = 5) {
+async function searchLinkedInThreads(terms, limit = 5, excludeUrls = new Set()) {
   const primary = terms[0] || 'Business Solution';
   const currentYear = new Date().getFullYear();
   const prevYear = currentYear - 1;
@@ -1006,7 +1006,7 @@ async function searchLinkedInThreads(terms, limit = 5) {
       if (!isSolutionPost(item)) continue;
 
       const clean = cleanUrl(item.url, 'linkedin');
-      if (seenUrls.has(clean)) continue;
+      if (seenUrls.has(clean) || (excludeUrls && excludeUrls.has(clean))) continue;
       seenUrls.add(clean);
 
       results.push({
@@ -1026,9 +1026,9 @@ async function searchLinkedInThreads(terms, limit = 5) {
 
 /**
  * ค้นหากระทู้/โพสต์ตาม Keyword และ Platform (ระยะเวลาไม่เกิน 1 ปี)
- * มีระบบกระจายโควตาแพลตฟอร์มที่เป็นธรรม (ไม่ถูก Pantip ดูดโควตาจนหมด)
+ * มีระบบกระจายโควตาแพลตฟอร์มที่เป็นธรรม และไม่ค้นหากระทู้ที่เคยพบแล้ว (excludeUrls)
  */
-async function searchRecentThreads({ keyword, mode = 'manual', platform = 'all', limit = 5 }) {
+async function searchRecentThreads({ keyword, mode = 'manual', platform = 'all', limit = 5, excludeUrls = new Set() }) {
   const isAutoMode = mode === 'auto' || (keyword && keyword.startsWith('auto')) || (!keyword && mode !== 'manual');
 
   let autoMeta = null;
@@ -1053,40 +1053,88 @@ async function searchRecentThreads({ keyword, mode = 'manual', platform = 'all',
 
   const solKey = autoMeta?.solutionKey || (keyword?.startsWith('auto:') ? keyword.replace('auto:', '') : '');
 
-  // 1. กรณีระบุแพลตฟอร์มเจาะจง
+  // 1. กรณีระบุแพลตฟอร์มเจาะจง Facebook
   if (platform === 'facebook') {
-    const fbResults = await searchFacebookThreads(queriesToRun, limit, solKey);
+    let fbResults = await searchFacebookThreads(queriesToRun, limit, solKey, excludeUrls);
+    // หากยังไม่ครบ limit และอยู่ในโหมด auto ให้สุ่มโซลูชันอื่นมาค้นหาเสริมเพื่อกระจายผลลัพธ์
+    if (fbResults.length < limit && isAutoMode) {
+      const otherSolutions = SYACO_CATALOG.filter(c => c.key !== solKey).sort(() => Math.random() - 0.5);
+      for (const sol of otherSolutions) {
+        if (fbResults.length >= limit) break;
+        const moreFb = await searchFacebookThreads(sol.curatedQueries, limit - fbResults.length, sol.key, excludeUrls);
+        for (const item of moreFb) {
+          if (!fbResults.some(r => r.url === item.url) && fbResults.length < limit) {
+            fbResults.push({
+              ...item,
+              solutionCategory: sol.titleTh
+            });
+          }
+        }
+      }
+    }
     return { autoMeta, results: fbResults.slice(0, limit) };
   }
 
+  // 2. กรณีระบุแพลตฟอร์มเจาะจง Pantip
   if (platform === 'pantip') {
-    const ptResults = await searchPantipThreads(queriesToRun, limit);
+    let ptResults = await searchPantipThreads(queriesToRun, limit, excludeUrls);
+    if (ptResults.length < limit && isAutoMode) {
+      const otherSolutions = SYACO_CATALOG.filter(c => c.key !== solKey).sort(() => Math.random() - 0.5);
+      for (const sol of otherSolutions) {
+        if (ptResults.length >= limit) break;
+        const morePt = await searchPantipThreads(sol.curatedQueries, limit - ptResults.length, excludeUrls);
+        for (const item of morePt) {
+          if (!ptResults.some(r => r.url === item.url) && ptResults.length < limit) {
+            ptResults.push({
+              ...item,
+              solutionCategory: sol.titleTh
+            });
+          }
+        }
+      }
+    }
     return { autoMeta, results: ptResults.slice(0, limit) };
   }
 
+  // 3. กรณีระบุแพลตฟอร์มเจาะจง LinkedIn
   if (platform === 'linkedin') {
-    const liResults = await searchLinkedInThreads(queriesToRun, limit);
+    let liResults = await searchLinkedInThreads(queriesToRun, limit, excludeUrls);
+    if (liResults.length < limit && isAutoMode) {
+      const otherSolutions = SYACO_CATALOG.filter(c => c.key !== solKey).sort(() => Math.random() - 0.5);
+      for (const sol of otherSolutions) {
+        if (liResults.length >= limit) break;
+        const moreLi = await searchLinkedInThreads(sol.curatedQueries, limit - liResults.length, excludeUrls);
+        for (const item of moreLi) {
+          if (!liResults.some(r => r.url === item.url) && liResults.length < limit) {
+            liResults.push({
+              ...item,
+              solutionCategory: sol.titleTh
+            });
+          }
+        }
+      }
+    }
     return { autoMeta, results: liResults.slice(0, limit) };
   }
 
-  // 2. กรณี platform === 'all': แบ่งสัดส่วนอย่างสมดุล (Pantip 40%, Facebook 35%, LinkedIn 25%)
+  // 4. กรณี platform === 'all': แบ่งสัดส่วนอย่างสมดุล (Pantip 40%, Facebook 35%, LinkedIn 25%)
   const fbTarget = Math.max(1, Math.round(limit * 0.35));
   const liTarget = Math.max(1, Math.round(limit * 0.25));
   const ptTarget = Math.max(1, limit - fbTarget - liTarget);
 
-  const fbList = await searchFacebookThreads(queriesToRun, fbTarget, solKey);
-  const ptList = await searchPantipThreads(queriesToRun, ptTarget);
-  const liList = await searchLinkedInThreads(queriesToRun, liTarget);
+  const fbList = await searchFacebookThreads(queriesToRun, fbTarget, solKey, excludeUrls);
+  const ptList = await searchPantipThreads(queriesToRun, ptTarget, excludeUrls);
+  const liList = await searchLinkedInThreads(queriesToRun, liTarget, excludeUrls);
 
   let combined = [...fbList, ...ptList, ...liList];
 
   // หากยังไม่ครบ limit ให้เติมส่วนที่ขาดจากแพลตฟอร์มที่มี
   if (combined.length < limit) {
     const deficit = limit - combined.length;
-    const morePt = await searchPantipThreads(queriesToRun, ptTarget + deficit);
+    const morePt = await searchPantipThreads(queriesToRun, ptTarget + deficit, excludeUrls);
     const existingUrls = new Set(combined.map(r => r.url));
     for (const p of morePt) {
-      if (!existingUrls.has(p.url) && combined.length < limit) {
+      if (!existingUrls.has(p.url) && (!excludeUrls || !excludeUrls.has(p.url)) && combined.length < limit) {
         existingUrls.add(p.url);
         combined.push(p);
       }
@@ -1102,8 +1150,9 @@ async function searchRecentThreads({ keyword, mode = 'manual', platform = 'all',
 /**
  * รวบรวมกระทู้/โพสต์น่าสนใจประจำวัน (Daily Radar) รวม ~20 รายการ
  * กระจายครบทุกหมวดหมู่โซลูชัน และการันตีมีกระทู้ Facebook + Pantip + LinkedIn ครบถ้วน
+ * พร้อมป้องกันการดึงกระทู้ที่เคยค้นพบไปแล้ว (excludeUrls)
  */
-async function collectDailyRadarThreads(targetCount = 20) {
+async function collectDailyRadarThreads(targetCount = 20, excludeUrls = new Set()) {
   const categories = ['warehouse', 'data', 'logistics', 'production', 'alert', 'crm', 'energy', 'predictive'];
   const shuffled = [...categories].sort(() => Math.random() - 0.5);
 
@@ -1130,9 +1179,9 @@ async function collectDailyRadarThreads(targetCount = 20) {
 
       // ดึง Facebook สำหรับหมวดนี้
       if (fbCount < fbTargetTotal) {
-        const fbBatch = await searchFacebookThreads(queries, 1, cat);
+        const fbBatch = await searchFacebookThreads(queries, 1, cat, excludeUrls);
         for (const item of fbBatch) {
-          if (!seenUrls.has(item.url) && allResults.length < targetCount && fbCount < fbTargetTotal) {
+          if (!seenUrls.has(item.url) && (!excludeUrls || !excludeUrls.has(item.url)) && allResults.length < targetCount && fbCount < fbTargetTotal) {
             seenUrls.add(item.url);
             fbCount++;
             allResults.push({
@@ -1145,9 +1194,9 @@ async function collectDailyRadarThreads(targetCount = 20) {
 
       // ดึง Pantip สำหรับหมวดนี้
       if (ptCount < ptTargetTotal) {
-        const ptBatch = await searchPantipThreads(queries, 1);
+        const ptBatch = await searchPantipThreads(queries, 1, excludeUrls);
         for (const item of ptBatch) {
-          if (!seenUrls.has(item.url) && allResults.length < targetCount && ptCount < ptTargetTotal) {
+          if (!seenUrls.has(item.url) && (!excludeUrls || !excludeUrls.has(item.url)) && allResults.length < targetCount && ptCount < ptTargetTotal) {
             seenUrls.add(item.url);
             ptCount++;
             allResults.push({
@@ -1160,9 +1209,9 @@ async function collectDailyRadarThreads(targetCount = 20) {
 
       // ดึง LinkedIn สำหรับหมวดนี้
       if (liCount < liTargetTotal) {
-        const liBatch = await searchLinkedInThreads(queries, 1);
+        const liBatch = await searchLinkedInThreads(queries, 1, excludeUrls);
         for (const item of liBatch) {
-          if (!seenUrls.has(item.url) && allResults.length < targetCount && liCount < liTargetTotal) {
+          if (!seenUrls.has(item.url) && (!excludeUrls || !excludeUrls.has(item.url)) && allResults.length < targetCount && liCount < liTargetTotal) {
             seenUrls.add(item.url);
             liCount++;
             allResults.push({
@@ -1185,17 +1234,17 @@ async function collectDailyRadarThreads(targetCount = 20) {
     for (const term of fallbackTerms) {
       if (allResults.length >= targetCount) break;
       try {
-        const fbMore = await searchFacebookThreads([term], 2);
+        const fbMore = await searchFacebookThreads([term], 2, '', excludeUrls);
         for (const r of fbMore) {
-          if (!seenUrls.has(r.url) && allResults.length < targetCount) {
+          if (!seenUrls.has(r.url) && (!excludeUrls || !excludeUrls.has(r.url)) && allResults.length < targetCount) {
             seenUrls.add(r.url);
             allResults.push({ ...r, solutionCategory: `Keyword: ${term}` });
           }
         }
 
-        const ptMore = await searchPantipThreads([term], 2);
+        const ptMore = await searchPantipThreads([term], 2, excludeUrls);
         for (const r of ptMore) {
-          if (!seenUrls.has(r.url) && allResults.length < targetCount) {
+          if (!seenUrls.has(r.url) && (!excludeUrls || !excludeUrls.has(r.url)) && allResults.length < targetCount) {
             seenUrls.add(r.url);
             allResults.push({ ...r, solutionCategory: `Keyword: ${term}` });
           }

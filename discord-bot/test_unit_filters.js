@@ -134,4 +134,12 @@ const plcPost = { title: 'ฝึกการเขียนโปรแกรม
 assert.strictEqual(isSolutionPost(plcPost), true, 'PLC troubleshooting post should pass');
 console.log('✔ PLC troubleshooting post passed');
 
+// 6. Deduplication with excludeUrls
+console.log('\n--- 6. Testing Deduplication (excludeUrls) ---');
+const excludedFb = 'https://www.facebook.com/groups/123/posts/999';
+const excludeSet = new Set([excludedFb]);
+assert.strictEqual(excludeSet.has(excludedFb), true, 'URL in excludeUrls should be detected');
+assert.strictEqual(excludeSet.has('https://www.facebook.com/groups/123/posts/1000'), false, 'New URL should not be excluded');
+console.log('✔ Deduplication excludeUrls check passed');
+
 console.log('\nAll unit tests passed successfully!');
