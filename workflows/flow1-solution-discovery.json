@@ -51,7 +51,10 @@
       "position": [
         440,
         480
-      ]
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
     },
     {
       "parameters": {
@@ -81,7 +84,10 @@
         660,
         360
       ],
-      "onError": "continueRegularOutput"
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
     },
     {
       "parameters": {
@@ -111,7 +117,10 @@
         660,
         600
       ],
-      "onError": "continueRegularOutput"
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
     },
     {
       "parameters": {
@@ -168,11 +177,14 @@
       "position": [
         1320,
         480
-      ]
+      ],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000
     },
     {
       "parameters": {
-        "jsCode": "const candidates = $input.first()?.json?.candidates || [];\nconst rawText = candidates[0]?.content?.parts?.[0]?.text || '{}';\nlet data = {};\ntry {\n  data = JSON.parse(rawText);\n} catch (e) {\n  throw new Error('Failed to parse Gemini JSON output: ' + e.message);\n}\n\nreturn [{\n  json: {\n    base_solution_id: String(data.baseSolutionId || ''),\n    title_th: String(data.titleTh || '').trim(),\n    title_en: String(data.titleEn || '').trim(),\n    description_th: String(data.descriptionTh || '').trim(),\n    description_en: String(data.descriptionEn || '').trim(),\n    rationale: String(data.rationale || '').trim(),\n    features_json: JSON.stringify(data.features || []),\n    content_ai_json: JSON.stringify(data.contentAi || { th: {}, en: {} }),\n    features: data.features || [],\n    content_ai: data.contentAi || { th: {}, en: {} }\n  }\n}];"
+        "jsCode": "const candidates = $input.first()?.json?.candidates || [];\nconst rawText = candidates[0]?.content?.parts?.[0]?.text || '{}';\nconst cleanedText = rawText\n  .replace(/^```(?:json)?\\s*/i, '')\n  .replace(/\\s*```$/i, '')\n  .trim();\n\nlet data = {};\ntry {\n  data = JSON.parse(cleanedText);\n} catch (e) {\n  throw new Error('Failed to parse Gemini JSON output: ' + e.message);\n}\n\nreturn [{\n  json: {\n    base_solution_id: String(data.baseSolutionId || ''),\n    title_th: String(data.titleTh || '').trim(),\n    title_en: String(data.titleEn || '').trim(),\n    description_th: String(data.descriptionTh || '').trim(),\n    description_en: String(data.descriptionEn || '').trim(),\n    rationale: String(data.rationale || '').trim(),\n    features_json: JSON.stringify(data.features || []),\n    content_ai_json: JSON.stringify(data.contentAi || { th: {}, en: {} }),\n    features: data.features || [],\n    content_ai: data.contentAi || { th: {}, en: {} }\n  }\n}];"
       },
       "id": "f1-node-parse-suggestions",
       "name": "Parse Solution Suggestions",
@@ -222,7 +234,10 @@
       "position": [
         1980,
         480
-      ]
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
     }
   ],
   "connections": {
