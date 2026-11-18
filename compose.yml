@@ -4,8 +4,10 @@ services:
     image: searxng/searxng:latest
     environment:
       SEARXNG_SECRET: RfAwwvOanC7poPcILDqHrzFkZAogG1KJrEvV7O9jFxc=
+      SEARXNG_LIMITER: "false"
     volumes:
       - ./searxng-settings.yml:/etc/searxng/settings.yml:ro
+      - ./searxng-limiter.toml:/etc/searxng/limiter.toml:ro
     ports:
       - "127.0.0.1:5679:8080"
     restart: unless-stopped

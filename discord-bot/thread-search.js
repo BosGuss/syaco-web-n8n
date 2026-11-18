@@ -713,12 +713,14 @@ function isValidCandidate(item, targetPlatform = 'all') {
  * เรียกค้นหาจาก SearXNG
  */
 async function querySearxng(query) {
-  const endpoint = `${SEARXNG_URL}/search?q=${encodeURIComponent(query)}&format=json&engines=yandex`;
+  const endpoint = `${SEARXNG_URL}/search?q=${encodeURIComponent(query)}&format=json&engines=bing,yandex`;
   try {
     const res = await fetch(endpoint, {
       signal: AbortSignal.timeout(8000),
       headers: {
-        'Accept': 'application/json'
+        'Accept': 'application/json',
+        'X-Real-IP': '127.0.0.1',
+        'X-Forwarded-For': '127.0.0.1'
       }
     });
     if (!res.ok) {

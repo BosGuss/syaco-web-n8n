@@ -1,15 +1,29 @@
 use_default_settings: true
 
+server:
+  limiter: false
+
 search:
   formats:
     - html
     - json
 
 outgoing:
-  request_timeout: 4.0
-  max_request_timeout: 6.0
+  request_timeout: 6.0
+  max_request_timeout: 8.0
 
 engines:
+  - name: ahmia
+    inactive: true
+  - name: torch
+    inactive: true
+  - name: yahoo
+    disabled: true
+    inactive: true
+  - name: duckduckgo
+    disabled: true
+  - name: google
+    disabled: true
   - name: google cse
     disabled: true
   - name: brave
@@ -17,10 +31,7 @@ engines:
   - name: bing
     disabled: false
     weight: 3
-  - name: yahoo
+  - name: yandex
     disabled: false
     weight: 2
-  - name: duckduckgo
-    disabled: true
-  - name: google
-    disabled: true
+
