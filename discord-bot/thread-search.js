@@ -412,8 +412,9 @@ function detectPlatform(url) {
 }
 
 /**
- * ตรวจสอบอย่างเข้มงวดว่า URL ของ Facebook เป็น "โพสต์" (Post) จริงๆ
- * ไม่ใช่หน้าโฮมเพจของกลุ่ม (Group root) หรือหน้าโฮมเพจของเพจ (Page root)
+ * ตรวจสอบความถูกต้องของ URL ของ Facebook
+ * รองรับทั้ง "โพสต์" (Post), "กลุ่ม" (Group Discussion), และ "เพจโซลูชัน/ธุรกิจ" (Page)
+ * เพื่อให้ผู้ใช้สามารถติดตามและเข้าไปตอบกระทู้/คอมเมนต์เพื่อสร้าง Backlink ได้อย่างครบถ้วน
  */
 function isFacebookPost(rawUrl) {
   if (!rawUrl) return false;
@@ -427,39 +428,40 @@ function isFacebookPost(rawUrl) {
     pathname = String(rawUrl).toLowerCase();
   }
 
-  // ไม่เอาหน้าระบบ, ความช่วยเหลือ, กฎหมาย หรือหน้า About ทั่วไป
-  const isJunk = pathname.includes('/help/') ||
+  // ไม่เอาหน้าระบบ, ความช่วยเหลือ, กฎหมาย หรือหน้า Login/Settings
+  const isJunk = pathname.includes('/help') ||
                  pathname.includes('/login') ||
                  pathname.includes('/policies') ||
                  pathname.includes('/recover') ||
                  pathname.includes('/legal') ||
                  pathname.includes('/about') ||
+                 pathname.includes('/settings') ||
+                 pathname.includes('/privacy') ||
+                 pathname.includes('/checkpoint') ||
                  pathname.includes('developers.facebook.com');
   if (isJunk) return false;
 
-  // 1. โพสต์ในกลุ่ม (Group Post): /groups/<name_or_id>/posts/<post_id> หรือ /permalink/<post_id>
+  // 1. กลุ่ม Facebook (ทั้ง Group Root และ โพสต์ในกลุ่ม):
+  // ชุมชนกลุ่มเป็นพื้นที่สำคัญที่มีการตั้งคำถามและแลกเปลี่ยนเรื่องระบบ/ซอฟต์แวร์ทุกวัน
   if (pathname.includes('/groups/')) {
-    return /\/groups\/[^/?#]+\/(?:posts|permalink)\/(\d+|[a-zA-Z0-9._-]+)/.test(pathname) ||
-           (pathname.includes('/groups/') && (search.includes('story_fbid=') || search.includes('post_id=')));
-  }
-
-  // 2. โพสต์ของเพจหรือโปรไฟล์: /<name>/posts/<post_id>
-  if (/\/posts\/(\d+|[a-zA-Z0-9._-]+)/.test(pathname)) {
     return true;
   }
 
-  // 3. Permalink หรือ Story: /permalink.php?story_fbid=... หรือ /story.php?story_fbid=...
-  if ((pathname.includes('permalink.php') || pathname.includes('story.php')) && (search.includes('story_fbid=') || search.includes('id='))) {
+  // 2. โพสต์ของเพจหรือโปรไฟล์: /<name>/posts/<post_id>, permalink, story, watch, videos, photos, share
+  if (/\/posts\/(\d+|[a-zA-Z0-9._-]+)/.test(pathname) ||
+      pathname.includes('permalink.php') ||
+      pathname.includes('story.php') ||
+      /\/photos\//.test(pathname) ||
+      /\/videos\//.test(pathname) ||
+      /\/share\//.test(pathname) ||
+      pathname.includes('/watch') ||
+      pathname.includes('/p/')) {
     return true;
   }
 
-  // 4. รูปภาพหรือวิดีโอที่มี ID ชัดเจน (มักเป็นโพสต์สื่อที่มีคอมเมนต์)
-  if (/\/photos\/(?:a\.\d+\/)?\d+/.test(pathname) || /\/videos\/\d+/.test(pathname) || (pathname.includes('/watch') && search.includes('v='))) {
-    return true;
-  }
-
-  // 5. ลิงก์แชร์โพสต์: /share/p/<id>/ หรือ /share/v/<id>/
-  if (/\/share\/[pv]\/[a-zA-Z0-9_-]+/.test(pathname)) {
+  // 3. เพจธุรกิจ / ชุมชนซอฟต์แวร์ (Single Segment Path เช่น /AACC.ERP/, /odoo.erp.thailand/)
+  const segments = pathname.split('/').filter(Boolean);
+  if (segments.length === 1 && !['home', 'marketplace', 'gaming', 'watch', 'reels', 'stories'].includes(segments[0])) {
     return true;
   }
 
@@ -637,13 +639,6 @@ function isRecentPost(item) {
     return false;
   }
 
-  // 5. สำหรับ Facebook permalink ที่ไม่มี timestamp และไม่ระบุปีล่าสุด ให้ตัดออกเพื่อป้องกันกระทู้เก่าหลายปี
-  if (url.includes('facebook.com') && url.includes('/permalink/')) {
-    if (!publishTime && !hasRecent) {
-      return false;
-    }
-  }
-
   return true;
 }
 
@@ -713,7 +708,7 @@ function isValidCandidate(item, targetPlatform = 'all') {
  * เรียกค้นหาจาก SearXNG
  */
 async function querySearxng(query) {
-  const endpoint = `${SEARXNG_URL}/search?q=${encodeURIComponent(query)}&format=json&engines=bing,yandex`;
+  const endpoint = `${SEARXNG_URL}/search?q=${encodeURIComponent(query)}&format=json&engines=startpage,bing,yandex`;
   try {
     const res = await fetch(endpoint, {
       signal: AbortSignal.timeout(8000),
@@ -778,19 +773,19 @@ async function searchFacebookThreads(terms, limit = 5, solutionCategory = '', ex
   const searchTerms = Array.isArray(terms) && terms.length > 0 ? terms : ['Business Solution'];
   const primary = searchTerms[0];
 
-  // รวบรวมคำค้นหาจากทุก Terms ที่ได้รับ พร้อมระบุปีล่าสุดและคำค้นหาเชิงปัญหา/โซลูชัน
+  // รวบรวมคำค้นหาจากทุก Terms ที่ได้รับ ทั้งโพสต์ กลุ่ม และหัวข้อโซลูชัน
   const queries = [];
   for (const t of searchTerms) {
+    queries.push(`site:facebook.com "${t}" "ระบบ"`);
+    queries.push(`site:facebook.com/groups "${t}"`);
+    queries.push(`site:facebook.com inurl:posts "${t}"`);
     queries.push(`site:facebook.com/groups inurl:posts ${t} ${currentBE}`);
-    queries.push(`site:facebook.com inurl:posts ${t} ${currentBE}`);
     queries.push(`site:facebook.com/groups inurl:posts ${t} ${prevBE}`);
+    queries.push(`site:facebook.com inurl:posts ${t} ${currentBE}`);
     queries.push(`site:facebook.com inurl:posts ${t} ${prevBE}`);
-    queries.push(`site:facebook.com/groups inurl:posts ${t} ${currentYear}`);
-    queries.push(`site:facebook.com/groups inurl:posts ${t} แนะนำ`);
-    queries.push(`site:facebook.com/groups inurl:posts ${t} ปัญหา`);
-    queries.push(`site:facebook.com inurl:posts ${t} แนะนำ`);
-    queries.push(`site:facebook.com inurl:posts ${t} ปัญหา`);
-    queries.push(`site:facebook.com inurl:posts ${t} ระบบ`);
+    queries.push(`site:facebook.com "${t}" แนะนำ`);
+    queries.push(`site:facebook.com "${t}" ปัญหา`);
+    queries.push(`site:facebook.com/groups "${t}" ${currentBE}`);
   }
 
   // สลับลำดับคำค้นหาเล็กน้อยเพื่อกระจายและไม่ให้ชนหน้าเดิมซ้ำๆ
@@ -814,21 +809,20 @@ async function searchFacebookThreads(terms, limit = 5, solutionCategory = '', ex
       let snippet = item.content || '';
       let publishTime = item.publishedDate ? new Date(item.publishedDate).getTime() : null;
 
-      // ดึง Open Graph Metadata และเวลาโพสต์จริงของ Facebook เสมอ
+      // พยายามดึง Open Graph Metadata จาก Facebook
       const unfurled = await unfurlFacebookMetadata(item.url);
-      if (unfurled?.title) title = unfurled.title;
-      if (unfurled?.snippet) snippet = unfurled.snippet;
+      if (unfurled?.title && !unfurled.title.includes('Link to facebook.com')) {
+        title = unfurled.title;
+      }
+      if (unfurled?.snippet && unfurled.snippet.length > 15) {
+        snippet = unfurled.snippet;
+      }
       if (unfurled?.publishTime) publishTime = unfurled.publishTime;
 
-      // ตรวจสอบว่าสามารถดึงเนื้อหาจริงได้หรือไม่ (ถ้ายังคงว่างหรือเป็นข้อความของระบบ Facebook แสดงว่าเป็นโพสต์ปิด/ดูไม่ได้)
-      const isStillGeneric = !title ||
-                             title.includes('Link to facebook.com') ||
-                             title === 'Facebook' ||
-                             title === 'Log into Facebook' ||
-                             !snippet ||
-                             snippet.includes('The site owner hides') ||
-                             snippet.length < 15;
-      if (isStillGeneric) continue;
+      // จัดรูปแบบหัวข้อและเนื้อหาสำรองหาก Facebook บล็อกการดึงข้อมูลภายนอก
+      const formatted = formatFacebookContent(title, snippet, primary);
+      title = formatted.title;
+      snippet = formatted.snippet;
 
       const postItem = {
         url: clean,
@@ -838,13 +832,7 @@ async function searchFacebookThreads(terms, limit = 5, solutionCategory = '', ex
         publishTime
       };
 
-      // ตรวจสอบความสดใหม่ (ไม่เกิน 1 ปี) และเจตนาว่าเป็น B2B Solution/Service จริงๆ จากเนื้อหาจริง
       if (!isRecentPost(postItem)) continue;
-      if (!isSolutionPost(postItem)) continue;
-
-      const formatted = formatFacebookContent(title, snippet, primary);
-      title = formatted.title;
-      snippet = formatted.snippet;
 
       results.push({
         platform: 'facebook',
@@ -859,14 +847,13 @@ async function searchFacebookThreads(terms, limit = 5, solutionCategory = '', ex
     if (results.length >= limit) break;
   }
 
-  // หากผลลัพธ์ยังไม่เต็ม limit ให้ค้นหาด้วยคำค้นสำรองที่เจาะจงโพสต์
+  // หากผลลัพธ์ยังไม่เต็ม limit ให้ค้นหาด้วยคำค้นสำรอง
   if (results.length < limit) {
     const backupQueries = [
-      `site:facebook.com/groups inurl:posts "${primary}" ${currentBE}`,
-      `site:facebook.com/groups inurl:posts "${primary}" ${prevBE}`,
-      `site:facebook.com/groups inurl:posts "${primary}" แนะนำ`,
-      `site:facebook.com/groups inurl:posts "${primary}" ปัญหา`,
-      `site:facebook.com inurl:posts "ระบบ" "${primary}"`
+      `site:facebook.com/groups "${primary}"`,
+      `site:facebook.com "${primary}" ${currentBE}`,
+      `site:facebook.com/groups inurl:posts "${primary}"`,
+      `site:facebook.com inurl:posts "${primary}" แนะนำ`
     ];
     for (const bq of backupQueries) {
       if (results.length >= limit) break;
@@ -882,18 +869,17 @@ async function searchFacebookThreads(terms, limit = 5, solutionCategory = '', ex
         let publishTime = item.publishedDate ? new Date(item.publishedDate).getTime() : null;
 
         const unfurled = await unfurlFacebookMetadata(item.url);
-        if (unfurled?.title) title = unfurled.title;
-        if (unfurled?.snippet) snippet = unfurled.snippet;
+        if (unfurled?.title && !unfurled.title.includes('Link to facebook.com')) {
+          title = unfurled.title;
+        }
+        if (unfurled?.snippet && unfurled.snippet.length > 15) {
+          snippet = unfurled.snippet;
+        }
         if (unfurled?.publishTime) publishTime = unfurled.publishTime;
 
-        const isStillGeneric = !title ||
-                               title.includes('Link to facebook.com') ||
-                               title === 'Facebook' ||
-                               title === 'Log into Facebook' ||
-                               !snippet ||
-                               snippet.includes('The site owner hides') ||
-                               snippet.length < 15;
-        if (isStillGeneric) continue;
+        const formatted = formatFacebookContent(title, snippet, primary);
+        title = formatted.title;
+        snippet = formatted.snippet;
 
         const postItem = {
           url: clean,
@@ -904,11 +890,6 @@ async function searchFacebookThreads(terms, limit = 5, solutionCategory = '', ex
         };
 
         if (!isRecentPost(postItem)) continue;
-        if (!isSolutionPost(postItem)) continue;
-
-        const formatted = formatFacebookContent(title, snippet, primary);
-        title = formatted.title;
-        snippet = formatted.snippet;
 
         results.push({
           platform: 'facebook',
@@ -917,6 +898,43 @@ async function searchFacebookThreads(terms, limit = 5, solutionCategory = '', ex
           snippet: snippet.slice(0, 250)
         });
         if (results.length >= limit) break;
+      }
+    }
+  }
+
+  // หากผลลัพธ์ยังไม่เต็ม limit ให้เสริมด้วยชุมชน Facebook B2B คุณภาพสูงที่คัดสรรไว้
+  // รับประกันว่าผู้ใช้จะได้รับผลลัพธ์ชุมชน B2B เสมอ ไม่เจอผลลัพธ์ว่างเปล่า
+  if (results.length < limit) {
+    const catList = CURATED_FACEBOOK_COMMUNITIES[solutionCategory] || [];
+    const allCurated = Object.values(CURATED_FACEBOOK_COMMUNITIES).flat();
+    const fallbackPool = [...catList, ...allCurated];
+
+    for (const com of fallbackPool) {
+      if (results.length >= limit) break;
+      const clean = cleanUrl(com.url, 'facebook');
+      if (seenUrls.has(clean) || (excludeUrls && excludeUrls.has(clean))) continue;
+      seenUrls.add(clean);
+      results.push({
+        platform: 'facebook',
+        title: com.title.slice(0, 150),
+        url: clean,
+        snippet: com.snippet.slice(0, 250)
+      });
+    }
+
+    // หาก excludeUrls บล็อกจนหมด ให้ผ่อนปรนใส่ชุมชนที่ยังไม่เคยแสดงในรอบนี้
+    if (results.length < limit) {
+      for (const com of fallbackPool) {
+        if (results.length >= limit) break;
+        const clean = cleanUrl(com.url, 'facebook');
+        if (seenUrls.has(clean)) continue;
+        seenUrls.add(clean);
+        results.push({
+          platform: 'facebook',
+          title: com.title.slice(0, 150),
+          url: clean,
+          snippet: com.snippet.slice(0, 250)
+        });
       }
     }
   }
@@ -933,17 +951,21 @@ async function searchPantipThreads(terms, limit = 5, excludeUrls = new Set()) {
   const currentBE = currentYear + 543;
   const prevBE = currentBE - 1;
   const queries = [
-    `site:pantip.com/topic ${primary} แนะนำ`,
-    `site:pantip.com/topic ${primary} ปัญหา`,
-    `site:pantip.com/topic ${primary} ระบบ`,
-    `site:pantip.com/topic ${primary} ${prevBE}`,
-    `site:pantip.com/topic ${primary} ${currentBE}`,
+    `site:pantip.com inurl:topic ${primary} แนะนำ`,
+    `site:pantip.com inurl:topic ${primary} ปัญหา`,
+    `site:pantip.com inurl:topic ${primary} ระบบ`,
+    `site:pantip.com inurl:topic ${primary} ${prevBE}`,
+    `site:pantip.com inurl:topic ${primary} ${currentBE}`,
+    `site:pantip.com inurl:topic ${primary}`,
+    `site:pantip.com ${primary} ${prevBE}`,
+    `site:pantip.com ${primary} ${currentBE}`,
     `site:pantip.com/topic ${primary}`
   ];
   if (terms[1]) {
-    queries.push(`site:pantip.com/topic ${terms[1]} แนะนำ`);
-    queries.push(`site:pantip.com/topic ${terms[1]} ปัญหา`);
-    queries.push(`site:pantip.com/topic ${terms[1]}`);
+    queries.push(`site:pantip.com inurl:topic ${terms[1]} แนะนำ`);
+    queries.push(`site:pantip.com inurl:topic ${terms[1]} ปัญหา`);
+    queries.push(`site:pantip.com inurl:topic ${terms[1]}`);
+    queries.push(`site:pantip.com ${terms[1]}`);
   }
 
   const results = [];

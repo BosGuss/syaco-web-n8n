@@ -555,10 +555,10 @@ async function handleCommand(interaction, { pool, client }) {
 
       // ดึงรายการ URL ที่เคยค้นพบไปแล้ว (จาก cache และ backlink candidates) เพื่อป้องกันการค้นพบซ้ำ
       const { rows: cachedRows } = await pool.query(`
-        SELECT DISTINCT post_url FROM thread_search_cache WHERE created_at > NOW() - INTERVAL '30 days'
+        SELECT DISTINCT post_url FROM thread_search_cache WHERE created_at > NOW() - INTERVAL '7 days'
         UNION
-        SELECT DISTINCT post_url FROM backlink_candidates
-      `);
+        SELECT DISTINCT post_url FROM backlink_candidates WHERE platform = $1 OR $1 = 'all'
+      `, [platform]);
       const excludeUrls = new Set(cachedRows.map(r => r.post_url).filter(Boolean));
 
       // เป็นโหมด Radar เมื่อไม่ได้ระบุคีย์เวิร์ด และเลือกแพลตฟอร์มทั้งหมด (all)
@@ -585,6 +585,32 @@ async function handleCommand(interaction, { pool, client }) {
           solutionsCovered = [searchRes.autoMeta.solutionTitle];
         } else {
           solutionsCovered = [rawKeyword || (platform !== 'all' ? platform.toUpperCase() : 'General')];
+        }
+      }
+
+      // หากคัดกรองด้วย excludeUrls แล้วผลลัพธ์ว่างเปล่า ให้ผ่อนปรนค้นหาซ้ำโดยไม่ตัด excludeUrls
+      // เพื่อให้ผู้ใช้มีกระทู้คุณภาพสำหรับสร้าง Backlink เสมอ (ป้องกันข้อความ "ไม่พบกระทู้")
+      if (!results.length && excludeUrls.size > 0) {
+        if (isRadar) {
+          const fallbackRadar = await collectDailyRadarThreads(limit, new Set());
+          results = fallbackRadar.results;
+          solutionsCovered = fallbackRadar.solutionsCovered;
+        } else {
+          const isAutoCategory = !rawKeyword || rawKeyword === 'auto' || rawKeyword.startsWith('auto:');
+          const mode = isAutoCategory ? 'auto' : 'manual';
+          const fallbackRes = await searchRecentThreads({
+            keyword: rawKeyword,
+            mode,
+            platform,
+            limit,
+            excludeUrls: new Set()
+          });
+          results = fallbackRes.results;
+          if (fallbackRes.autoMeta?.solutionTitle) {
+            solutionsCovered = [fallbackRes.autoMeta.solutionTitle];
+          } else {
+            solutionsCovered = [rawKeyword || (platform !== 'all' ? platform.toUpperCase() : 'General')];
+          }
         }
       }
 

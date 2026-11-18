@@ -436,15 +436,19 @@ async function runDailyRadarTask() {
     console.log(`[DailyRadar] Starting automated daily thread gathering (target: ${targetLimit})...`);
     const { collectDailyRadarThreads } = require('./thread-search');
 
-    // ดึงรายการ URL ที่เคยค้นพบไปแล้วเพื่อป้องกันเรดาร์ซ้ำ
+    // ดึงรายการ URL ที่เคยค้นพบไปแล้วเพื่อป้องกันเรดาร์ซ้ำ (ย้อนหลัง 7 วัน)
     const { rows: cachedRows } = await pool.query(`
-      SELECT DISTINCT post_url FROM thread_search_cache WHERE created_at > NOW() - INTERVAL '30 days'
+      SELECT DISTINCT post_url FROM thread_search_cache WHERE created_at > NOW() - INTERVAL '7 days'
       UNION
       SELECT DISTINCT post_url FROM backlink_candidates
     `);
     const excludeUrls = new Set(cachedRows.map(r => r.post_url).filter(Boolean));
 
-    const { solutionsCovered, results } = await collectDailyRadarThreads(targetLimit, excludeUrls);
+    let radarData = await collectDailyRadarThreads(targetLimit, excludeUrls);
+    if (!radarData.results.length && excludeUrls.size > 0) {
+      radarData = await collectDailyRadarThreads(targetLimit, new Set());
+    }
+    const { solutionsCovered, results } = radarData;
 
     if (!results.length) {
       console.log('[DailyRadar] No new threads found today.');

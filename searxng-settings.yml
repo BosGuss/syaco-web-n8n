@@ -34,4 +34,7 @@ engines:
   - name: yandex
     disabled: false
     weight: 2
+  - name: startpage
+    disabled: false
+    weight: 4
 
