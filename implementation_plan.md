@@ -318,8 +318,11 @@ CREATE TABLE content_drafts (
    - **Facebook**: รักษาพารามิเตอร์ระบุโพสต์ที่จำเป็น เช่น `story_fbid`, `id`, `post_id` หรือ path `/groups/.../posts/{id}`
    - **LinkedIn**: ตัด UTM/query tracking ออก เหลือ canonical post path เช่น `https://www.linkedin.com/posts/...`
 3. **Idempotency ด้วย Normalized URL**: ตรวจสอบ `post_url` (UNIQUE) หากส่งลิงก์เดิมซ้ำ บอตจะตอบกลับว่า "กระทู้นี้อยู่ในระบบแล้ว" พร้อมแสดงการ์ดเดิม ไม่สร้างแถวซ้ำ
-4. **จำกัดโควตา 3–5 กระทู้ต่อสัปดาห์ (บังคับด้วย Database Query)**:
-   - เมื่อรับคำสั่ง `/answer` จะรันคำนวณจำนวนโพสต์ที่ถูก approve/posted ในช่วง 7 วันที่ผ่านมา:
+4. **โควตาตอบกระทู้ (Configurable Quota & Unlimited Default)**:
+   - ตรวจสอบจำนวนโพสต์ที่ถูก approve/posted ในช่วง 7 วันที่ผ่านมาด้วย SQL Query
+   - ค่าเริ่มต้นถูกปรับเป็น **ไม่มีลิมิต (Unlimited)** โดยคงโหนด `If Quota Exceeded` และ `Respond Quota Exceeded` ไว้บน Canvas เพื่อรองรับการเปิดใช้งานหรือปรับแก้ในอนาคต (สามารถกำหนดผ่าน `$env.FLOW3_WEEKLY_QUOTA` หรือปรับ `rightValue` ในโหนด)
+   - หากมีการเปิดใช้งานและโควตาเต็ม ระบบจะส่งการ์ดแจ้งเตือนเข้าห้อง Discord Channel อัตโนมัติ (`flow3_quota_exceeded`)
+   - SQL Query ตรวจสอบสถิติ:
      ```sql
      SELECT COUNT(*) AS weekly_count 
      FROM backlink_candidates 
@@ -327,7 +330,6 @@ CREATE TABLE content_drafts (
        AND status IN ('pending_review', 'approved', 'posted')
        AND created_at >= NOW() - INTERVAL '7 days';
      ```
-   - หากเกิน 5 กระทู้/สัปดาห์: บอตจะแจ้งเตือนว่า "โควตาตอบกระทู้สัปดาห์นี้ครบแล้ว (5/5) เพื่อป้องกันบัญชีถูกมองเป็นสแปม" และหยุดทำงาน
 5. **ดึงเฉพาะ Published Solutions**:
    - เรียก HTTP GET `https://www.syaco.co.th/api/solutions` (**ไม่มี `?all=true`**) เพื่อไม่ให้ดึง Draft ที่ AI เพิ่งแนะนำมาอ้างอิง
 6. **Lead Fit & Can-Answer Qualification**:
@@ -397,7 +399,7 @@ CREATE TABLE content_drafts (
    ```
 4. **Quota & Duplicate Guard** — IF node:
    - หาก `existing_id IS NOT NULL`: แจ้ง Discord ว่า "กระทู้นี้อยู่ในระบบแล้ว (ID: {{ $json.existing_id }}, สถานะ: {{ $json.existing_status }})" → จบการทำงาน
-   - หาก `weekly_count >= 5`: แจ้ง Discord ว่า "โควตาตอบกระทู้สัปดาห์นี้เต็มแล้ว ({{ $json.weekly_count }}/5) เพื่อความปลอดภัยของบัญชี" → จบการทำงาน
+   - หากโควตาเต็ม (เมื่อมีการตั้งค่าลิมิต): ส่งการ์ดแจ้งเตือนเข้า Discord Channel ทันที และตอบกลับผู้ใช้ว่า "โควตาตอบกระทู้สัปดาห์นี้เต็มแล้ว" → จบการทำงาน
 5. **Fetch Published Solutions Catalog** — HTTP GET `https://www.syaco.co.th/api/solutions` (**เฉพาะ Published**)
 6. **Build Lead Qualification & Draft Prompt** — Code node:
    - ตรวจสอบ `lead_fit`: HIGH (Enterprise/B2B/Factory), MEDIUM (SMB/General Tech), LOW (Student/Hobbyist/Gaming)

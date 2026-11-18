@@ -683,7 +683,36 @@ client.on('interactionCreate', async (interaction) => {
             return await interaction.editReply(`⚠️ กระทู้นี้อยู่ในระบบแล้ว (Candidate ID: #${resData.id}, สถานะ: \`${resData.existing_status}\`)`);
           }
           if (resData.status === 'quota_exceeded') {
-            return await interaction.editReply(`🚫 **โควตาสัปดาห์นี้เต็มแล้ว (${resData.count}/5)** เพื่อป้องกันการสแปมตามนโยบายชุมชน`);
+            try {
+              let alertChannelId = null;
+              const { rows } = await pool.query("SELECT value FROM bot_settings WHERE key = 'DISCORD_CHANNEL_ID'");
+              if (rows.length && rows[0].value && rows[0].value !== '123456789012345678') {
+                alertChannelId = rows[0].value;
+              }
+              if (!alertChannelId) alertChannelId = process.env.DISCORD_CHANNEL_ID;
+              if (alertChannelId) {
+                const alertChannel = await client.channels.fetch(alertChannelId).catch(() => null);
+                if (alertChannel) {
+                  const quotaAlertEmbed = new EmbedBuilder()
+                    .setTitle('🚫 [Flow 3] แจ้งเตือน: โควตาตอบกระทู้เต็มแล้ว')
+                    .setColor(0xef4444)
+                    .setDescription(`ผู้ใช้ **${interaction.user.tag}** (<@${interaction.user.id}>) พยายามส่งกระทู้เข้าระบบ แต่โควตาสัปดาห์นี้เต็มแล้ว`)
+                    .addFields(
+                      { name: 'แพลตฟอร์ม', value: platform, inline: true },
+                      { name: 'จำนวนใน 7 วัน', value: `${resData.count} รายการ`, inline: true },
+                      { name: 'ลิงก์กระทู้', value: postUrl, inline: false }
+                    )
+                    .setFooter({ text: 'ระบบหยุดการประมวลผลเพื่อความปลอดภัยตามนโยบาย Anti-Spam' })
+                    .setTimestamp();
+                  await alertChannel.send({ embeds: [quotaAlertEmbed] }).catch(() => {});
+                }
+              }
+            } catch (err) {
+              console.error('Error sending quota alert to channel:', err);
+            }
+
+            const limitText = resData.limit && resData.limit < 999999 ? `/${resData.limit}` : '';
+            return await interaction.editReply(`🚫 **โควตาสัปดาห์นี้เต็มแล้ว (${resData.count}${limitText} รายการ)** ระบบได้ส่งการแจ้งเตือนไปยังห้องหลักเรียบร้อยครับ`);
           }
 
           const notifyChannelId = process.env.DISCORD_CHANNEL_ID;
@@ -1386,7 +1415,36 @@ client.on('interactionCreate', async (interaction) => {
             return await interaction.editReply(`⚠️ กระทู้นี้อยู่ในระบบแล้ว (ID: #${resData.id}, สถานะ: \`${resData.existing_status}\`)`);
           }
           if (resData.status === 'quota_exceeded') {
-            return await interaction.editReply(`🚫 **โควตาสัปดาห์นี้เต็มแล้ว (${resData.count}/5)** เพื่อป้องกันการสแปมตามนโยบายชุมชน`);
+            try {
+              let alertChannelId = null;
+              const { rows } = await pool.query("SELECT value FROM bot_settings WHERE key = 'DISCORD_CHANNEL_ID'");
+              if (rows.length && rows[0].value && rows[0].value !== '123456789012345678') {
+                alertChannelId = rows[0].value;
+              }
+              if (!alertChannelId) alertChannelId = process.env.DISCORD_CHANNEL_ID;
+              if (alertChannelId) {
+                const alertChannel = await client.channels.fetch(alertChannelId).catch(() => null);
+                if (alertChannel) {
+                  const quotaAlertEmbed = new EmbedBuilder()
+                    .setTitle('🚫 [Flow 3] แจ้งเตือน: โควตาตอบกระทู้เต็มแล้ว')
+                    .setColor(0xef4444)
+                    .setDescription(`ผู้ใช้ **${interaction.user.tag}** (<@${interaction.user.id}>) พยายามส่งกระทู้เข้าระบบ แต่โควตาสัปดาห์นี้เต็มแล้ว`)
+                    .addFields(
+                      { name: 'แพลตฟอร์ม', value: platform, inline: true },
+                      { name: 'จำนวนใน 7 วัน', value: `${resData.count} รายการ`, inline: true },
+                      { name: 'ลิงก์กระทู้', value: postUrl, inline: false }
+                    )
+                    .setFooter({ text: 'ระบบหยุดการประมวลผลเพื่อความปลอดภัยตามนโยบาย Anti-Spam' })
+                    .setTimestamp();
+                  await alertChannel.send({ embeds: [quotaAlertEmbed] }).catch(() => {});
+                }
+              }
+            } catch (err) {
+              console.error('Error sending quota alert to channel:', err);
+            }
+
+            const limitText = resData.limit && resData.limit < 999999 ? `/${resData.limit}` : '';
+            return await interaction.editReply(`🚫 **โควตาสัปดาห์นี้เต็มแล้ว (${resData.count}${limitText} รายการ)** ระบบได้ส่งการแจ้งเตือนไปยังห้องหลักเรียบร้อยครับ`);
           }
 
           return await interaction.editReply(`✅ **ส่งกระทู้เข้าสู่ระบบเรียบร้อย!** AI กำลังประเมิน Lead Fit และร่างคำตอบ การ์ดจะปรากฏในห้องแจ้งเตือนเมื่อพร้อมตรวจทานครับ`);
@@ -1640,7 +1698,25 @@ app.post('/notify', async (req, res) => {
       return res.json({ ok: true, type: 'manual_ready' });
     }
 
-    // 4. Default: Candidate for Flow 3
+    // 4. Flow 3: Quota Exceeded Alert
+    if (body.type === 'flow3_quota_exceeded') {
+      const quotaEmbed = new EmbedBuilder()
+        .setTitle('🚫 [Flow 3] แจ้งเตือน: โควตาตอบกระทู้เต็มแล้ว (Quota Exceeded)')
+        .setColor(0xef4444)
+        .setDescription(`ระบบตรวจพบว่าจำนวนกระทู้ที่ถูกส่ง/อนุมัติในรอบ 7 วันที่ผ่านมาครบโควตาแล้ว และไม่สามารถประมวลผลกระทู้ใหม่ได้\n\n📊 **สถิติ 7 วันล่าสุด:** \`${body.count} รายการ\` (โควตาที่กำหนด: \`${body.limit && body.limit < 999999 ? body.limit : 'ไม่จำกัด'}\`)`)
+        .addFields(
+          { name: 'แพลตฟอร์ม', value: String(body.platform || '-'), inline: true },
+          { name: 'ผู้ส่งคำขอ', value: String(body.requested_by || '-'), inline: true },
+          { name: 'ลิงก์ที่พยายามส่ง', value: String(body.post_url || '-'), inline: false }
+        )
+        .setFooter({ text: 'เพื่อความปลอดภัยของบัญชีตามนโยบาย Anti-Spam ชุมชน' })
+        .setTimestamp();
+
+      await channel.send({ embeds: [quotaEmbed] });
+      return res.json({ ok: true, type: 'flow3_quota_exceeded' });
+    }
+
+    // 5. Default: Candidate for Flow 3
     const candidate = body;
     if (!candidate || !candidate.id) {
       return res.json({ ok: true, skipped: true, reason: 'No candidate ID (likely duplicate post_url)' });

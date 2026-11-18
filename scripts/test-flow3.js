@@ -96,4 +96,19 @@ assert.strictEqual(checkQualified({ leadFit: 'HIGH', canAnswer: true, matchScore
 assert.strictEqual(checkQualified({ leadFit: 'LOW', canAnswer: true, matchScore: 0.99 }), false);
 assert.strictEqual(checkQualified({ leadFit: 'HIGH', canAnswer: false, matchScore: 0.99 }), false);
 
+// 5. Quota Evaluation Logic (Unlimited by default: 999999, configurable via env)
+function isQuotaExceeded(weeklyCount, envQuota) {
+  const quotaLimit = envQuota ? parseInt(envQuota) : 999999;
+  return parseInt(weeklyCount || 0) >= quotaLimit;
+}
+
+// Default (Unlimited)
+assert.strictEqual(isQuotaExceeded(0), false);
+assert.strictEqual(isQuotaExceeded(5), false);
+assert.strictEqual(isQuotaExceeded(100), false);
+// When quota is explicitly configured
+assert.strictEqual(isQuotaExceeded(4, '5'), false);
+assert.strictEqual(isQuotaExceeded(5, '5'), true);
+assert.strictEqual(isQuotaExceeded(10, '5'), true);
+
 console.log('✅ All Flow 3 test checks passed successfully!');

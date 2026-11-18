@@ -109,13 +109,13 @@
           "options": {
             "caseSensitive": true,
             "leftValue": "",
-            "typeValidation": "strict"
+            "typeValidation": "loose"
           },
           "conditions": [
             {
               "id": "f3-cond-quota",
               "leftValue": "={{ parseInt($json.weekly_count || 0) }}",
-              "rightValue": 5,
+              "rightValue": "={{ $env.FLOW3_WEEKLY_QUOTA ? parseInt($env.FLOW3_WEEKLY_QUOTA) : 999999 }}",
               "operator": {
                 "type": "number",
                 "operation": "gte"
@@ -138,7 +138,7 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ { status: 'quota_exceeded', count: $json.weekly_count } }}",
+        "responseBody": "={{ { status: 'quota_exceeded', count: $json.weekly_count, limit: $env.FLOW3_WEEKLY_QUOTA ? parseInt($env.FLOW3_WEEKLY_QUOTA) : 999999 } }}",
         "options": {
           "responseCode": 200
         }
@@ -151,6 +151,27 @@
         1400,
         260
       ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://discord-bot:3000/notify",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\n  type: 'flow3_quota_exceeded',\n  count: $json.weekly_count,\n  limit: $env.FLOW3_WEEKLY_QUOTA ? parseInt($env.FLOW3_WEEKLY_QUOTA) : 999999,\n  post_url: $('Platform-Aware Normalize Post URL').first()?.json?.post_url || '',\n  platform: $('Platform-Aware Normalize Post URL').first()?.json?.platform || '',\n  requested_by: $('Platform-Aware Normalize Post URL').first()?.json?.requested_by || 'Discord User'\n} }}",
+        "options": {}
+      },
+      "id": "f3-node-notify-quota",
+      "name": "Notify Discord Quota Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1640,
+        260
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
     },
     {
       "parameters": {
@@ -383,6 +404,17 @@
         [
           {
             "node": "Respond Accepted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond Quota Exceeded": {
+      "main": [
+        [
+          {
+            "node": "Notify Discord Quota Alert",
             "type": "main",
             "index": 0
           }
