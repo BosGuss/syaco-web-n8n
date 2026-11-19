@@ -142,4 +142,56 @@ assert.strictEqual(excludeSet.has(excludedFb), true, 'URL in excludeUrls should 
 assert.strictEqual(excludeSet.has('https://www.facebook.com/groups/123/posts/1000'), false, 'New URL should not be excluded');
 console.log('✔ Deduplication excludeUrls check passed');
 
+// 7. Dynamic Solution Topic Matching (for newly added solutions on website)
+console.log('\n--- 7. Testing Dynamic Solution Topic Matching ---');
+const {
+  extractSolutionKeywords,
+  buildDynamicSolutionTopicsRegex
+} = require('./thread-search');
+
+// Simulate a completely new solution added on the website (e.g. Cybersecurity & Pentest)
+const mockNewSolution = {
+  id: 99,
+  titleTh: 'ระบบตรวจสอบความปลอดภัยไซเบอร์ (Cybersecurity & Pentest)',
+  titleEn: 'Cybersecurity & Penetration Testing',
+  descTh: 'บริการประเมินความเสี่ยงและตรวจสอบช่องโหว่ระบบคอมพิวเตอร์',
+  descEn: 'Enterprise cybersecurity posture assessment and penetration testing',
+  curatedQueries: [
+    'ตรวจช่องโหว่ระบบ ปัญหา',
+    'แนะนำ Pentest บริษัท'
+  ]
+};
+
+// 7.1 Verify keyword extraction
+const extracted = extractSolutionKeywords(mockNewSolution);
+assert(extracted.includes('cybersecurity'), 'Must extract english term "cybersecurity"');
+assert(extracted.includes('pentest'), 'Must extract english term "pentest"');
+assert(extracted.includes('penetration'), 'Must extract english term "penetration"');
+assert(extracted.includes('ตรวจสอบความปลอดภัยไซเบอร์'), 'Must extract Thai title phrase');
+console.log('✔ Keyword extraction for new solution succeeded:', extracted);
+
+// 7.2 Post that discusses this new solution
+const cybersecurityPost = {
+  title: 'สอบถามครับ กำลังหาบริษัททำ Cybersecurity audit และ Pentest ประจำปี แนะนำหน่อยครับ',
+  snippet: 'เนื่องจากมีข้อกำหนดใหม่เรื่องความปลอดภัยระบบไอที กำลังมองหาทีมผู้เชี่ยวชาญ...'
+};
+
+// Without dynamic regex (old static regex without cybersecurity/pentest)
+const staticRegexOnly = buildDynamicSolutionTopicsRegex([], []);
+// With dynamic regex (including the newly added solution)
+const dynamicRegexWithNewSol = buildDynamicSolutionTopicsRegex([], [mockNewSolution]);
+
+assert.strictEqual(isSolutionPost(cybersecurityPost, staticRegexOnly), false, 'Post should NOT match old static regex alone');
+assert.strictEqual(isSolutionPost(cybersecurityPost, dynamicRegexWithNewSol), true, 'Post MUST pass when dynamic regex includes the new solution');
+console.log('✔ New solution post successfully matched via dynamic regex!');
+
+// 7.3 Custom user search keyword (/find keyword:HR Payroll)
+const hrPost = {
+  title: 'ปรึกษาเรื่องโปรแกรม Payroll สำหรับคำนวณเงินเดือนพนักงาน 500 คน',
+  snippet: 'ตอนนี้เจอปัญหาระบบเดิมคำนวณโอทีผิดพลาดบ่อยมาก ช่วยแนะนำทีครับ...'
+};
+const dynamicRegexWithSearchTerm = buildDynamicSolutionTopicsRegex(['Payroll'], []);
+assert.strictEqual(isSolutionPost(hrPost, dynamicRegexWithSearchTerm), true, 'Post matching custom search keyword Payroll must pass');
+console.log('✔ Custom search keyword dynamically added to topic regex and passed');
+
 console.log('\nAll unit tests passed successfully!');

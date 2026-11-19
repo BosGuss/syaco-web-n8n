@@ -183,15 +183,17 @@ const CURATED_FACEBOOK_COMMUNITIES = {
 /**
  * ดึงรายการโซลูชันล่าสุดจาก API ของ SyaCo
  */
+let cachedSolutionsList = SYACO_CATALOG;
+
 async function fetchSyacoSolutions() {
   try {
     const res = await fetch(SYACO_API_URL, { signal: AbortSignal.timeout(5000) });
-    if (!res.ok) return SYACO_CATALOG;
+    if (!res.ok) return cachedSolutionsList;
     const data = await res.json();
     const list = Array.isArray(data) ? data : (data.data || []);
-    if (!list.length) return SYACO_CATALOG;
+    if (!list.length) return cachedSolutionsList;
 
-    return list.map(s => ({
+    const mapped = list.map(s => ({
       id: s.id,
       titleTh: s.titleTh || s.titleEn || '',
       titleEn: s.titleEn || s.titleTh || '',
@@ -202,9 +204,16 @@ async function fetchSyacoSolutions() {
         `แนะนำระบบ ${s.titleTh || s.titleEn}`
       ]
     }));
+
+    cachedSolutionsList = mapped;
+    if (typeof updateGlobalTopicsRegex === 'function') {
+      updateGlobalTopicsRegex(mapped);
+    }
+
+    return mapped;
   } catch (err) {
     console.warn('[thread-search] fetchSyacoSolutions failed, using catalog fallback:', err.message);
-    return SYACO_CATALOG;
+    return cachedSolutionsList;
   }
 }
 
@@ -482,8 +491,114 @@ const NEGATIVE_INTENT = [
   'เปลี่ยนเส้นเอ็น', 'ลดน้ำหนัก', 'อาหารเสริม', 'รีวิวหนัง', 'trailer', 'สิว', 'ผิวขาว', 'เสื้อผ้า'
 ];
 
-// คำระบุหัวข้อระบบ / ซอฟต์แวร์ / ดิจิทัลทรานส์ฟอร์เมชัน B2B (ใช้ \b สำหรับตัวย่อสั้นภาษาอังกฤษเพื่อไม่ให้ชนคำทั่วไป เช่น proposed)
-const B2B_SOLUTION_TOPICS_REGEX = /(?:\b(?:erp|sap|wms|tms|plc|scada|pos|iot|ocr|api|cloud|database)\b|dashboard|power\s*bi|automation|สต็อก|สต๊อก|คลังสินค้า|ขนส่ง|logistics|ระบบโรงงาน|ตัดสต็อก|บาร์โค้ด|barcode|ซอฟต์แวร์|แอปพลิเคชัน|line\s*oa|workflow|อนุมัติ|defect|วางระบบ|จัดซื้อ|การผลิต|จัดการข้อมูล|supply\s*chain|smart\s*warehouse|digital\s*transformation)/i;
+// คำระบุหัวข้อระบบ / ซอฟต์แวร์ / ดิจิทัลทรานส์ฟอร์เมชัน B2B พื้นฐาน
+const BASE_B2B_KEYWORDS = [
+  'erp', 'sap', 'wms', 'tms', 'plc', 'scada', 'pos', 'iot', 'ocr', 'api', 'cloud', 'database',
+  'dashboard', 'power\\s*bi', 'automation', 'สต็อก', 'สต๊อก', 'คลังสินค้า', 'ขนส่ง', 'logistics',
+  'ระบบโรงงาน', 'ตัดสต็อก', 'บาร์โค้ด', 'barcode', 'ซอฟต์แวร์', 'แอปพลิเคชัน', 'line\\s*oa',
+  'workflow', 'อนุมัติ', 'defect', 'วางระบบ', 'จัดซื้อ', 'การผลิต', 'จัดการข้อมูล',
+  'supply\\s*chain', 'smart\\s*warehouse', 'digital\\s*transformation'
+];
+
+function escapeRegex(str) {
+  return String(str || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * สกัดคำสำคัญเชิงเทคนิคจากชื่อและรายละเอียดของโซลูชัน
+ */
+function extractSolutionKeywords(sol) {
+  if (!sol) return [];
+  const terms = new Set();
+  const rawTexts = [
+    sol.titleTh || '',
+    sol.titleEn || '',
+    ...(sol.curatedQueries || [])
+  ];
+
+  for (const text of rawTexts) {
+    if (!text) continue;
+    // แยกคำภาษาอังกฤษความยาว >= 3
+    const enWords = text.match(/[A-Za-z0-9_-]{3,}/g) || [];
+    for (const w of enWords) {
+      const lower = w.toLowerCase();
+      if (!['and', 'the', 'for', 'with', 'system', 'systems', 'platform', 'solution', 'solutions'].includes(lower)) {
+        terms.add(escapeRegex(lower));
+      }
+    }
+    // แยกคำภาษาไทย (ตัดตัวเลข/สัญลักษณ์)
+    const thClean = text.replace(/^ระบบ\s*/i, '').replace(/[0-9A-Za-z_&/()\\-]/g, ' ').trim();
+    const thWords = thClean.split(/\s+/).filter(w => w.length >= 3);
+    for (const tw of thWords) {
+      const lower = tw.toLowerCase();
+      if (!['และ', 'หรือ', 'ของ', 'กับ', 'ปัญหา', 'แนะนำ', 'ระบบ', 'โปรแกรม'].includes(lower)) {
+        terms.add(escapeRegex(lower));
+      }
+    }
+  }
+
+  return Array.from(terms);
+}
+
+/**
+ * สร้าง Dynamic Topic Regex ที่รวมทั้งคำพื้นฐาน และคำสำคัญจากโซลูชันล่าสุดบนเว็บ + Search Terms
+ */
+function buildDynamicSolutionTopicsRegex(extraTerms = [], solutions = []) {
+  const allTerms = new Set(BASE_B2B_KEYWORDS);
+
+  // 1. เพิ่มคำสำคัญจากโซลูชัน
+  const solList = (Array.isArray(solutions) && solutions.length) ? solutions : (cachedSolutionsList || SYACO_CATALOG);
+  for (const sol of solList) {
+    const kws = extractSolutionKeywords(sol);
+    kws.forEach(k => allTerms.add(k));
+  }
+
+  // 2. เพิ่ม extraTerms (เช่น คำที่ใช้ค้นหาในรอบนั้น หรือชื่อหมวดหมู่)
+  if (Array.isArray(extraTerms)) {
+    for (const t of extraTerms) {
+      const clean = String(t || '')
+        .replace(/site:[^\s]+/gi, '')
+        .replace(/inurl:[^\s]+/gi, '')
+        .replace(/["']/g, '')
+        .trim();
+      if (clean.length >= 2) {
+        clean.split(/\s+/).forEach(part => {
+          if (part.length >= 2 && !['และ', 'หรือ', 'ของ', 'กับ', 'แนะนำ', 'ปัญหา'].includes(part.toLowerCase())) {
+            allTerms.add(escapeRegex(part.toLowerCase()));
+          }
+        });
+      }
+    }
+  }
+
+  const shortEnTerms = [];
+  const phraseTerms = [];
+
+  for (const term of allTerms) {
+    if (/^[a-z0-9]{2,4}$/i.test(term)) {
+      shortEnTerms.push(term);
+    } else {
+      phraseTerms.push(term);
+    }
+  }
+
+  const regexParts = [];
+  if (shortEnTerms.length > 0) {
+    regexParts.push(`\\b(?:${shortEnTerms.join('|')})\\b`);
+  }
+  if (phraseTerms.length > 0) {
+    regexParts.push(phraseTerms.join('|'));
+  }
+
+  return new RegExp(`(?:${regexParts.join('|')})`, 'i');
+}
+
+// Global Regex เริ่มต้นจาก SYACO_CATALOG และจะอัปเดตอัตโนมัติเมื่อดึง API สำเร็จ
+let B2B_SOLUTION_TOPICS_REGEX = buildDynamicSolutionTopicsRegex([], SYACO_CATALOG);
+
+function updateGlobalTopicsRegex(solutions) {
+  B2B_SOLUTION_TOPICS_REGEX = buildDynamicSolutionTopicsRegex([], solutions);
+}
 
 // คำระบุเจตนาการสอบถาม / แก้ปัญหา / เปรียบเทียบ / ขอคำแนะนำด้านโซลูชันหรือบริการ
 const SOLUTION_INQUIRY_INTENT_REGEX = /(?:แนะนำ|ปัญหา|ทำไม|อย่างไร|ช่วย|ระบบ|โปรแกรม|พัฒนา|เชื่อมต่อ|เปรียบเทียบ|เทียบ|เจ้าไหน|ดีไหม|สอบถาม|วางระบบ|จัดการ|โซลูชัน|solution|service|แนวคิด|เทคนิค|ข้อดี|ข้อเสีย|ปรึกษา|แนะนำหน่อย|หาบริษัท|หาคนทำ|รับทำ|ใช้งานยังไง|เลือกยังไง|\b(?:vs|versus|difference|compare|comparison|guide|how|tips|best|problem|challenge|challenges|solutions?|implement(?:ation)?|optimize|transform|architecture|overview|review)\b)/i;
@@ -645,22 +760,27 @@ function isRecentPost(item) {
 /**
  * ตรวจสอบว่าเป็นโพสต์ที่เกี่ยวกับ B2B Solution / Service จริงๆ
  * 1. ปฏิเสธ Negative Intent (รับสมัครงาน, ขายรถ/ของมือสอง, การบ้านเด็ก, บันเทิง/สุขภาพ)
- * 2. ตรวจสอบหัวข้อทางเทคโนโลยี/โรงงาน/ซอฟต์แวร์
+ * 2. ตรวจสอบหัวข้อทางเทคโนโลยี/โรงงาน/ซอฟต์แวร์ (Dynamic Topic Matching)
  * 3. ตรวจสอบเจตนาการสอบถาม/ปัญหา/ปรึกษา/เปรียบเทียบ/วางระบบ
  */
-function isSolutionPost(item) {
+function isSolutionPost(item, dynamicRegex = null) {
   const text = `${item.title || ''} ${item.content || item.snippet || ''}`.toLowerCase();
   if (!text.trim()) return false;
 
   // 1. Negative Intent Check
   for (const neg of NEGATIVE_INTENT) {
     if (text.includes(neg.toLowerCase())) {
+      // ข้อยกเว้น: หากพบคำว่า "เงินเดือน" ในบริบทของระบบ/โปรแกรม หรือซอฟต์แวร์ Payroll ให้ถือเป็น Solution Inquiry
+      if (neg === 'เงินเดือน' && /(?:โปรแกรม|ระบบ|คำนวณ|จัดการ|สลิป|ซอฟต์แวร์|payroll)\s*เงินเดือน|เงินเดือน\s*(?:พนักงาน|ออนไลน์|โอที)/i.test(text)) {
+        continue;
+      }
       return false;
     }
   }
 
-  // 2. B2B Solution / System Topic Check
-  if (!B2B_SOLUTION_TOPICS_REGEX.test(text)) {
+  // 2. B2B Solution / System Topic Check (Dynamic or Global Regex)
+  const regex = dynamicRegex || B2B_SOLUTION_TOPICS_REGEX;
+  if (!regex.test(text)) {
     return false;
   }
 
@@ -945,7 +1065,8 @@ async function searchFacebookThreads(terms, limit = 5, solutionCategory = '', ex
 /**
  * ค้นหาเฉพาะ Pantip
  */
-async function searchPantipThreads(terms, limit = 5, excludeUrls = new Set()) {
+async function searchPantipThreads(terms, limit = 5, excludeUrls = new Set(), solutions = []) {
+  const dynamicTopicsRegex = buildDynamicSolutionTopicsRegex(terms, solutions);
   const primary = terms[0] || 'Business Solution';
   const currentYear = new Date().getFullYear();
   const currentBE = currentYear + 543;
@@ -977,7 +1098,7 @@ async function searchPantipThreads(terms, limit = 5, excludeUrls = new Set()) {
 
     for (const item of rawList) {
       if (!isValidCandidate(item, 'pantip')) continue;
-      if (!isSolutionPost(item)) continue;
+      if (!isSolutionPost(item, dynamicTopicsRegex)) continue;
 
       const clean = cleanUrl(item.url, 'pantip');
       if (seenUrls.has(clean) || (excludeUrls && excludeUrls.has(clean))) continue;
@@ -1001,7 +1122,8 @@ async function searchPantipThreads(terms, limit = 5, excludeUrls = new Set()) {
 /**
  * ค้นหาเฉพาะ LinkedIn
  */
-async function searchLinkedInThreads(terms, limit = 5, excludeUrls = new Set()) {
+async function searchLinkedInThreads(terms, limit = 5, excludeUrls = new Set(), solutions = []) {
+  const dynamicTopicsRegex = buildDynamicSolutionTopicsRegex(terms, solutions);
   const primary = terms[0] || 'Business Solution';
   const currentYear = new Date().getFullYear();
   const prevYear = currentYear - 1;
@@ -1027,7 +1149,7 @@ async function searchLinkedInThreads(terms, limit = 5, excludeUrls = new Set()) 
 
     for (const item of rawList) {
       if (!isValidCandidate(item, 'linkedin')) continue;
-      if (!isSolutionPost(item)) continue;
+      if (!isSolutionPost(item, dynamicTopicsRegex)) continue;
 
       const clean = cleanUrl(item.url, 'linkedin');
       if (seenUrls.has(clean) || (excludeUrls && excludeUrls.has(clean))) continue;
@@ -1058,6 +1180,9 @@ async function searchRecentThreads({ keyword, mode = 'manual', platform = 'all',
   let autoMeta = null;
   let queriesToRun = [];
 
+  // โหลดโซลูชันล่าสุดจาก API SyaCo เพื่อให้คำสำคัญเป็น Dynamic เสมอ
+  const allSolutions = await fetchSyacoSolutions();
+
   if (isAutoMode) {
     let cat = 'auto';
     if (keyword && keyword.startsWith('auto:')) {
@@ -1082,10 +1207,10 @@ async function searchRecentThreads({ keyword, mode = 'manual', platform = 'all',
     let fbResults = await searchFacebookThreads(queriesToRun, limit, solKey, excludeUrls);
     // หากยังไม่ครบ limit และอยู่ในโหมด auto ให้สุ่มโซลูชันอื่นมาค้นหาเสริมเพื่อกระจายผลลัพธ์
     if (fbResults.length < limit && isAutoMode) {
-      const otherSolutions = SYACO_CATALOG.filter(c => c.key !== solKey).sort(() => Math.random() - 0.5);
+      const otherSolutions = allSolutions.filter(c => c.key !== solKey).sort(() => Math.random() - 0.5);
       for (const sol of otherSolutions) {
         if (fbResults.length >= limit) break;
-        const moreFb = await searchFacebookThreads(sol.curatedQueries, limit - fbResults.length, sol.key, excludeUrls);
+        const moreFb = await searchFacebookThreads(sol.curatedQueries, limit - fbResults.length, sol.key || sol.titleTh, excludeUrls);
         for (const item of moreFb) {
           if (!fbResults.some(r => r.url === item.url) && fbResults.length < limit) {
             fbResults.push({
@@ -1101,12 +1226,12 @@ async function searchRecentThreads({ keyword, mode = 'manual', platform = 'all',
 
   // 2. กรณีระบุแพลตฟอร์มเจาะจง Pantip
   if (platform === 'pantip') {
-    let ptResults = await searchPantipThreads(queriesToRun, limit, excludeUrls);
+    let ptResults = await searchPantipThreads(queriesToRun, limit, excludeUrls, allSolutions);
     if (ptResults.length < limit && isAutoMode) {
-      const otherSolutions = SYACO_CATALOG.filter(c => c.key !== solKey).sort(() => Math.random() - 0.5);
+      const otherSolutions = allSolutions.filter(c => c.key !== solKey).sort(() => Math.random() - 0.5);
       for (const sol of otherSolutions) {
         if (ptResults.length >= limit) break;
-        const morePt = await searchPantipThreads(sol.curatedQueries, limit - ptResults.length, excludeUrls);
+        const morePt = await searchPantipThreads(sol.curatedQueries, limit - ptResults.length, excludeUrls, [sol]);
         for (const item of morePt) {
           if (!ptResults.some(r => r.url === item.url) && ptResults.length < limit) {
             ptResults.push({
@@ -1122,12 +1247,12 @@ async function searchRecentThreads({ keyword, mode = 'manual', platform = 'all',
 
   // 3. กรณีระบุแพลตฟอร์มเจาะจง LinkedIn
   if (platform === 'linkedin') {
-    let liResults = await searchLinkedInThreads(queriesToRun, limit, excludeUrls);
+    let liResults = await searchLinkedInThreads(queriesToRun, limit, excludeUrls, allSolutions);
     if (liResults.length < limit && isAutoMode) {
-      const otherSolutions = SYACO_CATALOG.filter(c => c.key !== solKey).sort(() => Math.random() - 0.5);
+      const otherSolutions = allSolutions.filter(c => c.key !== solKey).sort(() => Math.random() - 0.5);
       for (const sol of otherSolutions) {
         if (liResults.length >= limit) break;
-        const moreLi = await searchLinkedInThreads(sol.curatedQueries, limit - liResults.length, excludeUrls);
+        const moreLi = await searchLinkedInThreads(sol.curatedQueries, limit - liResults.length, excludeUrls, [sol]);
         for (const item of moreLi) {
           if (!liResults.some(r => r.url === item.url) && liResults.length < limit) {
             liResults.push({
@@ -1147,15 +1272,15 @@ async function searchRecentThreads({ keyword, mode = 'manual', platform = 'all',
   const ptTarget = Math.max(1, limit - fbTarget - liTarget);
 
   const fbList = await searchFacebookThreads(queriesToRun, fbTarget, solKey, excludeUrls);
-  const ptList = await searchPantipThreads(queriesToRun, ptTarget, excludeUrls);
-  const liList = await searchLinkedInThreads(queriesToRun, liTarget, excludeUrls);
+  const ptList = await searchPantipThreads(queriesToRun, ptTarget, excludeUrls, allSolutions);
+  const liList = await searchLinkedInThreads(queriesToRun, liTarget, excludeUrls, allSolutions);
 
   let combined = [...fbList, ...ptList, ...liList];
 
   // หากยังไม่ครบ limit ให้เติมส่วนที่ขาดจากแพลตฟอร์มที่มี
   if (combined.length < limit) {
     const deficit = limit - combined.length;
-    const morePt = await searchPantipThreads(queriesToRun, ptTarget + deficit, excludeUrls);
+    const morePt = await searchPantipThreads(queriesToRun, ptTarget + deficit, excludeUrls, allSolutions);
     const existingUrls = new Set(combined.map(r => r.url));
     for (const p of morePt) {
       if (!existingUrls.has(p.url) && (!excludeUrls || !excludeUrls.has(p.url)) && combined.length < limit) {
@@ -1303,5 +1428,9 @@ module.exports = {
   NEGATIVE_INTENT,
   unfurlFacebookMetadata,
   SYACO_CATALOG,
-  CURATED_FACEBOOK_COMMUNITIES
+  CURATED_FACEBOOK_COMMUNITIES,
+  buildDynamicSolutionTopicsRegex,
+  extractSolutionKeywords,
+  updateGlobalTopicsRegex,
+  BASE_B2B_KEYWORDS
 };
