@@ -101,3 +101,43 @@ const filteredNone = filterNewSolutions(mockCurrentApiItems, [...mockProcessed, 
 assert.strictEqual(filteredNone.length, 0, 'Must find 0 new solutions when all are completed');
 
 console.log('✅ Flow 2 sanitization, UTF-8 byte offset, and Filter New Solutions tests passed.');
+
+// 4. Test Unified Shared Persona & Anti-Spam Rules in Flow 2
+const { buildFlow2Prompts, SHARED_WRITING_AND_ANTI_SPAM_RULES } = require('../skills/shared_persona_rules');
+const fs = require('fs');
+const path = require('path');
+
+const mockSol = {
+  id: '31',
+  titleTh: 'ระบบ Enterprise AI & API Gateway',
+  titleEn: 'Secure Enterprise AI & API Gateway',
+  descTh: 'ระบบเชื่อมต่อ API และจัดคิว AI องค์กรความปลอดภัยสูง',
+  url: 'https://www.syaco.co.th/solutions/31'
+};
+
+const { promptA, promptB } = buildFlow2Prompts(mockSol);
+
+// Verify Zero AI Footprint rules are present
+assert(promptA.includes('ZERO AI FOOTPRINT'), 'Prompt A must include ZERO AI FOOTPRINT rule');
+assert(promptA.includes('REMOVE ROBOTIC BUZZWORDS & HYPE'), 'Prompt A must ban robotic buzzwords');
+assert(promptA.includes('WRITE LIKE A REAL ENGINEER'), 'Prompt A must instruct to write like real engineer');
+assert(promptA.includes('VALUE-FIRST'), 'Prompt A must include VALUE-FIRST rule');
+assert(promptA.includes(mockSol.url), 'Prompt A must include exact solution URL');
+
+assert(promptB.includes('ZERO AI FOOTPRINT'), 'Prompt B must include ZERO AI FOOTPRINT rule');
+assert(promptB.includes('REMOVE ROBOTIC BUZZWORDS & HYPE'), 'Prompt B must ban robotic buzzwords');
+assert(promptB.includes('WRITE LIKE A REAL ENGINEER'), 'Prompt B must instruct to write like real engineer');
+assert(promptB.includes('PRESERVE TECHNICAL ACCURACY & NO FABRICATION'), 'Prompt B must preserve technical accuracy');
+assert(promptB.includes(mockSol.url), 'Prompt B must include exact solution URL');
+
+// Verify workflow JSON node actually contains the shared rules
+const wf2Path = path.join(__dirname, '../workflows/flow2-content-publisher.json');
+const wf2 = JSON.parse(fs.readFileSync(wf2Path, 'utf8'));
+const promptNode = wf2.nodes.find(n => n.name === 'Build AI Prompts for Call A & B');
+assert(promptNode, 'Flow 2 must have Build AI Prompts node');
+assert(promptNode.parameters.jsCode.includes('ZERO AI FOOTPRINT'), 'Flow 2 prompt node jsCode must include ZERO AI FOOTPRINT');
+assert(promptNode.parameters.jsCode.includes('REMOVE ROBOTIC BUZZWORDS & HYPE'), 'Flow 2 prompt node jsCode must include REMOVE ROBOTIC BUZZWORDS');
+assert(promptNode.parameters.jsCode.includes('WRITE LIKE A REAL ENGINEER'), 'Flow 2 prompt node jsCode must include WRITE LIKE A REAL ENGINEER');
+
+console.log('✅ Flow 2 unified anti-spam & humanizer prompt tests passed successfully!');
+

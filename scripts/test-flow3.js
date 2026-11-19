@@ -111,4 +111,34 @@ assert.strictEqual(isQuotaExceeded(4, '5'), false);
 assert.strictEqual(isQuotaExceeded(5, '5'), true);
 assert.strictEqual(isQuotaExceeded(10, '5'), true);
 
+// 6. Test Unified Shared Persona & Anti-Spam Rules in Flow 3
+const { buildFlow3Prompt, SHARED_WRITING_AND_ANTI_SPAM_RULES } = require('../skills/shared_persona_rules');
+const fs = require('fs');
+const path = require('path');
+
+const mockReq = {
+  platform: 'pantip',
+  post_url: 'https://pantip.com/topic/43012345',
+  question_text: 'ต้องการเชื่อมต่อ PLC ในโรงงานเข้ากับระบบ SAP อัตโนมัติ ควรวาง Architecture อย่างไรดีครับ?'
+};
+
+const f3Prompt = buildFlow3Prompt(mockReq, [{ id: '31', titleEn: 'Secure AI Gateway', titleTh: 'ระบบ AI Gateway' }]);
+
+assert(f3Prompt.includes('ZERO AI FOOTPRINT'), 'Flow 3 prompt must include ZERO AI FOOTPRINT rule');
+assert(f3Prompt.includes('DO NOT REPEAT / ECHO CONTEXT'), 'Flow 3 prompt must instruct not to repeat context');
+assert(f3Prompt.includes('REMOVE ROBOTIC BUZZWORDS & HYPE'), 'Flow 3 prompt must ban robotic buzzwords');
+assert(f3Prompt.includes('WRITE LIKE A REAL ENGINEER'), 'Flow 3 prompt must instruct to write like real engineer');
+assert(f3Prompt.includes('VALUE-FIRST'), 'Flow 3 prompt must include VALUE-FIRST rule');
+assert(f3Prompt.includes('STRICT BACKLINK & DISCLOSURE RULES'), 'Flow 3 prompt must include backlink & disclosure rules');
+
+// Verify workflow JSON node actually contains the shared rules
+const wf3Path = path.join(__dirname, '../workflows/flow3-community-lead-assistant.json');
+const wf3 = JSON.parse(fs.readFileSync(wf3Path, 'utf8'));
+const f3PromptNode = wf3.nodes.find(n => n.name === 'Build Lead Qualification & Draft Prompt');
+assert(f3PromptNode, 'Flow 3 must have Build Lead Qualification & Draft Prompt node');
+assert(f3PromptNode.parameters.jsCode.includes('ZERO AI FOOTPRINT'), 'Flow 3 prompt node jsCode must include ZERO AI FOOTPRINT');
+assert(f3PromptNode.parameters.jsCode.includes('REMOVE ROBOTIC BUZZWORDS & HYPE'), 'Flow 3 prompt node jsCode must include REMOVE ROBOTIC BUZZWORDS');
+assert(f3PromptNode.parameters.jsCode.includes('WRITE LIKE A REAL ENGINEER'), 'Flow 3 prompt node jsCode must include WRITE LIKE A REAL ENGINEER');
+
+console.log('✅ Flow 3 unified anti-spam & humanizer prompt tests passed successfully!');
 console.log('✅ All Flow 3 test checks passed successfully!');
