@@ -124,7 +124,13 @@ const geminiBodyB = {
   }
 };
 
-return [{\\n  json: {\\n    solution: sol,\\n    geminiBodyA,\\n    geminiBodyB\\n  }\\n}];`;
+return [{
+  json: {
+    solution: sol,
+    geminiBodyA,
+    geminiBodyB
+  }
+}];`;
 
 const flow3JsCode = `const req = $('Platform-Aware Normalize Post URL').first().json;
 
@@ -221,7 +227,13 @@ const geminiBody = {
   }
 };
 
-return [{\\n  json: {\\n    req,\\n    solutions,\\n    geminiBody\\n  }\\n}];`;
+return [{
+  json: {
+    req,
+    solutions,
+    geminiBody
+  }
+}];`;
 
 function applyFlow2() {
   const data = JSON.parse(fs.readFileSync(FLOW2_PATH, 'utf8'));
