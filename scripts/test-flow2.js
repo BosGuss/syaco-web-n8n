@@ -40,11 +40,14 @@ assert.strictEqual(extractedUrl, link, 'Extracted URL using byte offsets must ma
 
 // 3. Test Filter New Solutions Logic
 function filterNewSolutions(allSolutionItems, processedDbRows) {
-  const processed = new Set(
-    processedDbRows
-      .map(i => String(i.solution_id || ''))
-      .filter(id => id && id !== '__INIT__')
-  );
+  const processedMap = new Map();
+  for (const row of processedDbRows || []) {
+    const id = String(row.solution_id || '');
+    if (id && id !== '__INIT__') {
+      const hasPending = row.has_pending === true || row.has_pending === 'true' || row.has_pending === 1;
+      processedMap.set(id, hasPending);
+    }
+  }
 
   const allSolutions = [];
   for (const item of allSolutionItems) {
@@ -58,15 +61,29 @@ function filterNewSolutions(allSolutionItems, processedDbRows) {
     }
   }
 
-  const newSolutions = allSolutions.filter(s => s && s.id && !processed.has(String(s.id)));
-  return newSolutions.map(s => ({
+  const candidateSolutions = [];
+  for (const s of allSolutions) {
+    if (!s || !s.id) continue;
+    const solId = String(s.id);
+    if (!processedMap.has(solId)) {
+      // Completely new solution -> run AI
+      candidateSolutions.push({ ...s, isReminder: false });
+    } else if (processedMap.get(solId) === true) {
+      // Already in processed_solutions but has pending review drafts -> reminder bypass
+      candidateSolutions.push({ ...s, isReminder: true });
+    }
+    // If in DB with has_pending === false -> completed, exclude
+  }
+
+  return candidateSolutions.map(s => ({
     id: String(s.id),
     titleEn: s.titleEn || '',
     titleTh: s.titleTh || '',
     descEn: s.content?.en?.hero?.description || s.descEn || '',
     descTh: s.content?.th?.hero?.description || s.descTh || '',
     link: s.link || `/solutions/${s.id}`,
-    url: `https://www.syaco.co.th${s.link || `/solutions/${s.id}`}`
+    url: `https://www.syaco.co.th${s.link || `/solutions/${s.id}`}`,
+    isReminder: s.isReminder === true
   }));
 }
 
@@ -99,6 +116,29 @@ assert.strictEqual(filteredEmptyDb.length, 9, 'When DB is completely empty, all 
 // Test When all are completed
 const filteredNone = filterNewSolutions(mockCurrentApiItems, [...mockProcessed, { solution_id: '31' }]);
 assert.strictEqual(filteredNone.length, 0, 'Must find 0 new solutions when all are completed');
+
+// Test Pending Drafts vs New Solutions vs Completed Solutions classification
+const mockProcessedWithPending = [
+  { solution_id: '7', has_pending: false },
+  { solution_id: '8', has_pending: true }, // Has pending review drafts -> should be re-notified
+  { solution_id: '9', has_pending: false },
+  { solution_id: '10', has_pending: false },
+  { solution_id: '11', has_pending: false },
+  { solution_id: '12', has_pending: false },
+  { solution_id: '13', has_pending: false },
+  { solution_id: '14', has_pending: false }
+];
+
+const classified = filterNewSolutions(mockCurrentApiItems, mockProcessedWithPending);
+assert.strictEqual(classified.length, 2, 'Must include 1 pending reminder (id 8) and 1 new solution (id 31)');
+
+const reminderSolution = classified.find(s => s.id === '8');
+assert(reminderSolution, 'Solution 8 must be present in output');
+assert.strictEqual(reminderSolution.isReminder, true, 'Solution 8 with has_pending=true must have isReminder: true');
+
+const newSolution = classified.find(s => s.id === '31');
+assert(newSolution, 'Solution 31 must be present in output');
+assert.strictEqual(newSolution.isReminder, false, 'New solution 31 must have isReminder: false');
 
 console.log('✅ Flow 2 sanitization, UTF-8 byte offset, and Filter New Solutions tests passed.');
 
@@ -140,4 +180,45 @@ assert(promptNode.parameters.jsCode.includes('REMOVE ROBOTIC BUZZWORDS & HYPE'),
 assert(promptNode.parameters.jsCode.includes('WRITE LIKE A REAL ENGINEER'), 'Flow 2 prompt node jsCode must include WRITE LIKE A REAL ENGINEER');
 
 console.log('✅ Flow 2 unified anti-spam & humanizer prompt tests passed successfully!');
+
+// 5. Test Flow 2 Workflow Structure: Draft Re-Notification & AI Bypass
+const loadProcessedNode = wf2.nodes.find(n => n.name === 'Load Processed IDs');
+assert(loadProcessedNode, 'Flow 2 must have Load Processed IDs node');
+assert(loadProcessedNode.parameters.query.includes('has_pending'), 'Load Processed IDs query must select has_pending');
+assert(loadProcessedNode.parameters.query.includes('content_drafts'), 'Load Processed IDs query must check content_drafts');
+
+const filterNewNode = wf2.nodes.find(n => n.name === 'Filter New Solutions');
+assert(filterNewNode, 'Flow 2 must have Filter New Solutions node');
+assert(filterNewNode.parameters.jsCode.includes('isReminder'), 'Filter New Solutions jsCode must handle isReminder');
+
+const ifNeedsAiNode = wf2.nodes.find(n => n.name === 'If Needs AI Generation');
+assert(ifNeedsAiNode, 'Flow 2 must have If Needs AI Generation node');
+assert.strictEqual(ifNeedsAiNode.type, 'n8n-nodes-base.if', 'If Needs AI Generation must be an IF node');
+
+// Verify connections for AI bypass
+const connections = wf2.connections;
+const splitConn = connections['Split In Batches'];
+assert(splitConn && splitConn.main && splitConn.main[1], 'Split In Batches must have batch output (main index 1)');
+assert.strictEqual(splitConn.main[1][0]?.node, 'If Needs AI Generation', 'Split In Batches output 1 must connect to If Needs AI Generation');
+
+const ifAiConn = connections['If Needs AI Generation'];
+assert(ifAiConn && ifAiConn.main && ifAiConn.main[0] && ifAiConn.main[1], 'If Needs AI Generation must have True (main 0) and False (main 1) branches');
+assert.strictEqual(ifAiConn.main[0][0]?.node, 'Lock Solution Status', 'If Needs AI Generation True branch must connect to Lock Solution Status');
+assert.strictEqual(ifAiConn.main[1][0]?.node, 'Notify Discord Review Cards', 'If Needs AI Generation False branch must connect to Notify Discord Review Cards');
+
+const saveCteConn = connections['Save Drafts & Complete Status (CTE)'];
+assert(saveCteConn?.main?.[0]?.[0]?.node === 'Notify Discord Review Cards', 'Save Drafts CTE must connect to Notify Discord Review Cards');
+
+const notifyConn = connections['Notify Discord Review Cards'];
+assert(notifyConn?.main?.[0]?.[0]?.node === 'Split In Batches', 'Notify Discord Review Cards must loop back to Split In Batches');
+
+// Verify Notify Discord Review Cards payload compatibility
+const notifyNode = wf2.nodes.find(n => n.name === 'Notify Discord Review Cards');
+assert(notifyNode, 'Flow 2 must have Notify Discord Review Cards node');
+const jsonBody = notifyNode.parameters.jsonBody || '';
+assert(jsonBody.includes('$json.id') && jsonBody.includes('$json.solution_id'), 'Notify Discord Review Cards must accept $json.id || $json.solution_id');
+assert((jsonBody.includes('$json.titleEn') || jsonBody.includes('$json.titleTh')) && jsonBody.includes('$json.solution_title'), 'Notify Discord Review Cards must accept solution title from both paths');
+
+console.log('✅ Flow 2 AI bypass and workflow structure tests passed successfully!');
+
 
