@@ -7,7 +7,8 @@ const {
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
-  EmbedBuilder
+  EmbedBuilder,
+  AttachmentBuilder
 } = require('discord.js');
 const express = require('express');
 const { Pool } = require('pg');
@@ -1023,6 +1024,70 @@ client.on('interactionCreate', async (interaction) => {
             reviewedBy
           });
           if (result.success) {
+            const isManual = result.platform === 'manual_article' || result.platform === 'manual';
+            if (isManual) {
+              let draftData = result.draft;
+              if (!draftData || !draftData.title_th) {
+                const { rows } = await pool.query('SELECT title_th, content_markdown, tags, solution_title FROM content_drafts WHERE id = $1', [parseInt(id)]);
+                draftData = rows[0] || {};
+              }
+              const title = draftData.title_th || 'Manual Enterprise Article';
+              const tags = (draftData.tags || []).join(', ') || '-';
+              const preview = (draftData.content_markdown || '').slice(0, 350);
+
+              // 1. In-place update of original card (Approach 1: Green border, keep Copy button)
+              const cardEmbed = new EmbedBuilder()
+                .setTitle(`✅ [พร้อมใช้งานแล้ว] Manual Enterprise Article`)
+                .setColor(0x10b981)
+                .setDescription(`📌 **ชื่อบทความ:** ${title}\n👤 **ดำเนินการโดย:** \`${reviewedBy}\`\n🎯 **แพลตฟอร์มแนะนำ:** Blognone, TechTalkThai, สื่อไอที, เว็บไซต์องค์กร`)
+                .addFields(
+                  { name: '🏷️ แท็ก', value: tags, inline: true },
+                  { name: '💾 สถานะ', value: 'พร้อมนำไปเผยแพร่ (Ready to post)', inline: true },
+                  { name: '📄 ตัวอย่างเนื้อหา (Preview)', value: `\`\`\`markdown\n${preview}...\n\`\`\``, inline: false },
+                  { name: '💡 การทำงาน', value: 'สามารถกดปุ่ม **"📋 คัดลอกบทความเต็ม"** ด้านล่างเพื่อคัดลอก Markdown ได้ตลอดเวลา', inline: false }
+                )
+                .setFooter({ text: `Draft ID: #${id} • อนุมัติเรียบร้อย` })
+                .setTimestamp();
+
+              const cardRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`flow2_copy_${id}`).setLabel('📋 คัดลอกบทความเต็ม').setStyle(ButtonStyle.Primary)
+              );
+
+              await interaction.editReply({
+                embeds: [cardEmbed],
+                components: [cardRow]
+              });
+
+              // 2. Send Quoted Reply notification with Jump Link + Copy Button (Approach 2)
+              if (interaction.message && typeof interaction.message.reply === 'function') {
+                try {
+                  const replyEmbed = new EmbedBuilder()
+                    .setTitle(`📝 [MANUAL ARTICLE READY] บทความพร้อมนำไปเผยแพร่แล้ว`)
+                    .setColor(0x10b981)
+                    .setDescription(`📌 **ชื่อบทความ:** ${title}\n👤 **อนุมัติโดย:** \`${reviewedBy}\`\n🏷️ **แท็ก:** ${tags}`)
+                    .addFields(
+                      { name: '📄 ตัวอย่างเนื้อหา (Preview)', value: `\`\`\`markdown\n${preview}...\n\`\`\``, inline: false },
+                      { name: '👉 ขั้นตอนต่อไป', value: 'กดปุ่ม **"📋 คัดลอกบทความเต็ม"** ด้านล่างเพื่อนำ Markdown ไปโพสต์ หรือกด **"🔗 กระโดดไปที่การ์ดต้นทาง"** เพื่อกลับไปดูการ์ดหลัก', inline: false }
+                    )
+                    .setFooter({ text: `Draft ID: #${id} • Ready to Publish` })
+                    .setTimestamp();
+
+                  const replyRow = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId(`flow2_copy_${id}`).setLabel('📋 คัดลอกบทความเต็ม').setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('🔗 กระโดดไปที่การ์ดต้นทาง').setURL(interaction.message.url)
+                  );
+
+                  await interaction.message.reply({
+                    embeds: [replyEmbed],
+                    components: [replyRow]
+                  });
+                } catch (replyErr) {
+                  console.warn('[flow2_publish] Quoted reply warning:', replyErr.message);
+                }
+              }
+              return;
+            }
+
             const isDraft = result.isDraft || result.status === 'ready_to_post';
             const actionTitle = isDraft ? 'บันทึกเป็นแบบร่าง (Draft) สำเร็จแล้ว!' : 'เผยแพร่โพสต์สำเร็จ!';
             const platformName = (result.platform || 'Platform').toUpperCase();
@@ -1180,12 +1245,21 @@ client.on('interactionCreate', async (interaction) => {
         const header = `📋 **เนื้อหาบทความฉบับเต็ม (${label})**\n\n📌 **ชื่อบทความ:** ${draft.title_th}\n🏷️ **แท็ก:** \`${tagsStr}\`\n\n\`\`\`markdown\n`;
         const footer = `\n\`\`\``;
         const maxBody = Math.max(100, 1950 - header.length - footer.length);
-        const text = (draft.content_markdown || '').length > maxBody
-          ? draft.content_markdown.slice(0, maxBody - 3) + '...'
-          : (draft.content_markdown || '');
+        const fullContent = draft.content_markdown || '';
+        const isTruncated = fullContent.length > maxBody;
+        const text = isTruncated
+          ? fullContent.slice(0, maxBody - 3) + '...'
+          : fullContent;
+
+        const files = [];
+        if (isTruncated) {
+          const buffer = Buffer.from(fullContent, 'utf8');
+          files.push(new AttachmentBuilder(buffer, { name: `article-${id}.md` }));
+        }
 
         await interaction.reply({
-          content: `${header}${text}${footer}`,
+          content: `${header}${text}${footer}${isTruncated ? `\n📎 *บทความมีความยาวเกิน 2,000 ตัวอักษร ได้แนบไฟล์ \`article-${id}.md\` ฉบับเต็มให้ดาวน์โหลดแล้วด้านล่าง*` : ''}`,
+          files,
           ephemeral: true
         });
         return;

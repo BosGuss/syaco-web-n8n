@@ -197,20 +197,6 @@ async function publishDraft({
       result = await publishToDevto({ draft, fetchFn, ...config.devto });
     } else if (platform === 'manual_article' || platform === 'manual') {
       // Manual Ready
-      if (client && channelId) {
-        try {
-          const channel = await client.channels.fetch(channelId);
-          if (channel) {
-            const cut = (str, len) => (String(str || '').length > len ? str.slice(0, len - 3) + '...' : str || '-');
-            await channel.send({
-              content: `📝 **MANUAL ARTICLE READY**\n━━━━━━━━━━━━━━━━━━━━━━━\n📌 **ชื่อบทความ:** ${draft.title_th}\n🏷️ **แท็ก:** ${(draft.tags || []).join(', ')}\n\n\`\`\`markdown\n${cut(draft.content_markdown, 1800)}\n\`\`\`\n━━━━━━━━━━━━━━━━━━━━━━━\n👉 สามารถคัดลอกไปเผยแพร่ตามแพลตฟอร์มต่างๆ ได้ทันที`
-            });
-          }
-        } catch (discordErr) {
-          console.warn('[Flow2Publisher] Discord announcement warning:', discordErr.message);
-        }
-      }
-
       await pool.query(
         "UPDATE content_drafts SET status = 'ready_to_post', posted_at = NOW(), reviewed_at = NOW(), reviewed_by = COALESCE($2, reviewed_by), error_message = NULL WHERE id = $1",
         [draft.id, reviewedBy]
@@ -220,6 +206,7 @@ async function publishDraft({
         success: true,
         platform: draft.platform,
         status: 'ready_to_post',
+        draft: draft,
         message: 'บทความถูกบันทึกพร้อมนำไปเผยแพร่แล้ว'
       };
     } else {
