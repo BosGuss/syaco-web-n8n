@@ -236,6 +236,36 @@ console.log('  ✅ Slash commands cleanly defined: /drafts registered with limit
   assert(manualComponents.some(btn => btn.data.custom_id === 'flow2_copy_103'), 'Manual card must have flow2_copy_103');
   console.log('  ✅ /drafts correctly sends overview embed and review cards with Flow 2 buttons.');
 
+  // Test 7b: Verify /drafts view:posted and view:all query conditions
+  queriesExecuted.length = 0;
+  const mockDraftsViewInteraction = {
+    commandName: 'drafts',
+    deferReply: async () => {},
+    options: {
+      getInteger: () => 5,
+      getString: (name) => (name === 'view' ? 'posted' : null)
+    },
+    editReply: async () => {},
+    followUp: async () => {}
+  };
+  await handleCommand(mockDraftsViewInteraction, { pool: mockDraftsPool, client: {} });
+  assert(queriesExecuted[0].sql.includes("status IN ('posted', 'ready_to_post')"), 'Should filter for posted/ready_to_post when view=posted');
+
+  queriesExecuted.length = 0;
+  const mockDraftsAllInteraction = {
+    commandName: 'drafts',
+    deferReply: async () => {},
+    options: {
+      getInteger: () => 5,
+      getString: (name) => (name === 'view' ? 'all' : null)
+    },
+    editReply: async () => {},
+    followUp: async () => {}
+  };
+  await handleCommand(mockDraftsAllInteraction, { pool: mockDraftsPool, client: {} });
+  assert(queriesExecuted[0].sql.includes("1=1"), 'Should query all statuses when view=all');
+  console.log('  ✅ /drafts view options (pending, posted, all) properly parameterized and verified.');
+
   // Test 8: Verify /status view:pending queries both backlink_candidates and content_drafts
   console.log('\nTest 8: Testing /status view:pending queries both backlink_candidates and content_drafts...');
   queriesExecuted.length = 0;

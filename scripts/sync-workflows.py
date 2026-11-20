@@ -75,19 +75,25 @@ def sync_workflow(cursor, wf_path):
         """, (nodes_json, connections_json, settings_json, static_data, pin_data, meta_json, new_version_id, new_version_id, now_str, wf_id))
         print(f"[UPDATED] Workflow '{name}' (ID: {wf_id})")
 
-    # 3. Insert into workflow_history
-    cursor.execute("""
-    INSERT INTO workflow_history (versionId, workflowId, nodes, connections, name, createdAt, updatedAt, authors)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 'Antigravity Agent')
-    """, (new_version_id, wf_id, nodes_json, connections_json, name, now_str, now_str))
+    # 3. Insert into workflow_history (optional audit table)
+    try:
+        cursor.execute("""
+        INSERT INTO workflow_history (versionId, workflowId, nodes, connections, name, createdAt, updatedAt, authors)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'Antigravity Agent')
+        """, (new_version_id, wf_id, nodes_json, connections_json, name, now_str, now_str))
+    except Exception as e:
+        print(f"[WARN] workflow_history skipped: {e}")
 
     # 4. Update workflow_published_version
-    cursor.execute("SELECT workflowId FROM workflow_published_version WHERE workflowId=?", (wf_id,))
-    pub_row = cursor.fetchone()
-    if pub_row:
-        cursor.execute("UPDATE workflow_published_version SET publishedVersionId=?, createdAt=?, updatedAt=? WHERE workflowId=?", (new_version_id, now_str, now_str, wf_id))
-    else:
-        cursor.execute("INSERT INTO workflow_published_version (workflowId, publishedVersionId, createdAt, updatedAt) VALUES (?, ?, ?, ?)", (wf_id, new_version_id, now_str, now_str))
+    try:
+        cursor.execute("SELECT workflowId FROM workflow_published_version WHERE workflowId=?", (wf_id,))
+        pub_row = cursor.fetchone()
+        if pub_row:
+            cursor.execute("UPDATE workflow_published_version SET publishedVersionId=?, createdAt=?, updatedAt=? WHERE workflowId=?", (new_version_id, now_str, now_str, wf_id))
+        else:
+            cursor.execute("INSERT INTO workflow_published_version (workflowId, publishedVersionId, createdAt, updatedAt) VALUES (?, ?, ?, ?)", (wf_id, new_version_id, now_str, now_str))
+    except Exception as e:
+        print(f"[WARN] workflow_published_version update skipped: {e}")
 
     return True
 

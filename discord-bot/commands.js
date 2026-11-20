@@ -352,7 +352,7 @@ function buildFlow2Card(d, fallbackSolutionTitle) {
 
 async function handleFlow2DraftsNotify({ pool, channel, solution_id, solution_title }) {
   const { rows } = await pool.query(
-    "SELECT id, platform, title_th, content_markdown, tags FROM content_drafts WHERE solution_id = $1 AND status = 'pending_review'",
+    "SELECT id, platform, title_th, content_markdown, tags FROM content_drafts WHERE solution_id = $1 AND status = 'pending_review' ORDER BY id ASC",
     [solution_id]
   );
   if (!rows.length) {
@@ -558,19 +558,26 @@ const commands = [
         .setMaxValue(10)
     ),
 
-  // 5. /drafts - ดูรายการดราฟต์บทความ Flow 2 ที่รอการตรวจสอบ (Pending Review)
+  // 5. /drafts - ดูรายการดราฟต์บทความ Flow 2 ที่รอการตรวจสอบ (Pending Review) หรือประวัติการโพสต์
   new SlashCommandBuilder()
     .setName('drafts')
-    .setDescription('ดูรายการดราฟต์บทความ Flow 2 ที่รอการตรวจสอบ (Pending Review)')
+    .setDescription('ดูรายการดราฟต์บทความ Flow 2 ที่รอการตรวจสอบ หรือประวัติการโพสต์')
     .addIntegerOption(opt =>
       opt.setName('limit')
-        .setDescription('จำนวนดราฟต์ที่ต้องการดู (ค่าเริ่มต้น: 5)')
+        .setDescription('จำนวนดราฟต์ที่ต้องการดู (ค่าเริ่มต้น: 5, สูงสุด: 20)')
+        .setMinValue(1)
+        .setMaxValue(20)
         .setRequired(false)
     )
     .addStringOption(opt =>
       opt.setName('view')
         .setDescription('เลือกประเภทดราฟต์ (ค่าเริ่มต้น: pending)')
         .setRequired(false)
+        .addChoices(
+          { name: '⏳ รอการตรวจสอบ (Pending Review)', value: 'pending' },
+          { name: '✅ โพสต์แล้ว/พร้อมใช้ (Posted / Ready)', value: 'posted' },
+          { name: '📋 ทั้งหมด (All Drafts)', value: 'all' }
+        )
     ),
 
   // 6. /idea - ขอไอเดียโซลูชันใหม่จาก Flow 1
@@ -1071,22 +1078,33 @@ async function handleCommand(interaction, { pool, client }) {
     return await interaction.reply({ content: `⚙️ **Daily Radar:** เวลา \`${curTime} น.\` | สถานะ: ${curEnabled ? '🟢 เปิดใช้งาน' : '🔴 ปิดใช้งาน'}`, ephemeral: true });
   }
 
-  // 4. คำสั่ง /drafts (ดูรายการดราฟต์บทความ Flow 2 ที่รอการตรวจสอบ)
+  // 4. คำสั่ง /drafts (ดูรายการดราฟต์บทความ Flow 2 ที่รอการตรวจสอบ หรือประวัติการโพสต์)
   if (commandName === 'drafts') {
     await interaction.deferReply();
     const limit = interaction.options?.getInteger?.('limit') || 5;
+    const view = (interaction.options?.getString?.('view') || 'pending').toLowerCase();
+
+    let statusCondition = "status = 'pending_review'";
+    let statusLabel = 'Pending Review (รอการตรวจสอบ)';
+    if (view === 'posted' || view === 'published') {
+      statusCondition = "status IN ('posted', 'ready_to_post')";
+      statusLabel = 'Posted / Ready to Post (เผยแพร่แล้ว/พร้อมใช้)';
+    } else if (view === 'all') {
+      statusCondition = "1=1";
+      statusLabel = 'ทั้งหมด (All Statuses)';
+    }
 
     try {
       const { rows } = await pool.query(`
         SELECT id, solution_id, solution_title, platform, title_th, content_markdown, tags, status, created_at
         FROM content_drafts
-        WHERE status = 'pending_review'
+        WHERE ${statusCondition}
         ORDER BY created_at DESC, id DESC
         LIMIT $1
       `, [limit]);
 
       if (!rows.length) {
-        return await interaction.editReply('🎉 ไม่มีดราฟต์บทความค้างตรวจในขณะนี้ (Pending: 0)');
+        return await interaction.editReply(`🎉 ไม่มีดราฟต์บทความค้างตรวจในหมวด **${statusLabel}** ในขณะนี้ (จำนวน: 0)`);
       }
 
       const platformCounts = rows.reduce((acc, r) => {
@@ -1099,9 +1117,9 @@ async function handleCommand(interaction, { pool, client }) {
         .join('\n');
 
       const overviewEmbed = new EmbedBuilder()
-        .setTitle(`📝 รายการดราฟต์บทความ Flow 2 ที่รอการตรวจสอบ (${rows.length} รายการล่าสุด)`)
-        .setColor(0x5865f2)
-        .setDescription(`พบดราฟต์บทความที่สถานะเป็น **Pending Review** ทั้งหมด **${rows.length}** รายการ:\n\n${platformSummary}`)
+        .setTitle(`📝 รายการดราฟต์บทความ Flow 2 [${statusLabel}] (${rows.length} รายการล่าสุด)`)
+        .setColor(view === 'posted' ? 0x10b981 : 0x5865f2)
+        .setDescription(`พบดราฟต์บทความในหมวด **${statusLabel}** ทั้งหมด **${rows.length}** รายการ:\n\n${platformSummary}`)
         .setFooter({ text: 'กดปุ่มที่การ์ดด้านล่างเพื่อเผยแพร่, แก้ไข หรือปฏิเสธแต่ละรายการ' })
         .setTimestamp();
 
@@ -1111,7 +1129,7 @@ async function handleCommand(interaction, { pool, client }) {
         const d = rows[i];
         const { embed: cardEmbed, actionRow } = buildFlow2Card(d, d.solution_title);
         await interaction.followUp({
-          content: `📝 **[${i + 1}/${rows.length}] Draft ID: \`#${d.id}\`** | Platform: **${(d.platform || '').toUpperCase()}** | Solution: **${d.solution_title || d.title_th || '-'}**`,
+          content: `📝 **[${i + 1}/${rows.length}] Draft ID: \`#${d.id}\`** | Platform: **${(d.platform || '').toUpperCase()}** | Solution: **${d.solution_title || d.title_th || '-'}** (สถานะ: \`${d.status}\`)`,
           embeds: [cardEmbed],
           components: [actionRow]
         });
