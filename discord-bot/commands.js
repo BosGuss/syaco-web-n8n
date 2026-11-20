@@ -266,6 +266,90 @@ function createActionButtons(id) {
   );
 }
 
+function buildFlow2Card(d, fallbackSolutionTitle) {
+  const cut = (str, len) => (String(str || '').length > len ? str.slice(0, len - 3) + '...' : str || '-');
+  const tagsFormatted = (d.tags || []).length > 0 ? (d.tags || []).map(t => `\`${t}\``).join(' ') : '`-`';
+  const solutionTitle = fallbackSolutionTitle || d.solution_title || d.title_th || 'Enterprise Solution';
+
+  let embed;
+  let actionRow;
+
+  if (d.platform === 'bluesky') {
+    // 🦋 Bluesky: Short Social Micro-Post (Live Post)
+    const text = d.content_markdown || '';
+    const charCount = text.length;
+    const byteCount = Buffer.byteLength(text, 'utf8');
+
+    embed = new EmbedBuilder()
+      .setTitle(`🦋 [Bluesky] โพสต์สั้นโซเชียล (Live Auto-Post)`)
+      .setColor(0x0085ff)
+      .setDescription(`>>> ${text}`)
+      .addFields(
+        { name: '📦 โซลูชันเป้าหมาย', value: solutionTitle, inline: true },
+        { name: '📊 ความยาว', value: `${charCount} ตัวอักษร (${byteCount} bytes / สูงสุด 300)`, inline: true },
+        { name: '🏷️ แท็ก', value: tagsFormatted, inline: true },
+        { name: '⚡ การทำงาน', value: 'อนุมัติแล้วจะยิงโพสต์ขึ้นหน้าฟีด Bluesky ทันที', inline: false }
+      )
+      .setFooter({ text: `Draft ID: #${d.id} • สถานะ: ${d.status || 'รออนุมัติ'}` })
+      .setTimestamp();
+
+    actionRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`flow2_publish_${d.id}`).setLabel('🚀 เผยแพร่สดบน Bluesky').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId(`flow2_edit_${d.id}`).setLabel('✏️ แก้ไขข้อความ').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`flow2_reject_${d.id}`).setLabel('❌ ปฏิเสธ').setStyle(ButtonStyle.Danger)
+    );
+
+  } else if (d.platform === 'devto') {
+    // 📝 Dev.to: Technical Guide (Draft Mode)
+    const previewText = cut(d.content_markdown, 380);
+
+    embed = new EmbedBuilder()
+      .setTitle(`📝 [Dev.to] บทความเทคนิค (Draft Mode)`)
+      .setColor(0x0a0a0a)
+      .setDescription(`📌 **ชื่อบทความ:** ${d.title_th || solutionTitle}\n🛡️ **โหมดความปลอดภัย:** ส่งเข้า **แบบร่าง (Unpublished Draft)** บน Dev.to`)
+      .addFields(
+        { name: '📦 โซลูชันเป้าหมาย', value: solutionTitle, inline: true },
+        { name: '🏷️ แท็ก', value: tagsFormatted, inline: true },
+        { name: '📄 ตัวอย่างเนื้อหา (Preview)', value: `\`\`\`markdown\n${previewText}\n\`\`\``, inline: false },
+        { name: '💡 ขั้นตอนแนะนำ', value: 'เมื่อกดยืนยัน บทความจะถูกส่งเข้าหน้า Drafts บน Dev.to ทีมงานสามารถคลิกลิงก์ไปตรวจเช็กฟอร์แมตและกด Publish บนเว็บ Dev.to ได้อย่างปลอดภัย ไม่ถูกระบบ Anti-Spam แบน', inline: false }
+      )
+      .setFooter({ text: `Draft ID: #${d.id} • สถานะ: ${d.status || 'บันทึกเป็นแบบร่าง'}` })
+      .setTimestamp();
+
+    actionRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`flow2_publish_${d.id}`).setLabel('📝 ส่งเข้า Draft บน Dev.to').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId(`flow2_edit_${d.id}`).setLabel('✏️ แก้ไขเนื้อหา').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`flow2_reject_${d.id}`).setLabel('❌ ปฏิเสธ').setStyle(ButtonStyle.Danger)
+    );
+
+  } else {
+    // 📰 Manual: Long-Form Enterprise Article
+    const previewText = cut(d.content_markdown, 380);
+
+    embed = new EmbedBuilder()
+      .setTitle(`📰 [บทความยาว] Manual Enterprise Article`)
+      .setColor(0x6366f1)
+      .setDescription(`📌 **ชื่อบทความ:** ${d.title_th || solutionTitle}\n🎯 **แพลตฟอร์มแนะนำ:** Blognone, TechTalkThai, สื่อไอที, เว็บไซต์องค์กร`)
+      .addFields(
+        { name: '📦 โซลูชันเป้าหมาย', value: solutionTitle, inline: true },
+        { name: '🏷️ แท็ก', value: tagsFormatted, inline: true },
+        { name: '📄 ตัวอย่างเนื้อหา (Preview)', value: `\`\`\`markdown\n${previewText}\n\`\`\``, inline: false },
+        { name: '💡 การทำงาน', value: 'กดปุ่ม **"คัดลอกบทความเต็ม"** เพื่อนำ Markdown ไปโพสต์ หรือกด **"ทำเครื่องหมายพร้อมใช้งาน"** เพื่อบันทึกสถานะในระบบ', inline: false }
+      )
+      .setFooter({ text: `Draft ID: #${d.id} • สถานะ: ${d.status || 'สำหรับคัดลอกไปเผยแพร่ด้วยตนเอง'}` })
+      .setTimestamp();
+
+    actionRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`flow2_copy_${d.id}`).setLabel('📋 คัดลอกบทความเต็ม').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId(`flow2_edit_${d.id}`).setLabel('✏️ แก้ไขเนื้อหา').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`flow2_publish_${d.id}`).setLabel('✅ ทำเครื่องหมายพร้อมใช้งาน').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId(`flow2_reject_${d.id}`).setLabel('❌ ปฏิเสธ').setStyle(ButtonStyle.Danger)
+    );
+  }
+
+  return { embed, actionRow };
+}
+
 function buildRadarEmbedsAndMenu(threads, solutionsCovered = []) {
   const cut = (str, len) => (String(str || '').length > len ? str.slice(0, len - 3) + '...' : str || '');
   const getEmoji = (plat) => {
@@ -458,7 +542,22 @@ const commands = [
         .setMaxValue(10)
     ),
 
-  // 5. /idea - ขอไอเดียโซลูชันใหม่จาก Flow 1
+  // 5. /drafts - ดูรายการดราฟต์บทความ Flow 2 ที่รอการตรวจสอบ (Pending Review)
+  new SlashCommandBuilder()
+    .setName('drafts')
+    .setDescription('ดูรายการดราฟต์บทความ Flow 2 ที่รอการตรวจสอบ (Pending Review)')
+    .addIntegerOption(opt =>
+      opt.setName('limit')
+        .setDescription('จำนวนดราฟต์ที่ต้องการดู (ค่าเริ่มต้น: 5)')
+        .setRequired(false)
+    )
+    .addStringOption(opt =>
+      opt.setName('view')
+        .setDescription('เลือกประเภทดราฟต์ (ค่าเริ่มต้น: pending)')
+        .setRequired(false)
+    ),
+
+  // 6. /idea - ขอไอเดียโซลูชันใหม่จาก Flow 1
   new SlashCommandBuilder()
     .setName('idea')
     .setDescription('ขอไอเดียโซลูชันใหม่จาก Flow 1 (วิเคราะห์ข่าวสารและเทคโนโลยี Enterprise)')
@@ -469,12 +568,12 @@ const commands = [
         .setAutocomplete(true)
     ),
 
-  // 6. /health - ตรวจสอบความเร็วและสถานะระบบ (Ping, DB, n8n, AI, APIs)
+  // 7. /health - ตรวจสอบความเร็วและสถานะระบบ (Ping, DB, n8n, AI, APIs)
   new SlashCommandBuilder()
     .setName('health')
     .setDescription('ตรวจสอบความเร็วและสถานะระบบ (Ping, DB, n8n, AI, APIs)'),
 
-  // 7. /help - แสดงคู่มือการใช้งาน
+  // 8. /help - แสดงคู่มือการใช้งาน
   new SlashCommandBuilder()
     .setName('help')
     .setDescription('แสดงรายการคำสั่งทั้งหมดและวิธีใช้งาน')
@@ -956,7 +1055,59 @@ async function handleCommand(interaction, { pool, client }) {
     return await interaction.reply({ content: `⚙️ **Daily Radar:** เวลา \`${curTime} น.\` | สถานะ: ${curEnabled ? '🟢 เปิดใช้งาน' : '🔴 ปิดใช้งาน'}`, ephemeral: true });
   }
 
-  // 4. คำสั่ง /status (ภาพรวม, รายการรอรีวิว, หรือรายการที่โพสต์แล้ว)
+  // 4. คำสั่ง /drafts (ดูรายการดราฟต์บทความ Flow 2 ที่รอการตรวจสอบ)
+  if (commandName === 'drafts') {
+    await interaction.deferReply();
+    const limit = interaction.options?.getInteger?.('limit') || 5;
+
+    try {
+      const { rows } = await pool.query(`
+        SELECT id, solution_id, solution_title, platform, title_th, content_markdown, tags, status, created_at
+        FROM content_drafts
+        WHERE status = 'pending_review'
+        ORDER BY created_at DESC, id DESC
+        LIMIT $1
+      `, [limit]);
+
+      if (!rows.length) {
+        return await interaction.editReply('🎉 ไม่มีดราฟต์บทความค้างตรวจในขณะนี้ (Pending: 0)');
+      }
+
+      const platformCounts = rows.reduce((acc, r) => {
+        acc[r.platform] = (acc[r.platform] || 0) + 1;
+        return acc;
+      }, {});
+
+      const platformSummary = Object.entries(platformCounts)
+        .map(([p, cnt]) => `• **${p.toUpperCase()}**: ${cnt} รายการ`)
+        .join('\n');
+
+      const overviewEmbed = new EmbedBuilder()
+        .setTitle(`📝 รายการดราฟต์บทความ Flow 2 ที่รอการตรวจสอบ (${rows.length} รายการล่าสุด)`)
+        .setColor(0x5865f2)
+        .setDescription(`พบดราฟต์บทความที่สถานะเป็น **Pending Review** ทั้งหมด **${rows.length}** รายการ:\n\n${platformSummary}`)
+        .setFooter({ text: 'กดปุ่มที่การ์ดด้านล่างเพื่อเผยแพร่, แก้ไข หรือปฏิเสธแต่ละรายการ' })
+        .setTimestamp();
+
+      await interaction.editReply({ embeds: [overviewEmbed] });
+
+      for (let i = 0; i < rows.length; i++) {
+        const d = rows[i];
+        const { embed: cardEmbed, actionRow } = buildFlow2Card(d, d.solution_title);
+        await interaction.followUp({
+          content: `📝 **[${i + 1}/${rows.length}] Draft ID: \`#${d.id}\`** | Platform: **${(d.platform || '').toUpperCase()}** | Solution: **${d.solution_title || d.title_th || '-'}**`,
+          embeds: [cardEmbed],
+          components: [actionRow]
+        });
+      }
+      return;
+    } catch (err) {
+      console.error('Error in /drafts command:', err);
+      return await interaction.editReply(`⚠️ เกิดข้อผิดพลาดในการดึงข้อมูลดราฟต์: ${err.message}`);
+    }
+  }
+
+  // 5. คำสั่ง /status (ภาพรวม, รายการรอรีวิว, หรือรายการที่โพสต์แล้ว)
   if (commandName === 'status' || commandName === 'pending' || commandName === 'posted' || commandName === 'recent-posted' || commandName === 'latest' || commandName === 'get') {
     let view = interaction.options?.getString?.('view') || 'overview';
     if (commandName === 'pending') view = 'pending';
@@ -988,7 +1139,7 @@ async function handleCommand(interaction, { pool, client }) {
     if (view === 'pending') {
       await interaction.deferReply();
       try {
-        const { rows } = await pool.query(`
+        const { rows: backlinkRows } = await pool.query(`
           SELECT *
           FROM backlink_candidates
           WHERE status = 'pending_review'
@@ -996,25 +1147,53 @@ async function handleCommand(interaction, { pool, client }) {
           LIMIT $1
         `, [limit]);
 
-        if (!rows.length) {
+        const { rows: draftRows } = await pool.query(`
+          SELECT id, solution_id, solution_title, platform, title_th, content_markdown, tags, status, created_at
+          FROM content_drafts
+          WHERE status = 'pending_review'
+          ORDER BY created_at DESC, id DESC
+          LIMIT $1
+        `, [limit]);
+
+        if (!backlinkRows.length && !draftRows.length) {
           return await interaction.editReply('🎉 **ไม่มีรายการค้างที่รอรีวิวในขณะนี้!** (Pending Review: 0)');
         }
 
-        await interaction.editReply({
-          content: `⏳ **รายการที่รอรีวิว (${rows.length} รายการล่าสุด):**`
-        });
+        const summaryEmbed = new EmbedBuilder()
+          .setTitle('⏳ รายการที่รอการตรวจสอบ (Pending Review)')
+          .setColor(0xfee75c)
+          .setDescription('สรุปรายการทั้งหมดที่ค้างอยู่ในระบบและต้องการการตรวจสอบ:')
+          .addFields(
+            { name: '💬 กระทู้รอตอบ (Flow 3)', value: `**${backlinkRows.length}** รายการ`, inline: true },
+            { name: '📝 ดราฟต์บทความรอยืนยัน (Flow 2)', value: `**${draftRows.length}** รายการ`, inline: true }
+          )
+          .setFooter({ text: 'คุณสามารถใช้ /drafts เพื่อดูเฉพาะดราฟต์บทความ Flow 2 ได้โดยตรง' })
+          .setTimestamp();
 
-        await Promise.all(
-          rows.map((row, i) => {
-            const embed = createCandidateEmbed(row);
-            const actionRow = createActionButtons(row.id);
-            return interaction.followUp({
-              content: `📋 **[${i + 1}/${rows.length}] Candidate ID: \`${row.id}\`** | Platform: **${row.platform}** | Score: \`${row.match_score || '-'}\``,
-              embeds: [embed],
-              components: [actionRow]
-            });
-          })
-        );
+        await interaction.editReply({ embeds: [summaryEmbed] });
+
+        // 1. Follow up with Flow 3 Backlink Candidates
+        for (let i = 0; i < backlinkRows.length; i++) {
+          const row = backlinkRows[i];
+          const embed = createCandidateEmbed(row);
+          const actionRow = createActionButtons(row.id);
+          await interaction.followUp({
+            content: `💬 **[Flow 3] [${i + 1}/${backlinkRows.length}] Candidate ID: \`${row.id}\`** | Platform: **${row.platform}** | Score: \`${row.match_score || '-'}\``,
+            embeds: [embed],
+            components: [actionRow]
+          });
+        }
+
+        // 2. Follow up with Flow 2 Content Drafts
+        for (let i = 0; i < draftRows.length; i++) {
+          const d = draftRows[i];
+          const { embed: draftEmbed, actionRow } = buildFlow2Card(d, d.solution_title);
+          await interaction.followUp({
+            content: `📝 **[Flow 2] [${i + 1}/${draftRows.length}] Draft ID: \`#${d.id}\`** | Platform: **${(d.platform || '').toUpperCase()}** | Solution: **${d.solution_title || d.title_th || '-'}**`,
+            embeds: [draftEmbed],
+            components: [actionRow]
+          });
+        }
         return;
       } catch (err) {
         return await interaction.editReply(`⚠️ เกิดข้อผิดพลาด: ${err.message}`);
@@ -1306,12 +1485,12 @@ async function handleCommand(interaction, { pool, client }) {
     return await interaction.editReply({ embeds: [embed] });
   }
 
-  // 7. คำสั่ง /help (แสดงคู่มือคำสั่งทั้ง 7)
+  // 8. คำสั่ง /help (แสดงคู่มือคำสั่งทั้ง 8)
   if (commandName === 'help') {
     const embed = new EmbedBuilder()
       .setTitle('📖 คู่มือคำสั่ง Discord Bot (SyaCo Community & Content Stack)')
       .setColor(0x57f287)
-      .setDescription('คำสั่งทั้งหมด 7 คำสั่งหลัก สั้น กระชับ จำง่าย ครบทุกฟังก์ชัน:')
+      .setDescription('คำสั่งทั้งหมด 8 คำสั่งหลัก สั้น กระชับ จำง่าย ครบทุกฟังก์ชัน:')
       .addFields(
         {
           name: '1. `/find [keyword] [platform] [limit]`',
@@ -1327,18 +1506,22 @@ async function handleCommand(interaction, { pool, client }) {
         },
         {
           name: '4. `/status [view] [limit]`',
-          value: '• ดูสถานะงาน:\n  - `overview`: สรุปจำนวนรายการทั้งหมดในระบบ\n  - `pending`: แสดงรายการที่รอรีวิวพร้อมปุ่ม Approve / Edit / Reject\n  - `posted`: แสดงรายการที่โพสต์สำเร็จพร้อมลิงก์'
+          value: '• ดูสถานะงาน:\n  - `overview`: สรุปจำนวนรายการทั้งหมดในระบบ\n  - `pending`: แสดงรายการที่รอรีวิวพร้อมปุ่ม Approve / Edit / Reject (รวมทั้งกระทู้ Flow 3 และบทความ Flow 2)\n  - `posted`: แสดงรายการที่โพสต์สำเร็จพร้อมลิงก์'
         },
         {
-          name: '5. `/idea [solution]`',
+          name: '5. `/drafts [limit]`',
+          value: '• ดูรายการดราฟต์บทความ Flow 2 ที่รอการตรวจสอบ (Pending Review) พร้อมปุ่ม Publish, Edit, Reject'
+        },
+        {
+          name: '6. `/idea [solution]`',
           value: '• ขอไอเดียโซลูชันใหม่จาก Flow 1 (สามารถเลือกต่อยอดจากโซลูชัน เช่น Smart Inventory & Warehouse หรือเว้นว่างเพื่อให้ AI สุ่มวิเคราะห์)'
         },
         {
-          name: '6. `/health`',
+          name: '7. `/health`',
           value: '• ตรวจสอบความเร็ว Latency และความพร้อมของระบบ (DB, n8n, AI, Bluesky, Dev.to)'
         },
         {
-          name: '7. `/help`',
+          name: '8. `/help`',
           value: '• แสดงคู่มือการใช้งานคำสั่งทั้งหมด'
         }
       )
@@ -1355,6 +1538,7 @@ module.exports = {
   createCandidateEmbed,
   createActionButtons,
   buildRadarEmbedsAndMenu,
+  buildFlow2Card,
   normalizeDevtoCookie,
   saveAndVerifyDevtoCookie,
   saveAndVerifyDevtoKey,

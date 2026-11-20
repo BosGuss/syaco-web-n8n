@@ -244,6 +244,7 @@ const {
   createCandidateEmbed,
   createActionButtons,
   buildRadarEmbedsAndMenu,
+  buildFlow2Card,
   saveAndVerifyDevtoCookie,
   saveAndVerifyDevtoKey
 } = require('./commands');
@@ -297,89 +298,7 @@ function buildFlow1Card(s, baseSolutionText, reviewedBy = null) {
   return { embed, actionRow };
 }
 
-function buildFlow2Card(d, fallbackSolutionTitle) {
-  const cut = (str, len) => (String(str || '').length > len ? str.slice(0, len - 3) + '...' : str || '-');
-  const tagsFormatted = (d.tags || []).length > 0 ? (d.tags || []).map(t => `\`${t}\``).join(' ') : '`-`';
-  const solutionTitle = fallbackSolutionTitle || d.solution_title || d.title_th || 'Enterprise Solution';
-
-  let embed;
-  let actionRow;
-
-  if (d.platform === 'bluesky') {
-    // 🦋 Bluesky: Short Social Micro-Post (Live Post)
-    const text = d.content_markdown || '';
-    const charCount = text.length;
-    const byteCount = Buffer.byteLength(text, 'utf8');
-
-    embed = new EmbedBuilder()
-      .setTitle(`🦋 [Bluesky] โพสต์สั้นโซเชียล (Live Auto-Post)`)
-      .setColor(0x0085ff)
-      .setDescription(`>>> ${text}`)
-      .addFields(
-        { name: '📦 โซลูชันเป้าหมาย', value: solutionTitle, inline: true },
-        { name: '📊 ความยาว', value: `${charCount} ตัวอักษร (${byteCount} bytes / สูงสุด 300)`, inline: true },
-        { name: '🏷️ แท็ก', value: tagsFormatted, inline: true },
-        { name: '⚡ การทำงาน', value: 'อนุมัติแล้วจะยิงโพสต์ขึ้นหน้าฟีด Bluesky ทันที', inline: false }
-      )
-      .setFooter({ text: `Draft ID: #${d.id} • สถานะ: ${d.status || 'รออนุมัติ'}` })
-      .setTimestamp();
-
-    actionRow = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`flow2_publish_${d.id}`).setLabel('🚀 เผยแพร่สดบน Bluesky').setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId(`flow2_edit_${d.id}`).setLabel('✏️ แก้ไขข้อความ').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`flow2_reject_${d.id}`).setLabel('❌ ปฏิเสธ').setStyle(ButtonStyle.Danger)
-    );
-
-  } else if (d.platform === 'devto') {
-    // 📝 Dev.to: Technical Guide (Draft Mode)
-    const previewText = cut(d.content_markdown, 380);
-
-    embed = new EmbedBuilder()
-      .setTitle(`📝 [Dev.to] บทความเทคนิค (Draft Mode)`)
-      .setColor(0x0a0a0a)
-      .setDescription(`📌 **ชื่อบทความ:** ${d.title_th || solutionTitle}\n🛡️ **โหมดความปลอดภัย:** ส่งเข้า **แบบร่าง (Unpublished Draft)** บน Dev.to`)
-      .addFields(
-        { name: '📦 โซลูชันเป้าหมาย', value: solutionTitle, inline: true },
-        { name: '🏷️ แท็ก', value: tagsFormatted, inline: true },
-        { name: '📄 ตัวอย่างเนื้อหา (Preview)', value: `\`\`\`markdown\n${previewText}\n\`\`\``, inline: false },
-        { name: '💡 ขั้นตอนแนะนำ', value: 'เมื่อกดยืนยัน บทความจะถูกส่งเข้าหน้า Drafts บน Dev.to ทีมงานสามารถคลิกลิงก์ไปตรวจเช็กฟอร์แมตและกด Publish บนเว็บ Dev.to ได้อย่างปลอดภัย ไม่ถูกระบบ Anti-Spam แบน', inline: false }
-      )
-      .setFooter({ text: `Draft ID: #${d.id} • สถานะ: ${d.status || 'บันทึกเป็นแบบร่าง'}` })
-      .setTimestamp();
-
-    actionRow = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`flow2_publish_${d.id}`).setLabel('📝 ส่งเข้า Draft บน Dev.to').setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId(`flow2_edit_${d.id}`).setLabel('✏️ แก้ไขเนื้อหา').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`flow2_reject_${d.id}`).setLabel('❌ ปฏิเสธ').setStyle(ButtonStyle.Danger)
-    );
-
-  } else {
-    // 📰 Manual: Long-Form Enterprise Article
-    const previewText = cut(d.content_markdown, 380);
-
-    embed = new EmbedBuilder()
-      .setTitle(`📰 [บทความยาว] Manual Enterprise Article`)
-      .setColor(0x6366f1)
-      .setDescription(`📌 **ชื่อบทความ:** ${d.title_th || solutionTitle}\n🎯 **แพลตฟอร์มแนะนำ:** Blognone, TechTalkThai, สื่อไอที, เว็บไซต์องค์กร`)
-      .addFields(
-        { name: '📦 โซลูชันเป้าหมาย', value: solutionTitle, inline: true },
-        { name: '🏷️ แท็ก', value: tagsFormatted, inline: true },
-        { name: '📄 ตัวอย่างเนื้อหา (Preview)', value: `\`\`\`markdown\n${previewText}\n\`\`\``, inline: false },
-        { name: '💡 การทำงาน', value: 'กดปุ่ม **"คัดลอกบทความเต็ม"** เพื่อนำ Markdown ไปโพสต์ หรือกด **"ทำเครื่องหมายพร้อมใช้งาน"** เพื่อบันทึกสถานะในระบบ', inline: false }
-      )
-      .setFooter({ text: `Draft ID: #${d.id} • สถานะ: ${d.status || 'สำหรับคัดลอกไปเผยแพร่ด้วยตนเอง'}` })
-      .setTimestamp();
-
-    actionRow = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`flow2_copy_${d.id}`).setLabel('📋 คัดลอกบทความเต็ม').setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId(`flow2_edit_${d.id}`).setLabel('✏️ แก้ไขเนื้อหา').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`flow2_publish_${d.id}`).setLabel('✅ ทำเครื่องหมายพร้อมใช้งาน').setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId(`flow2_reject_${d.id}`).setLabel('❌ ปฏิเสธ').setStyle(ButtonStyle.Danger)
-    );
-  }
-
-  return { embed, actionRow };
-}
+// Note: buildFlow2Card is imported from ./commands for sharing across bot modules
 
 async function loadBotSettings() {
   try {
@@ -1835,3 +1754,9 @@ const PORT = 3000;
 app.listen(PORT, () => console.log(`Internal notify API listening on port ${PORT}`));
 
 client.login(process.env.DISCORD_BOT_TOKEN);
+
+module.exports = {
+  buildFlow2Card,
+  app,
+  client
+};
