@@ -350,6 +350,22 @@ function buildFlow2Card(d, fallbackSolutionTitle) {
   return { embed, actionRow };
 }
 
+async function handleFlow2DraftsNotify({ pool, channel, solution_id, solution_title }) {
+  const { rows } = await pool.query(
+    "SELECT id, platform, title_th, content_markdown, tags FROM content_drafts WHERE solution_id = $1 AND status = 'pending_review'",
+    [solution_id]
+  );
+  if (!rows.length) {
+    return { ok: true, message: 'No pending drafts found' };
+  }
+
+  for (const d of rows) {
+    const { embed, actionRow } = buildFlow2Card(d, solution_title);
+    await channel.send({ embeds: [embed], components: [actionRow] });
+  }
+  return { ok: true, type: 'flow2_drafts', count: rows.length };
+}
+
 function buildRadarEmbedsAndMenu(threads, solutionsCovered = []) {
   const cut = (str, len) => (String(str || '').length > len ? str.slice(0, len - 3) + '...' : str || '');
   const getEmoji = (plat) => {
@@ -1539,6 +1555,7 @@ module.exports = {
   createActionButtons,
   buildRadarEmbedsAndMenu,
   buildFlow2Card,
+  handleFlow2DraftsNotify,
   normalizeDevtoCookie,
   saveAndVerifyDevtoCookie,
   saveAndVerifyDevtoKey,

@@ -21,7 +21,7 @@ Module._resolveFilename = function (request, parent, isMain, options) {
 };
 
 const assert = require('assert');
-const { commands, handleCommand, normalizeDevtoCookie, saveAndVerifyDevtoKey, buildFlow2Card } = require('./commands');
+const { commands, handleCommand, normalizeDevtoCookie, saveAndVerifyDevtoKey, buildFlow2Card, handleFlow2DraftsNotify } = require('./commands');
 
 console.log('🧪 Starting Discord Bot Commands Unit Tests...\n');
 
@@ -319,28 +319,12 @@ console.log('  ✅ Slash commands cleanly defined: /drafts registered with limit
     }
   };
 
-  // Helper simulating the notify handler logic for flow2_drafts from index.js
-  async function simulateNotifyHandler(body, pool, channel) {
-    if (body.type === 'flow2_drafts' && body.solution_id) {
-      const { rows } = await pool.query(
-        "SELECT id, platform, title_th, content_markdown, tags FROM content_drafts WHERE solution_id = $1 AND status = 'pending_review'",
-        [body.solution_id]
-      );
-      if (!rows.length) {
-        return { ok: true, message: 'No pending drafts found' };
-      }
-
-      for (const d of rows) {
-        const { embed, actionRow } = buildFlow2Card(d, body.solution_title);
-        await channel.send({ embeds: [embed], components: [actionRow] });
-      }
-      return { ok: true, type: 'flow2_drafts', count: rows.length };
-    }
-    return { ok: false };
-  }
-
   // 9a: When solution_id: '90' has no pending drafts
-  const emptyNotifyRes = await simulateNotifyHandler({ type: 'flow2_drafts', solution_id: '90' }, mockPool, mockNotifyChannel);
+  const emptyNotifyRes = await handleFlow2DraftsNotify({
+    pool: mockPool,
+    channel: mockNotifyChannel,
+    solution_id: '90'
+  });
   assert.strictEqual(emptyNotifyRes.ok, true);
   assert.strictEqual(emptyNotifyRes.message, 'No pending drafts found');
   assert.strictEqual(channelSends.length, 0);
@@ -380,11 +364,12 @@ console.log('  ✅ Slash commands cleanly defined: /drafts registered with limit
     }
   };
 
-  const notifyRes = await simulateNotifyHandler(
-    { type: 'flow2_drafts', solution_id: '90', solution_title: 'Enterprise AI Inspection #90' },
-    mockNotifyPool,
-    mockNotifyChannel
-  );
+  const notifyRes = await handleFlow2DraftsNotify({
+    pool: mockNotifyPool,
+    channel: mockNotifyChannel,
+    solution_id: '90',
+    solution_title: 'Enterprise AI Inspection #90'
+  });
 
   assert.strictEqual(notifyRes.ok, true);
   assert.strictEqual(notifyRes.type, 'flow2_drafts');

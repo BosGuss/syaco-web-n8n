@@ -245,6 +245,7 @@ const {
   createActionButtons,
   buildRadarEmbedsAndMenu,
   buildFlow2Card,
+  handleFlow2DraftsNotify,
   saveAndVerifyDevtoCookie,
   saveAndVerifyDevtoKey
 } = require('./commands');
@@ -1677,19 +1678,13 @@ app.post('/notify', async (req, res) => {
 
     // 2. Flow 2: Multi-Platform Drafts Notification
     if (body.type === 'flow2_drafts' && body.solution_id) {
-      const { rows } = await pool.query(
-        "SELECT id, platform, title_th, content_markdown, tags FROM content_drafts WHERE solution_id = $1 AND status = 'pending_review'",
-        [body.solution_id]
-      );
-      if (!rows.length) {
-        return res.json({ ok: true, message: 'No pending drafts found' });
-      }
-
-      for (const d of rows) {
-        const { embed, actionRow } = buildFlow2Card(d, body.solution_title);
-        await channel.send({ embeds: [embed], components: [actionRow] });
-      }
-      return res.json({ ok: true, type: 'flow2_drafts', count: rows.length });
+      const result = await handleFlow2DraftsNotify({
+        pool,
+        channel,
+        solution_id: body.solution_id,
+        solution_title: body.solution_title
+      });
+      return res.json(result);
     }
 
     // 3. Flow 2: Manual Ready Announcement
