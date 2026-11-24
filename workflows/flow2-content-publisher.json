@@ -20,7 +20,8 @@
       "position": [
         200,
         280
-      ]
+      ],
+      "disabled": true
     },
     {
       "parameters": {
@@ -42,7 +43,9 @@
     {
       "parameters": {
         "url": "https://www.syaco.co.th/api/solutions",
-        "options": {}
+        "options": {
+          "timeout": 30000
+        }
       },
       "id": "f2-node-get-solutions",
       "name": "Get Current Solutions",
@@ -236,7 +239,9 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ $json.geminiBodyA }}",
-        "options": {}
+        "options": {
+          "timeout": 30000
+        }
       },
       "id": "f2-node-gemini-a",
       "name": "Call Gemini AI (Micro & Dev.to)",
@@ -266,7 +271,9 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ $('Build AI Prompts for Call A & B').first().json.geminiBodyB }}",
-        "options": {}
+        "options": {
+          "timeout": 30000
+        }
       },
       "id": "f2-node-gemini-b",
       "name": "Call Gemini AI (Manual Article)",
@@ -323,7 +330,9 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ {\n  type: 'flow2_drafts',\n  solution_id: $json.id || $json.solution_id,\n  solution_title: $json.titleEn || $json.titleTh || $json.solution_title\n} }}",
-        "options": {}
+        "options": {
+          "timeout": 30000
+        }
       },
       "id": "f2-node-notify-discord",
       "name": "Notify Discord Review Cards",

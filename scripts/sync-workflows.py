@@ -95,6 +95,46 @@ def sync_workflow(cursor, wf_path):
     except Exception as e:
         print(f"[WARN] workflow_published_version update skipped: {e}")
 
+    # 5. Sync workflow_publication_trigger_status and triggerCount
+    trigger_nodes = []
+    for node in wf_data.get('nodes', []):
+        if node.get('disabled') is True:
+            continue
+        node_type = node.get('type', '')
+        if 'webhook' in node_type.lower():
+            trigger_nodes.append((node.get('id'), 'persisted'))
+        elif 'schedule' in node_type.lower() or 'poll' in node_type.lower():
+            trigger_nodes.append((node.get('id'), 'in-memory'))
+
+    try:
+        cursor.execute("UPDATE workflow_entity SET triggerCount=? WHERE id=?", (len(trigger_nodes), wf_id))
+        # Remove old trigger statuses that no longer exist in workflow
+        valid_node_ids = [t[0] for t in trigger_nodes]
+        if valid_node_ids:
+            placeholders = ','.join('?' for _ in valid_node_ids)
+            cursor.execute(f"DELETE FROM workflow_publication_trigger_status WHERE workflowId=? AND nodeId NOT IN ({placeholders})", [wf_id] + valid_node_ids)
+        else:
+            cursor.execute("DELETE FROM workflow_publication_trigger_status WHERE workflowId=?", (wf_id,))
+
+        for node_id, kind in trigger_nodes:
+            cursor.execute("""
+            INSERT INTO workflow_publication_trigger_status (workflowId, nodeId, versionId, status, errorMessage, createdAt, updatedAt, triggerKind)
+            VALUES (?, ?, ?, 'activated', NULL, ?, ?, ?)
+            ON CONFLICT(workflowId, nodeId) DO UPDATE SET
+              versionId=excluded.versionId,
+              status=excluded.status,
+              errorMessage=NULL,
+              updatedAt=excluded.updatedAt,
+              triggerKind=excluded.triggerKind
+            """, (wf_id, node_id, new_version_id, now_str, now_str, kind))
+
+        # Clear failed retry states so reconciler / trigger manager does not lock out triggers
+        cursor.execute("DELETE FROM workflow_publication_retry_state WHERE workflowId=?", (wf_id,))
+        cursor.execute("DELETE FROM workflow_publication_outbox WHERE workflowId=? AND status='failed'", (wf_id,))
+        print(f"[TRIGGER-SYNC] Synced {len(trigger_nodes)} triggers for workflow '{name}'")
+    except Exception as e:
+        print(f"[WARN] workflow_publication_trigger_status sync skipped: {e}")
+
     return True
 
 def main():

@@ -494,7 +494,7 @@ const commands = [
     )
     .addSubcommand(sub =>
       sub.setName('radar')
-        .setDescription('ตั้งเวลาดึงกระทู้อัตโนมัติประจำวัน')
+        .setDescription('ตั้งเวลาดึงกระทู้อัตโนมัติประจำวัน (Flow 3)')
         .addStringOption(opt =>
           opt.setName('time')
             .setDescription('เวลา HH:MM เช่น 11:00 หรือ 09:00 (เวลาไทย)')
@@ -511,6 +511,34 @@ const commands = [
             .setRequired(false)
             .setMinValue(5)
             .setMaxValue(25)
+        )
+    )
+    .addSubcommand(sub =>
+      sub.setName('flow1')
+        .setDescription('ตั้งเวลาและเปิด/ปิด Daily Trigger ของ Flow 1 (Solution Discovery)')
+        .addStringOption(opt =>
+          opt.setName('time')
+            .setDescription('เวลา HH:MM เช่น 11:00 หรือ 09:00 (เวลาไทย)')
+            .setRequired(false)
+        )
+        .addBooleanOption(opt =>
+          opt.setName('enabled')
+            .setDescription('เปิดหรือปิดระบบค้นหาโซลูชันอัตโนมัติ')
+            .setRequired(false)
+        )
+    )
+    .addSubcommand(sub =>
+      sub.setName('flow2')
+        .setDescription('ตั้งเวลาและเปิด/ปิด Daily Trigger ของ Flow 2 (Content Creator & Publisher)')
+        .addStringOption(opt =>
+          opt.setName('time')
+            .setDescription('เวลา HH:MM เช่น 11:30 หรือ 10:00 (เวลาไทย)')
+            .setRequired(false)
+        )
+        .addBooleanOption(opt =>
+          opt.setName('enabled')
+            .setDescription('เปิดหรือปิดระบบสร้างคอนเทนต์อัตโนมัติ')
+            .setRequired(false)
         )
     )
     .addSubcommand(sub =>
@@ -591,12 +619,17 @@ const commands = [
         .setAutocomplete(true)
     ),
 
-  // 7. /health - ตรวจสอบความเร็วและสถานะระบบ (Ping, DB, n8n, AI, APIs)
+  // 7. /publish - สั่งรัน Flow 2 สร้างและตรวจทานคอนเทนต์ทันที
+  new SlashCommandBuilder()
+    .setName('publish')
+    .setDescription('สั่งรัน Flow 2 (Content Creator & Publisher) ทันทีเพื่อสร้างและตรวจทานคอนเทนต์'),
+
+  // 8. /health - ตรวจสอบความเร็วและสถานะระบบ (Ping, DB, n8n, AI, APIs)
   new SlashCommandBuilder()
     .setName('health')
     .setDescription('ตรวจสอบความเร็วและสถานะระบบ (Ping, DB, n8n, AI, APIs)'),
 
-  // 8. /help - แสดงคู่มือการใช้งาน
+  // 9. /help - แสดงคู่มือการใช้งาน
   new SlashCommandBuilder()
     .setName('help')
     .setDescription('แสดงรายการคำสั่งทั้งหมดและวิธีใช้งาน')
@@ -819,6 +852,10 @@ async function handleCommand(interaction, { pool, client }) {
         const radarTime = getSetting('DAILY_RADAR_TIME', '11:00');
         const radarEnabled = getSetting('DAILY_RADAR_ENABLED', 'true') !== 'false';
         const radarLimit = getSetting('DAILY_RADAR_LIMIT', '20');
+        const flow1Time = getSetting('FLOW1_DAILY_TIME', '10:30');
+        const flow1Enabled = getSetting('FLOW1_DAILY_ENABLED', 'true') !== 'false';
+        const flow2Time = getSetting('FLOW2_DAILY_TIME', '11:30');
+        const flow2Enabled = getSetting('FLOW2_DAILY_ENABLED', 'true') !== 'false';
         const channelId = getSetting('DISCORD_CHANNEL_ID', '');
         const adminRaw = getSetting('DISCORD_ADMIN_IDS', '');
         const devtoKey = getSetting('DEVTO_API_KEY', '');
@@ -835,12 +872,13 @@ async function handleCommand(interaction, { pool, client }) {
           .setColor(0x5865f2)
           .addFields(
             { name: '📢 ห้องแจ้งเตือน', value: channelText, inline: false },
-            { name: '⏰ เวลาเรดาร์กระทู้อัตโนมัติ', value: `\`${radarTime} น.\` (สถานะ: ${radarEnabled ? '🟢 เปิดใช้งาน' : '🔴 ปิด'})`, inline: true },
-            { name: '🎯 จำนวนกระทู้เรดาร์', value: `\`${radarLimit} กระทู้\``, inline: true },
+            { name: '💡 Flow 1: Solution Discovery', value: `\`${flow1Time} น.\` (${flow1Enabled ? '🟢 เปิดใช้งาน' : '🔴 ปิด'})`, inline: true },
+            { name: '✍️ Flow 2: Content Publisher', value: `\`${flow2Time} น.\` (${flow2Enabled ? '🟢 เปิดใช้งาน' : '🔴 ปิด'})`, inline: true },
+            { name: '🌅 Flow 3: Daily Radar', value: `\`${radarTime} น.\` (${radarEnabled ? '🟢 เปิดใช้งาน' : '🔴 ปิด'} • \`${radarLimit} กระทู้\`)`, inline: true },
             { name: '🛡️ รายชื่อผู้ดูแลระบบ (Admin IDs)', value: adminText, inline: false },
             { name: '💻 Dev.to Integration', value: `API Key: ${devtoKey ? '🟢 บันทึกแล้ว' : '⚪ ยังไม่มี'} | Cookie: ${devtoCookie ? '🟢 บันทึกแล้ว' : '⚪ ยังไม่มี'}`, inline: false }
           )
-          .setFooter({ text: 'พิมพ์ /settings [subcommand] เพื่อแก้ไขการตั้งค่า' })
+          .setFooter({ text: 'พิมพ์ /settings flow1, /settings flow2 หรือ /settings radar เพื่อปรับเวลา' })
           .setTimestamp();
 
         return await interaction.editReply({ embeds: [embed] });
@@ -860,7 +898,7 @@ async function handleCommand(interaction, { pool, client }) {
         const { rows: eRows } = await pool.query("SELECT value FROM bot_settings WHERE key = 'DAILY_RADAR_ENABLED'");
         const { rows: lRows } = await pool.query("SELECT value FROM bot_settings WHERE key = 'DAILY_RADAR_LIMIT'");
 
-        const curTime = tRows[0]?.value || '11:00';
+        const curTime = tRows[0]?.value || '10:30';
         const curEnabled = eRows[0]?.value !== 'false';
         const curLimit = lRows[0]?.value || '20';
 
@@ -908,6 +946,106 @@ async function handleCommand(interaction, { pool, client }) {
       }
 
       return await interaction.editReply('✅ **บันทึกการตั้งค่า Daily Thread Radar เรียบร้อยแล้ว!**');
+    }
+
+    // 3.3 /settings flow1
+    if (subcommand === 'flow1') {
+      const rawTime = interaction.options.getString('time');
+      const enabled = interaction.options.getBoolean('enabled');
+
+      if (!rawTime && enabled === null) {
+        const { rows: tRows } = await pool.query("SELECT value FROM bot_settings WHERE key = 'FLOW1_DAILY_TIME'");
+        const { rows: eRows } = await pool.query("SELECT value FROM bot_settings WHERE key = 'FLOW1_DAILY_ENABLED'");
+        const curTime = tRows[0]?.value || '10:30';
+        const curEnabled = eRows[0]?.value !== 'false';
+
+        const embed = new EmbedBuilder()
+          .setTitle('⚙️ สถานะ Daily Trigger: Flow 1 (Solution Discovery)')
+          .setColor(curEnabled ? 0x57f287 : 0xed4245)
+          .addFields(
+            { name: '⏰ เวลาทำงานอัตโนมัติ', value: `\`${curTime} น.\` (เวลาไทย Asia/Bangkok)`, inline: true },
+            { name: '📊 สถานะระบบ', value: curEnabled ? '🟢 เปิดใช้งาน (Active)' : '🔴 ปิดใช้งาน (Disabled)', inline: true },
+            { name: '🎯 หน้าที่', value: 'ดึงข่าว TechTalkThai & Blognone ค้นหา Adjacent Solution เสนอทีม', inline: false }
+          )
+          .setFooter({ text: 'ใช้ /settings flow1 time:11:00 enabled:true เพื่อปรับเปลี่ยน' });
+
+        return await interaction.reply({ embeds: [embed], ephemeral: true });
+      }
+
+      await interaction.deferReply({ ephemeral: true });
+
+      if (rawTime) {
+        const match = rawTime.trim().match(/^([01]?[0-9]|2[0-3]):([0-5][0-9])$/);
+        if (!match) {
+          return await interaction.editReply('⚠️ รูปแบบเวลาไม่ถูกต้อง กรุณากรอกเป็น `HH:MM` เช่น `11:00` หรือ `09:00`');
+        }
+        const hour = match[1].padStart(2, '0');
+        const min = match[2];
+        const timeFormatted = `${hour}:${min}`;
+        await pool.query(
+          "INSERT INTO bot_settings (key, value, updated_at) VALUES ('FLOW1_DAILY_TIME', $1, NOW()) ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()",
+          [timeFormatted]
+        );
+      }
+
+      if (enabled !== null) {
+        await pool.query(
+          "INSERT INTO bot_settings (key, value, updated_at) VALUES ('FLOW1_DAILY_ENABLED', $1, NOW()) ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()",
+          [enabled ? 'true' : 'false']
+        );
+      }
+
+      return await interaction.editReply('✅ **บันทึกการตั้งค่า Daily Trigger สำหรับ Flow 1 เรียบร้อยแล้ว!**');
+    }
+
+    // 3.4 /settings flow2
+    if (subcommand === 'flow2') {
+      const rawTime = interaction.options.getString('time');
+      const enabled = interaction.options.getBoolean('enabled');
+
+      if (!rawTime && enabled === null) {
+        const { rows: tRows } = await pool.query("SELECT value FROM bot_settings WHERE key = 'FLOW2_DAILY_TIME'");
+        const { rows: eRows } = await pool.query("SELECT value FROM bot_settings WHERE key = 'FLOW2_DAILY_ENABLED'");
+        const curTime = tRows[0]?.value || '11:30';
+        const curEnabled = eRows[0]?.value !== 'false';
+
+        const embed = new EmbedBuilder()
+          .setTitle('⚙️ สถานะ Daily Trigger: Flow 2 (Content Creator & Publisher)')
+          .setColor(curEnabled ? 0x57f287 : 0xed4245)
+          .addFields(
+            { name: '⏰ เวลาทำงานอัตโนมัติ', value: `\`${curTime} น.\` (เวลาไทย Asia/Bangkok)`, inline: true },
+            { name: '📊 สถานะระบบ', value: curEnabled ? '🟢 เปิดใช้งาน (Active)' : '🔴 ปิดใช้งาน (Disabled)', inline: true },
+            { name: '🎯 หน้าที่', value: 'ดึงโซลูชันที่เสร็จสมบูรณ์ ร่างบทความ/โซเชียล พร้อมปุ่มกดอนุมัติ', inline: false }
+          )
+          .setFooter({ text: 'ใช้ /settings flow2 time:11:30 enabled:true เพื่อปรับเปลี่ยน' });
+
+        return await interaction.reply({ embeds: [embed], ephemeral: true });
+      }
+
+      await interaction.deferReply({ ephemeral: true });
+
+      if (rawTime) {
+        const match = rawTime.trim().match(/^([01]?[0-9]|2[0-3]):([0-5][0-9])$/);
+        if (!match) {
+          return await interaction.editReply('⚠️ รูปแบบเวลาไม่ถูกต้อง กรุณากรอกเป็น `HH:MM` เช่น `11:30` หรือ `10:00`');
+        }
+        const hour = match[1].padStart(2, '0');
+        const min = match[2];
+        const timeFormatted = `${hour}:${min}`;
+        await pool.query(
+          "INSERT INTO bot_settings (key, value, updated_at) VALUES ('FLOW2_DAILY_TIME', $1, NOW()) ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()",
+          [timeFormatted]
+        );
+      }
+
+      if (enabled !== null) {
+        await pool.query(
+          "INSERT INTO bot_settings (key, value, updated_at) VALUES ('FLOW2_DAILY_ENABLED', $1, NOW()) ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()",
+          [enabled ? 'true' : 'false']
+        );
+      }
+
+      return await interaction.editReply('✅ **บันทึกการตั้งค่า Daily Trigger สำหรับ Flow 2 เรียบร้อยแล้ว!**');
     }
 
     // 3.3 /settings channel
@@ -1312,12 +1450,12 @@ async function handleCommand(interaction, { pool, client }) {
     }
   }
 
-  // 5. คำสั่ง /idea (และ alias /request-idea, /run)
-  if (commandName === 'idea' || commandName === 'request-idea' || commandName === 'run' || commandName === 'run-research') {
+  // 5. คำสั่ง /idea (และ alias /request-idea, /run, /run-flow1)
+  if (commandName === 'idea' || commandName === 'request-idea' || commandName === 'run' || commandName === 'run-research' || commandName === 'run-flow1' || commandName === 'flow1') {
     await interaction.deferReply();
     const webhookUrl = process.env.N8N_FLOW1_IDEA_WEBHOOK_URL || 'http://n8n:5678/webhook/flow1-request-idea';
 
-    const solutionInput = interaction.options.getString('solution');
+    const solutionInput = interaction.options?.getString ? interaction.options.getString('solution') : null;
     let targetSolutionId = null;
     let targetSolutionTitle = null;
 
@@ -1351,8 +1489,8 @@ async function handleCommand(interaction, { pool, client }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          triggered_by: interaction.user.tag,
-          user_id: interaction.user.id,
+          triggered_by: interaction.user ? interaction.user.tag : 'Discord User',
+          user_id: interaction.user ? interaction.user.id : null,
           requested_at: new Date().toISOString(),
           target_solution_id: targetSolutionId || null,
           target_solution_title: targetSolutionTitle || null
@@ -1377,6 +1515,34 @@ async function handleCommand(interaction, { pool, client }) {
       return await interaction.editReply(
         `⚠️ **ไม่สามารถเรียก n8n ได้:** ${err.message}\nปลายทาง: \`${webhookUrl}\``
       );
+    }
+  }
+
+  // 6. คำสั่ง /publish (และ alias /publish-flow, /run-flow2, /flow2)
+  if (commandName === 'publish' || commandName === 'publish-flow' || commandName === 'run-flow2' || commandName === 'flow2') {
+    await interaction.deferReply();
+    const webhookUrl = process.env.N8N_FLOW2_WEBHOOK_URL || 'http://n8n:5678/webhook/flow2-run-publisher';
+    try {
+      const res = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          triggered_by: interaction.user ? interaction.user.tag : 'Discord User',
+          user_id: interaction.user ? interaction.user.id : null,
+          requested_at: new Date().toISOString()
+        }),
+        signal: AbortSignal.timeout(10000)
+      });
+
+      if (res.ok) {
+        return await interaction.editReply(
+          '✍️ **สั่งรัน Flow 2 (Content Creator & Publisher) บน n8n สำเร็จแล้ว!**\nระบบกำลังตรวจสอบโซลูชันที่เสร็จสมบูรณ์ และร่างเนื้อหาบทความ/โซเชียลพร้อมปุ่มอนุมัติเผยแพร่มายัง Discord ครับ'
+        );
+      } else {
+        return await interaction.editReply(`⚠️ **n8n ตอบกลับสถานะ HTTP ${res.status}**\nปลายทาง: \`${webhookUrl}\``);
+      }
+    } catch (err) {
+      return await interaction.editReply(`⚠️ **ไม่สามารถเรียก n8n ได้:** ${err.message}\nปลายทาง: \`${webhookUrl}\``);
     }
   }
 

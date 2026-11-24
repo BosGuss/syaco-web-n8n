@@ -116,69 +116,8 @@ const SYACO_CATALOG = [
   }
 ];
 
-// ชุมชน Facebook B2B คุณภาพสูงที่เกี่ยวข้องกับโซลูชัน SyaCo (สำหรับเสริมความแม่นยำในการสร้าง Backlink)
-const CURATED_FACEBOOK_COMMUNITIES = {
-  warehouse: [
-    {
-      title: 'คลังสินค้า Logistics และ Supply Chain ประเทศไทย',
-      url: 'https://www.facebook.com/groups/logisticsthai/',
-      snippet: 'ชุมชนแลกเปลี่ยนความรู้ด้านคลังสินค้า (WMS) ระบบจัดเก็บ Barcode/RFID และ Supply Chain ในไทย'
-    },
-    {
-      title: 'สมาคมผู้ประกอบการ e-Commerce ไทย (สต็อก & คลังสินค้า)',
-      url: 'https://www.facebook.com/groups/ecommerce.or.th/',
-      snippet: 'กลุ่มผู้ประกอบการ พูดคุยเรื่องระบบสต็อกสินค้า คลังสินค้า และการเชื่อมโยงระบบออนไลน์'
-    }
-  ],
-  data: [
-    {
-      title: 'Odoo Thailand (ERP) & Data Integration',
-      url: 'https://www.facebook.com/groups/odoo.erp.thailand/',
-      snippet: 'กลุ่มผู้สนใจพัฒนาและแลกเปลี่ยนความรู้การพัฒนาระบบ ERP, API และการเชื่อมต่อฐานข้อมูล'
-    },
-    {
-      title: 'SAP ABAP & Enterprise Systems Thailand',
-      url: 'https://www.facebook.com/groups/sapabap4/',
-      snippet: 'กลุ่มแลกเปลี่ยนปัญหาและโซลูชันระบบ SAP, ERP และการเชื่อมต่อระบบโรงงาน'
-    }
-  ],
-  logistics: [
-    {
-      title: 'รถร่วมขนส่ง ผู้ประกอบการขนส่ง หางาน รถส่งของ',
-      url: 'https://www.facebook.com/groups/750105715501953/',
-      snippet: 'ชุมชนผู้ประกอบการขนส่ง รถร่วม และการบริหารจัดการเที่ยววิ่ง Logistics'
-    },
-    {
-      title: 'Logistics & Development Thailand Forum ข่าวสารการขนส่ง',
-      url: 'https://www.facebook.com/Logistic-Thailand-Forum-1426104774283552',
-      snippet: 'ศูนย์รวมข้อมูลข่าวสาร นวัตกรรมระบบติดตามรถ GPS และเทคโนโลยีโลจิสติกส์'
-    }
-  ],
-  analytics: [
-    {
-      title: 'Power BI Thailand Community',
-      url: 'https://www.facebook.com/groups/powerbithailand/',
-      snippet: 'กลุ่มคนทำ Dashboard, Business Intelligence (BI) วิเคราะห์ยอดขายและข้อมูลองค์กร'
-    },
-    {
-      title: 'DataTH - Data Science & Business Analytics Thailand',
-      url: 'https://www.facebook.com/groups/datathailand/',
-      snippet: 'ชุมชนคนทำงานด้าน Data Analytics, Dashboard ผู้บริหาร และ Business Intelligence'
-    }
-  ],
-  automation: [
-    {
-      title: 'thaiadmin.org ระบบเซิร์ฟเวอร์และระบบออโตเมชันองค์กร',
-      url: 'https://www.facebook.com/groups/thaiadmin/',
-      snippet: 'ชุมชนแลกเปลี่ยนปัญหา IT, Server, ระบบ Automation และการปรับปรุงประสิทธิภาพองค์กร'
-    },
-    {
-      title: 'Jobs & Tech for Thai Programmers & Engineers',
-      url: 'https://www.facebook.com/groups/647718825333067/',
-      snippet: 'ชุมชนสายเทค วิศวกร และผู้เชี่ยวชาญด้านระบบอัตโนมัติ AI และซอฟต์แวร์โรงงาน'
-    }
-  ]
-};
+// @deprecated ยกเลิกการใช้งานหน้าแรกของกลุ่ม Facebook สำเร็จรูป (ไม่เติมหน้าแรกของกลุ่มเข้าผลการค้นหาอีกต่อไปเพื่อความถูกต้องของข้อมูลตามกระทู้จริง)
+const CURATED_FACEBOOK_COMMUNITIES = {};
 
 /**
  * ดึงรายการโซลูชันล่าสุดจาก API ของ SyaCo
@@ -348,7 +287,7 @@ async function unfurlFacebookMetadata(url) {
         'Accept': 'text/html,application/xhtml+xml',
         'Accept-Language': 'th,en-US;q=0.9,en;q=0.8'
       },
-      signal: AbortSignal.timeout(4000)
+      signal: AbortSignal.timeout(2500)
     });
     if (!res.ok) return null;
     const html = await res.text();
@@ -422,22 +361,22 @@ function detectPlatform(url) {
 
 /**
  * ตรวจสอบความถูกต้องของ URL ของ Facebook
- * รองรับทั้ง "โพสต์" (Post), "กลุ่ม" (Group Discussion), และ "เพจโซลูชัน/ธุรกิจ" (Page)
- * เพื่อให้ผู้ใช้สามารถติดตามและเข้าไปตอบกระทู้/คอมเมนต์เพื่อสร้าง Backlink ได้อย่างครบถ้วน
+ * ต้องเป็น "กระทู้/โพสต์ที่สามารถตอบได้" (Post/Discussion Thread) เท่านั้น
+ * ปฏิเสธหน้าโปรไฟล์ส่วนบุคคล (ป้องกันประเด็น PDPA), หน้าแรกของเพจ และหน้าแรกของกลุ่ม (/groups/<id>)
  */
 function isFacebookPost(rawUrl) {
   if (!rawUrl) return false;
   let pathname = '';
-  let search = '';
+  let searchParams = null;
   try {
     const u = new URL(rawUrl);
     pathname = u.pathname.toLowerCase();
-    search = u.search.toLowerCase();
+    searchParams = u.searchParams;
   } catch (_) {
     pathname = String(rawUrl).toLowerCase();
   }
 
-  // ไม่เอาหน้าระบบ, ความช่วยเหลือ, กฎหมาย หรือหน้า Login/Settings
+  // 1. กรองหน้าระบบ, ความช่วยเหลือ, กฎหมาย หรือหน้าทั่วไปที่ไม่ใช่โพสต์
   const isJunk = pathname.includes('/help') ||
                  pathname.includes('/login') ||
                  pathname.includes('/policies') ||
@@ -447,38 +386,67 @@ function isFacebookPost(rawUrl) {
                  pathname.includes('/settings') ||
                  pathname.includes('/privacy') ||
                  pathname.includes('/checkpoint') ||
+                 pathname.includes('/events') ||
+                 pathname.includes('/hashtag') ||
+                 pathname.includes('/marketplace') ||
+                 pathname.includes('/gaming') ||
+                 pathname.includes('/jobs') ||
+                 pathname.includes('/dialog') ||
+                 pathname.includes('/sharer') ||
                  pathname.includes('developers.facebook.com');
   if (isJunk) return false;
 
-  // 1. กลุ่ม Facebook (ทั้ง Group Root และ โพสต์ในกลุ่ม):
-  // ชุมชนกลุ่มเป็นพื้นที่สำคัญที่มีการตั้งคำถามและแลกเปลี่ยนเรื่องระบบ/ซอฟต์แวร์ทุกวัน
+  // 2. โพสต์ในกลุ่ม Facebook (ต้องมี post ID หรือ permalink เท่านั้น ไม่รับหน้าแรกของกลุ่ม)
   if (pathname.includes('/groups/')) {
+    return /\/groups\/[^/]+\/posts\/(\d+|[a-zA-Z0-9._-]+)/.test(pathname) ||
+           /\/groups\/[^/]+\/permalink\/(\d+)/.test(pathname) ||
+           /\/groups\/[^/]+\/multi_permalinks\/(\d+)/.test(pathname);
+  }
+
+  // 3. โพสต์ของเพจ: /<name>/posts/<post_id>
+  if (/\/[^/]+\/posts\/(\d+|[a-zA-Z0-9._-]+)/.test(pathname)) {
     return true;
   }
 
-  // 2. โพสต์ของเพจหรือโปรไฟล์: /<name>/posts/<post_id>, permalink, story, watch, videos, photos, share
-  if (/\/posts\/(\d+|[a-zA-Z0-9._-]+)/.test(pathname) ||
-      pathname.includes('permalink.php') ||
-      pathname.includes('story.php') ||
-      /\/photos\//.test(pathname) ||
-      /\/videos\//.test(pathname) ||
-      /\/share\//.test(pathname) ||
-      pathname.includes('/watch') ||
-      pathname.includes('/p/')) {
+  // 4. permalink.php หรือ story.php (ต้องมี story_fbid เพื่อระบุว่าเป็นโพสต์จริง)
+  if (pathname.includes('/permalink.php') || pathname.includes('/story.php')) {
+    return Boolean(searchParams && searchParams.has('story_fbid'));
+  }
+
+  // 5. โพสต์รูปภาพหรือวิดีโอที่มี ID เจาะจง
+  if (/\/[^/]+\/photos\/(?:[^/]+\/)?(\d+)/.test(pathname) ||
+      /\/[^/]+\/videos\/(\d+)/.test(pathname) ||
+      (pathname.includes('/watch') && Boolean(searchParams && searchParams.has('v')))) {
     return true;
   }
 
-  // 3. เพจธุรกิจ / ชุมชนซอฟต์แวร์ (Single Segment Path เช่น /AACC.ERP/, /odoo.erp.thailand/)
-  const segments = pathname.split('/').filter(Boolean);
-  if (segments.length === 1 && !['home', 'marketplace', 'gaming', 'watch', 'reels', 'stories'].includes(segments[0])) {
-    return true;
-  }
-
+  // ปฏิเสธ Single Segment Path (เช่น /some.person, /SomeShop) และหน้า profile.php ทั่วไป
   return false;
 }
 
+// คำภาษาอังกฤษทั่วไปที่ไม่ใช่ชื่อเฉพาะทางเทคนิค B2B (ป้องกันการสกัดคำเดี่ยวที่กว้างเกินไป)
+const GENERIC_ENGLISH_STOP_WORDS = new Set([
+  'and', 'the', 'for', 'with', 'system', 'systems', 'platform', 'platforms',
+  'solution', 'solutions', 'data', 'time', 'real', 'web', 'app', 'apps',
+  'smart', 'growth', 'performance', 'digital', 'service', 'services',
+  'management', 'track', 'tracking', 'test', 'testing', 'tech', 'online',
+  'free', 'best', 'guide', 'review', 'reviews', 'how', 'pro', 'new',
+  'top', 'center', 'lead', 'flow', 'chat', 'auto', 'good', 'great',
+  'fast', 'speed', 'slow', 'post', 'posts', 'page', 'pages', 'user',
+  'users', 'work', 'works', 'business', 'company', 'tool', 'tools',
+  'enterprise', 'cloud', 'mobile', 'development', 'software'
+]);
+
+// คำภาษาไทยทั่วไปที่ไม่ใช่หัวข้อเฉพาะทางเทคนิค B2B
+const THAI_STOP_WORDS = new Set([
+  'และ', 'หรือ', 'ของ', 'กับ', 'ปัญหา', 'แนะนำ', 'ระบบ', 'โปรแกรม',
+  'จัดการ', 'ทำงาน', 'บริการ', 'ข้อมูล', 'ออนไลน์', 'เวลา', 'บริษัท',
+  'ประเทศไทย', 'ทั่วไป', 'ช่วย', 'สอบถาม', 'ขอคำแนะนำ', 'อยากรู้',
+  'วิธี', 'แบบ', 'การ', 'ความ', 'อะไร', 'ทำไม', 'อย่างไร', 'ดีไหม'
+]);
+
 // คำค้น/เจตนาที่ไม่เกี่ยวข้องกับการหาโซลูชันหรือบริการทางธุรกิจ B2B
-// (กรองทิ้ง เช่น รับสมัครงาน/หางาน, ขายรถบรรทุก/ของมือสอง, สื่อการสอน/การบ้านเด็ก, สุขภาพ/บันเทิง, สินเชื่อ/อสังหา)
+// (กรองทิ้ง เช่น รับสมัครงาน/หางาน, ขายรถบรรทุก/ของมือสอง, สื่อการสอน/การบ้านเด็ก, สุขภาพ/บันเทิง, เกม/คอมเล่นเกม, บล็อกส่วนตัว)
 const NEGATIVE_INTENT = [
   // รับสมัครงาน / หางาน
   'รับสมัคร', 'ตามหาคน', 'หางาน', 'เปิดรับสมัคร', 'recruiter', 'เงินเดือน', 'สัมภาษณ์', 'resume', 'เรซูเม่', 'job description', 'สมัครงาน', 'หาคนร่วมงาน', 'ร่วมงานกับเรา',
@@ -486,18 +454,25 @@ const NEGATIVE_INTENT = [
   'ขายครับ', 'ขายด่วน', 'มือสอง', 'รถบรรทุก', 'รถพ่วง', 'รถดั้ม', 'สภาพสวย', 'ราคา...', 'ดาวน์', 'ผ่อน', 'ให้เช่า', 'ขายที่ดิน', 'ส่งฟรี', 'พร้อมส่ง',
   'mortgage', 'zoning', 'เงินกู้', 'สินเชื่อ', 'คอนโด', 'บ้านเดี่ยว', 'ทาวน์เฮ้าส์', 'อสังหาริมทรัพย์',
   // สื่อการสอน / การบ้าน
-  'แบบฝึกหัด', 'สื่อการสอน', 'วิชาคณิตศาสตร์', 'การบ้าน', 'เฉลย', 'ชั้น ป.', 'ชั้น ม.',
-  // สุขภาพ / อาหาร / แฟชั่น / บันเทิง
-  'เปลี่ยนเส้นเอ็น', 'ลดน้ำหนัก', 'อาหารเสริม', 'รีวิวหนัง', 'trailer', 'สิว', 'ผิวขาว', 'เสื้อผ้า'
+  'แบบฝึกหัด', 'สื่อการสอน', 'วิชาคณิตศาสตร์', 'การบ้าน', 'เฉลย', 'ชั้น ป.', 'ชั้น ม.', 'รายงาน', 'วิทยานิพนธ์', 'โครงงานมัธยม', 'โครงงานนักเรียน',
+  // สุขภาพ / อาหาร / แฟชั่น / บันเทิง / ไลฟ์สไตล์
+  'เปลี่ยนเส้นเอ็น', 'ลดน้ำหนัก', 'อาหารเสริม', 'รีวิวหนัง', 'trailer', 'สิว', 'ผิวขาว', 'เสื้อผ้า', 'ดูดวง', 'ดวงชะตา', 'ราศี', 'รีวิวคาเฟ่', 'ร้านอาหาร', 'ที่พัก', 'โรงแรม', 'ตั๋วเครื่องบิน', 'ท่องเที่ยว', 'เที่ยว', 'ซีรีส์', 'ละคร', 'เพลง', 'ศิลปิน', 'คอนเสิร์ต', 'ความรัก', 'แฟน', 'อกหัก',
+  // เกม / บันเทิง / คอมพิวเตอร์เล่นเกม (Consumer Gaming)
+  'เกม', 'เล่นเกม', 'game', 'games', 'gaming', 'gamer', 'steam', 'roblox', 'valorant', 'rov', 'free fire', 'garena', 'discord bot', 'lag', 'fps', 'ping สูง', 'กระตุก', 'การ์ดจอ', 'สเปคคอม', 'คอมเล่นเกม', 'สตรีมเมอร์', 'mod',
+  // บล็อกส่วนตัว / คอนซูเมอร์แอป / ซ่อมมือถือทั่วไป
+  'บล็อกเกอร์', 'เขียนบล็อก', 'บล็อกส่วนตัว', 'แอปแต่งรูป', 'แอปดูหนัง', 'แอปหาคู่', 'เกมมือถือ', 'ซ่อมมือถือ', 'หน้าจอแตก', 'แบตเสื่อม', 'หูฟัง', 'เคสมือถือ'
 ];
 
-// คำระบุหัวข้อระบบ / ซอฟต์แวร์ / ดิจิทัลทรานส์ฟอร์เมชัน B2B พื้นฐาน
+// คำระบุหัวข้อระบบ / ซอฟต์แวร์ / ดิจิทัลทรานส์ฟอร์เมชัน B2B พื้นฐาน (เฉพาะเจาะจงทางธุรกิจ)
 const BASE_B2B_KEYWORDS = [
-  'erp', 'sap', 'wms', 'tms', 'plc', 'scada', 'pos', 'iot', 'ocr', 'api', 'cloud', 'database',
-  'dashboard', 'power\\s*bi', 'automation', 'สต็อก', 'สต๊อก', 'คลังสินค้า', 'ขนส่ง', 'logistics',
-  'ระบบโรงงาน', 'ตัดสต็อก', 'บาร์โค้ด', 'barcode', 'ซอฟต์แวร์', 'แอปพลิเคชัน', 'line\\s*oa',
-  'workflow', 'อนุมัติ', 'defect', 'วางระบบ', 'จัดซื้อ', 'การผลิต', 'จัดการข้อมูล',
-  'supply\\s*chain', 'smart\\s*warehouse', 'digital\\s*transformation'
+  'erp', 'sap', 'wms', 'tms', 'mes', 'plc', 'scada', 'pos', 'iot', 'ocr', 'api', 'database',
+  'dashboard', 'power\\s*bi', 'automation', 'สต็อกสินค้า', 'สต๊อกสินค้า', 'ตัดสต็อก', 'คลังสินค้า',
+  'โลจิสติกส์', 'logistics', 'ระบบโรงงาน', 'บาร์โค้ด', 'barcode', 'rfid', 'ซอฟต์แวร์องค์กร',
+  'แอปพลิเคชันองค์กร', 'line\\s*oa', 'workflow', 'อนุมัติเอกสาร', 'defect', 'วางระบบ', 'จัดซื้อ',
+  'การผลิต', 'จัดการข้อมูลองค์กร', 'supply\\s*chain', 'smart\\s*warehouse', 'smart\\s*inventory',
+  'digital\\s*transformation', 'crm', 'payroll', 'โปรแกรมเงินเดือน',
+  'โปรแกรมสต็อก', 'ระบบสต็อก', 'โปรแกรมคลังสินค้า', 'ระบบคลังสินค้า', 'โปรแกรม erp',
+  'ระบบ erp', 'โปรแกรม wms', 'ระบบ wms', 'โปรแกรม pos', 'ระบบ pos', 'โปรแกรมบัญชี', 'ระบบบัญชี'
 ];
 
 function escapeRegex(str) {
@@ -506,6 +481,7 @@ function escapeRegex(str) {
 
 /**
  * สกัดคำสำคัญเชิงเทคนิคจากชื่อและรายละเอียดของโซลูชัน
+ * กรอง Stop words ทั่วไปออก เพื่อไม่ให้คำสามัญ (เช่น data, time, web, apps) ผ่านเข้ามาเป็น Topic เดี่ยว
  */
 function extractSolutionKeywords(sol) {
   if (!sol) return [];
@@ -518,20 +494,33 @@ function extractSolutionKeywords(sol) {
 
   for (const text of rawTexts) {
     if (!text) continue;
-    // แยกคำภาษาอังกฤษความยาว >= 3
-    const enWords = text.match(/[A-Za-z0-9_-]{3,}/g) || [];
+    // 1. ดึงกลุ่มคำภาษาอังกฤษ (Phrases 2-3 คำ) เช่น Data Integration, Smart Inventory, Mobile App
+    const enPhrases = text.match(/\b[A-Za-z0-9_-]+(?:\s+[A-Za-z0-9_-]+)+\b/g) || [];
+    for (const ph of enPhrases) {
+      const lower = ph.toLowerCase().trim();
+      const words = lower.split(/\s+/);
+      // ถ้าคำใน phrase ไม่ใช่ stop words ล้วนๆ ให้เก็บเป็น pattern
+      const meaningful = words.filter(w => !GENERIC_ENGLISH_STOP_WORDS.has(w));
+      if (meaningful.length > 0 && lower.length >= 5) {
+        terms.add(escapeRegex(lower).replace(/\s+/g, '\\s+'));
+      }
+    }
+
+    // 2. ดึงคำศัพท์ภาษาอังกฤษเฉพาะทางเดี่ยวๆ (ต้องไม่อยู่ใน Stop Words)
+    const enWords = text.match(/\b[A-Za-z0-9_-]{3,}\b/g) || [];
     for (const w of enWords) {
       const lower = w.toLowerCase();
-      if (!['and', 'the', 'for', 'with', 'system', 'systems', 'platform', 'solution', 'solutions'].includes(lower)) {
+      if (!GENERIC_ENGLISH_STOP_WORDS.has(lower) && lower.length >= 3) {
         terms.add(escapeRegex(lower));
       }
     }
-    // แยกคำภาษาไทย (ตัดตัวเลข/สัญลักษณ์)
+
+    // 3. ดึงคำภาษาไทยเฉพาะทาง (ตัด Stop words ทั่วไป)
     const thClean = text.replace(/^ระบบ\s*/i, '').replace(/[0-9A-Za-z_&/()\\-]/g, ' ').trim();
-    const thWords = thClean.split(/\s+/).filter(w => w.length >= 3);
+    const thWords = thClean.split(/\s+/).filter(w => w.length >= 4);
     for (const tw of thWords) {
       const lower = tw.toLowerCase();
-      if (!['และ', 'หรือ', 'ของ', 'กับ', 'ปัญหา', 'แนะนำ', 'ระบบ', 'โปรแกรม'].includes(lower)) {
+      if (!THAI_STOP_WORDS.has(lower)) {
         terms.add(escapeRegex(lower));
       }
     }
@@ -541,19 +530,20 @@ function extractSolutionKeywords(sol) {
 }
 
 /**
- * สร้าง Dynamic Topic Regex ที่รวมทั้งคำพื้นฐาน และคำสำคัญจากโซลูชันล่าสุดบนเว็บ + Search Terms
+ * สร้าง Dynamic Topic Regex ที่รวมทั้งคำพื้นฐาน และคำสำคัญจากโซลูชันล่าสุดบนเว็บ
+ * ป้องกันไม่ให้ Search terms ทั่วไปแทรกเข้ามาเป็นคำผ่านอัตโนมัติ
  */
 function buildDynamicSolutionTopicsRegex(extraTerms = [], solutions = []) {
   const allTerms = new Set(BASE_B2B_KEYWORDS);
 
-  // 1. เพิ่มคำสำคัญจากโซลูชัน
+  // 1. เพิ่มคำสำคัญจากโซลูชัน (SyaCo Catalog หรือ API)
   const solList = (Array.isArray(solutions) && solutions.length) ? solutions : (cachedSolutionsList || SYACO_CATALOG);
   for (const sol of solList) {
     const kws = extractSolutionKeywords(sol);
     kws.forEach(k => allTerms.add(k));
   }
 
-  // 2. เพิ่ม extraTerms (เช่น คำที่ใช้ค้นหาในรอบนั้น หรือชื่อหมวดหมู่)
+  // 2. เพิ่ม extraTerms ที่ผ่านการกรองความปลอดภัยแล้วเท่านั้น (ไม่ใส่คำทั่วไป/stop words)
   if (Array.isArray(extraTerms)) {
     for (const t of extraTerms) {
       const clean = String(t || '')
@@ -561,10 +551,15 @@ function buildDynamicSolutionTopicsRegex(extraTerms = [], solutions = []) {
         .replace(/inurl:[^\s]+/gi, '')
         .replace(/["']/g, '')
         .trim();
-      if (clean.length >= 2) {
+      if (clean.length >= 3) {
         clean.split(/\s+/).forEach(part => {
-          if (part.length >= 2 && !['และ', 'หรือ', 'ของ', 'กับ', 'แนะนำ', 'ปัญหา'].includes(part.toLowerCase())) {
-            allTerms.add(escapeRegex(part.toLowerCase()));
+          const lower = part.toLowerCase();
+          if (
+            lower.length >= 3 &&
+            !GENERIC_ENGLISH_STOP_WORDS.has(lower) &&
+            !THAI_STOP_WORDS.has(lower)
+          ) {
+            allTerms.add(escapeRegex(lower));
           }
         });
       }
@@ -601,7 +596,8 @@ function updateGlobalTopicsRegex(solutions) {
 }
 
 // คำระบุเจตนาการสอบถาม / แก้ปัญหา / เปรียบเทียบ / ขอคำแนะนำด้านโซลูชันหรือบริการ
-const SOLUTION_INQUIRY_INTENT_REGEX = /(?:แนะนำ|ปัญหา|ทำไม|อย่างไร|ช่วย|ระบบ|โปรแกรม|พัฒนา|เชื่อมต่อ|เปรียบเทียบ|เทียบ|เจ้าไหน|ดีไหม|สอบถาม|วางระบบ|จัดการ|โซลูชัน|solution|service|แนวคิด|เทคนิค|ข้อดี|ข้อเสีย|ปรึกษา|แนะนำหน่อย|หาบริษัท|หาคนทำ|รับทำ|ใช้งานยังไง|เลือกยังไง|\b(?:vs|versus|difference|compare|comparison|guide|how|tips|best|problem|challenge|challenges|solutions?|implement(?:ation)?|optimize|transform|architecture|overview|review)\b)/i;
+// (กระชับและครอบคลุมรูปประโยคภาษาไทย: เช่น แนะนำ...หน่อย, วางระบบ, ปัญหา, สอบถาม, ปรึกษา, vs, looking for)
+const SOLUTION_INQUIRY_INTENT_REGEX = /(?:(?:ขอ|ช่วย|รบกวน)?คำแนะนำ|(?:ช่วย|รบกวน)?แนะนำ(?:.{0,50}?(?:หน่อย|ที|ครับ|ค่ะ|ไหม|บ้าง|ดี|ระบบ|โปรแกรม))?|(?:เจอ|มี|ติด|แก้)?ปัญหา(?:การ|เรื่อง|ของ)?|สอบถาม|ปรึกษา|หา(?:ผู้รับเหมา|บริษัท|คนทำ|vendor|ทีมงาน)|รับทำระบบ|วางระบบ|พัฒนาระบบ|เปรียบเทียบ|เทียบกับ|เทียบระหว่าง|(?:เลือก|ใช้|เจ้า)?ไหนดี|ดีไหม|โอเคไหม|เวิร์คไหม|ใช้งานยังไง|เลือกยังไง|เริ่มยังไง|แชร์ประสบการณ์|เคยวางระบบ|ทำไม.{0,30}?(?:ไม่|ไม่ได้|พัง|ช้า|ติด|ค้าง|ไม่ทัน)|\b(?:looking for|recommend(?:ation|ations)?|best practices?|implementation|troubleshoot(?:ing)?|comparison|compare|vs|versus|vendor|vendors|rfp|architecture|evaluat(?:e|ion))\b)/i;
 
 /**
  * คำนวณช่วงปีและสร้างตัวกรองปีแบบไดนามิกอัตโนมัติ (ไม่ฮาร์ดโค้ดปี)
@@ -815,8 +811,11 @@ function isValidCandidate(item, targetPlatform = 'all') {
     return isRecentPost(item);
   }
 
-  // 3. Facebook: ต้องเป็น "โพสต์" เท่านั้น และสดใหม่ภายใน ~1 ปี
+  // 3. Facebook: ต้องเป็น "โพสต์" เท่านั้น และสดใหม่ภายใน ~1 ปี (ปฏิเสธซับโดเมนภาษาต่างประเทศที่มักเป็นสแปม)
   if (platform === 'facebook') {
+    if (url.includes('ar-ar.facebook.com') || url.includes('zh-cn.facebook.com') || url.includes('ru-ru.facebook.com')) {
+      return false;
+    }
     if (!isFacebookPost(url)) return false;
     return isRecentPost(item);
   }
@@ -828,7 +827,7 @@ function isValidCandidate(item, targetPlatform = 'all') {
  * เรียกค้นหาจาก SearXNG
  */
 async function querySearxng(query) {
-  const endpoint = `${SEARXNG_URL}/search?q=${encodeURIComponent(query)}&format=json&engines=startpage,bing,yandex`;
+  const endpoint = `${SEARXNG_URL}/search?q=${encodeURIComponent(query)}&format=json`;
   try {
     const res = await fetch(endpoint, {
       signal: AbortSignal.timeout(8000),
@@ -850,7 +849,7 @@ async function querySearxng(query) {
   }
 }
 
-function formatFacebookContent(rawTitle, rawSnippet, primaryTerm) {
+function formatFacebookContent(rawTitle, rawSnippet) {
   let title = (rawTitle || '').trim();
   let snippet = (rawSnippet || '').trim();
 
@@ -866,25 +865,31 @@ function formatFacebookContent(rawTitle, rawSnippet, primaryTerm) {
   if (isGeneric(snippet)) snippet = '';
   if (isGeneric(title)) title = '';
 
+  title = title.replace(/\s*[-|]\s*facebook$/i, '').trim();
+
   if (snippet && snippet.length > 10) {
     const firstLine = snippet.split('\n')[0].trim();
     if (!title) {
       title = firstLine.slice(0, 110);
-    } else if (title.length < 35 && !firstLine.toLowerCase().includes(title.toLowerCase())) {
-      title = `${title}: ${firstLine.slice(0, 90)}`;
     }
   }
 
+  // หากไม่มีเนื้อหาจริง ให้คืนค่า null ปฏิเสธโพสต์ที่ไม่มีข้อมูล (ไม่สร้างหัวข้อปลอม)
+  if (!title && !snippet) {
+    return null;
+  }
   if (!title) {
-    title = `โพสต์ข้อความบน Facebook เกี่ยวกับ "${primaryTerm}"`;
+    title = snippet.slice(0, 110);
   }
   if (!snippet) {
-    snippet = `โพสต์และข้อความแลกเปลี่ยนความคิดเห็นบน Facebook เกี่ยวกับ "${primaryTerm}"`;
+    snippet = title;
   }
 
   return { title, snippet };
 }
-async function searchFacebookThreads(terms, limit = 5, solutionCategory = '', excludeUrls = new Set()) {
+
+async function searchFacebookThreads(terms, limit = 5, solutionCategory = '', excludeUrls = new Set(), solutions = [], extraTerms = []) {
+  const dynamicTopicsRegex = buildDynamicSolutionTopicsRegex(extraTerms, solutions);
   const currentYear = new Date().getFullYear();
   const currentBE = currentYear + 543;
   const prevYear = currentYear - 1;
@@ -893,19 +898,19 @@ async function searchFacebookThreads(terms, limit = 5, solutionCategory = '', ex
   const searchTerms = Array.isArray(terms) && terms.length > 0 ? terms : ['Business Solution'];
   const primary = searchTerms[0];
 
-  // รวบรวมคำค้นหาจากทุก Terms ที่ได้รับ ทั้งโพสต์ กลุ่ม และหัวข้อโซลูชัน
+  // รวบรวมคำค้นหา Facebook ที่มีประสิทธิภาพสูง ทั้งกลุ่มเฉพาะทางและโพสต์สอบถาม
   const queries = [];
   for (const t of searchTerms) {
-    queries.push(`site:facebook.com "${t}" "ระบบ"`);
-    queries.push(`site:facebook.com/groups "${t}"`);
-    queries.push(`site:facebook.com inurl:posts "${t}"`);
-    queries.push(`site:facebook.com/groups inurl:posts ${t} ${currentBE}`);
-    queries.push(`site:facebook.com/groups inurl:posts ${t} ${prevBE}`);
-    queries.push(`site:facebook.com inurl:posts ${t} ${currentBE}`);
-    queries.push(`site:facebook.com inurl:posts ${t} ${prevBE}`);
-    queries.push(`site:facebook.com "${t}" แนะนำ`);
-    queries.push(`site:facebook.com "${t}" ปัญหา`);
-    queries.push(`site:facebook.com/groups "${t}" ${currentBE}`);
+    queries.push(`site:facebook.com/groups/ ${t} ระบบ`);
+    queries.push(`site:facebook.com/groups/ ${t} ปัญหา`);
+    queries.push(`site:facebook.com/groups/ ${t} แนะนำ`);
+    queries.push(`site:facebook.com/groups/ ${t} วางระบบ`);
+    queries.push(`site:facebook.com/groups/ ${t}`);
+    queries.push(`site:facebook.com/groups/ ${t} ${currentBE}`);
+    queries.push(`site:facebook.com ${t} สอบถาม ปัญหา`);
+    queries.push(`site:facebook.com ${t} แนะนำ ระบบ`);
+    queries.push(`site:facebook.com ${t} วางระบบ`);
+    queries.push(`site:facebook.com ${t}`);
   }
 
   // สลับลำดับคำค้นหาเล็กน้อยเพื่อกระจายและไม่ให้ชนหน้าเดิมซ้ำๆ
@@ -929,18 +934,22 @@ async function searchFacebookThreads(terms, limit = 5, solutionCategory = '', ex
       let snippet = item.content || '';
       let publishTime = item.publishedDate ? new Date(item.publishedDate).getTime() : null;
 
-      // พยายามดึง Open Graph Metadata จาก Facebook
-      const unfurled = await unfurlFacebookMetadata(item.url);
-      if (unfurled?.title && !unfurled.title.includes('Link to facebook.com')) {
-        title = unfurled.title;
+      // ดึง Open Graph Metadata เฉพาะเมื่อ title หรือ snippet ขาด เพื่อความรวดเร็ว
+      const isGeneric = !title || title.includes('Link to facebook.com') || title === 'Facebook' || title === 'Log into Facebook';
+      if (isGeneric || !snippet || snippet.length < 20) {
+        const unfurled = await unfurlFacebookMetadata(item.url);
+        if (unfurled?.title && !unfurled.title.includes('Link to facebook.com')) {
+          title = unfurled.title;
+        }
+        if (unfurled?.snippet && unfurled.snippet.length > 15) {
+          snippet = unfurled.snippet;
+        }
+        if (unfurled?.publishTime) publishTime = unfurled.publishTime;
       }
-      if (unfurled?.snippet && unfurled.snippet.length > 15) {
-        snippet = unfurled.snippet;
-      }
-      if (unfurled?.publishTime) publishTime = unfurled.publishTime;
 
-      // จัดรูปแบบหัวข้อและเนื้อหาสำรองหาก Facebook บล็อกการดึงข้อมูลภายนอก
-      const formatted = formatFacebookContent(title, snippet, primary);
+      // จัดรูปแบบหัวข้อและเนื้อหา โดยปฏิเสธหากไม่มีเนื้อหาจริง
+      const formatted = formatFacebookContent(title, snippet);
+      if (!formatted) continue;
       title = formatted.title;
       snippet = formatted.snippet;
 
@@ -952,6 +961,8 @@ async function searchFacebookThreads(terms, limit = 5, solutionCategory = '', ex
         publishTime
       };
 
+      // ตรวจสอบทั้งความเกี่ยวข้องกับ B2B Solution และความสดใหม่ของโพสต์
+      if (!isSolutionPost(postItem, dynamicTopicsRegex)) continue;
       if (!isRecentPost(postItem)) continue;
 
       results.push({
@@ -967,13 +978,13 @@ async function searchFacebookThreads(terms, limit = 5, solutionCategory = '', ex
     if (results.length >= limit) break;
   }
 
-  // หากผลลัพธ์ยังไม่เต็ม limit ให้ค้นหาด้วยคำค้นสำรอง
+  // หากผลลัพธ์ยังไม่เต็ม limit ให้ค้นหาด้วยคำค้นสำรองที่มุ่งเป้าไปยังโพสต์จริง
   if (results.length < limit) {
     const backupQueries = [
-      `site:facebook.com/groups "${primary}"`,
-      `site:facebook.com "${primary}" ${currentBE}`,
-      `site:facebook.com/groups inurl:posts "${primary}"`,
-      `site:facebook.com inurl:posts "${primary}" แนะนำ`
+      `site:facebook.com/groups/ ${primary}`,
+      `site:facebook.com ${primary} แนะนำ`,
+      `site:facebook.com ${primary} ปัญหา`,
+      `site:facebook.com ${primary}`
     ];
     for (const bq of backupQueries) {
       if (results.length >= limit) break;
@@ -988,16 +999,20 @@ async function searchFacebookThreads(terms, limit = 5, solutionCategory = '', ex
         let snippet = item.content || '';
         let publishTime = item.publishedDate ? new Date(item.publishedDate).getTime() : null;
 
-        const unfurled = await unfurlFacebookMetadata(item.url);
-        if (unfurled?.title && !unfurled.title.includes('Link to facebook.com')) {
-          title = unfurled.title;
+        const isGeneric = !title || title.includes('Link to facebook.com') || title === 'Facebook' || title === 'Log into Facebook';
+        if (isGeneric || !snippet || snippet.length < 20) {
+          const unfurled = await unfurlFacebookMetadata(item.url);
+          if (unfurled?.title && !unfurled.title.includes('Link to facebook.com')) {
+            title = unfurled.title;
+          }
+          if (unfurled?.snippet && unfurled.snippet.length > 15) {
+            snippet = unfurled.snippet;
+          }
+          if (unfurled?.publishTime) publishTime = unfurled.publishTime;
         }
-        if (unfurled?.snippet && unfurled.snippet.length > 15) {
-          snippet = unfurled.snippet;
-        }
-        if (unfurled?.publishTime) publishTime = unfurled.publishTime;
 
-        const formatted = formatFacebookContent(title, snippet, primary);
+        const formatted = formatFacebookContent(title, snippet);
+        if (!formatted) continue;
         title = formatted.title;
         snippet = formatted.snippet;
 
@@ -1009,6 +1024,7 @@ async function searchFacebookThreads(terms, limit = 5, solutionCategory = '', ex
           publishTime
         };
 
+        if (!isSolutionPost(postItem, dynamicTopicsRegex)) continue;
         if (!isRecentPost(postItem)) continue;
 
         results.push({
@@ -1022,51 +1038,14 @@ async function searchFacebookThreads(terms, limit = 5, solutionCategory = '', ex
     }
   }
 
-  // หากผลลัพธ์ยังไม่เต็ม limit ให้เสริมด้วยชุมชน Facebook B2B คุณภาพสูงที่คัดสรรไว้
-  // รับประกันว่าผู้ใช้จะได้รับผลลัพธ์ชุมชน B2B เสมอ ไม่เจอผลลัพธ์ว่างเปล่า
-  if (results.length < limit) {
-    const catList = CURATED_FACEBOOK_COMMUNITIES[solutionCategory] || [];
-    const allCurated = Object.values(CURATED_FACEBOOK_COMMUNITIES).flat();
-    const fallbackPool = [...catList, ...allCurated];
-
-    for (const com of fallbackPool) {
-      if (results.length >= limit) break;
-      const clean = cleanUrl(com.url, 'facebook');
-      if (seenUrls.has(clean) || (excludeUrls && excludeUrls.has(clean))) continue;
-      seenUrls.add(clean);
-      results.push({
-        platform: 'facebook',
-        title: com.title.slice(0, 150),
-        url: clean,
-        snippet: com.snippet.slice(0, 250)
-      });
-    }
-
-    // หาก excludeUrls บล็อกจนหมด ให้ผ่อนปรนใส่ชุมชนที่ยังไม่เคยแสดงในรอบนี้
-    if (results.length < limit) {
-      for (const com of fallbackPool) {
-        if (results.length >= limit) break;
-        const clean = cleanUrl(com.url, 'facebook');
-        if (seenUrls.has(clean)) continue;
-        seenUrls.add(clean);
-        results.push({
-          platform: 'facebook',
-          title: com.title.slice(0, 150),
-          url: clean,
-          snippet: com.snippet.slice(0, 250)
-        });
-      }
-    }
-  }
-
   return results;
 }
 
 /**
  * ค้นหาเฉพาะ Pantip
  */
-async function searchPantipThreads(terms, limit = 5, excludeUrls = new Set(), solutions = []) {
-  const dynamicTopicsRegex = buildDynamicSolutionTopicsRegex(terms, solutions);
+async function searchPantipThreads(terms, limit = 5, excludeUrls = new Set(), solutions = [], extraTerms = []) {
+  const dynamicTopicsRegex = buildDynamicSolutionTopicsRegex(extraTerms, solutions);
   const primary = terms[0] || 'Business Solution';
   const currentYear = new Date().getFullYear();
   const currentBE = currentYear + 543;
@@ -1122,8 +1101,8 @@ async function searchPantipThreads(terms, limit = 5, excludeUrls = new Set(), so
 /**
  * ค้นหาเฉพาะ LinkedIn
  */
-async function searchLinkedInThreads(terms, limit = 5, excludeUrls = new Set(), solutions = []) {
-  const dynamicTopicsRegex = buildDynamicSolutionTopicsRegex(terms, solutions);
+async function searchLinkedInThreads(terms, limit = 5, excludeUrls = new Set(), solutions = [], extraTerms = []) {
+  const dynamicTopicsRegex = buildDynamicSolutionTopicsRegex(extraTerms, solutions);
   const primary = terms[0] || 'Business Solution';
   const currentYear = new Date().getFullYear();
   const prevYear = currentYear - 1;
@@ -1201,16 +1180,17 @@ async function searchRecentThreads({ keyword, mode = 'manual', platform = 'all',
   }
 
   const solKey = autoMeta?.solutionKey || (keyword?.startsWith('auto:') ? keyword.replace('auto:', '') : '');
+  const extraTerms = isAutoMode ? [] : queriesToRun;
 
   // 1. กรณีระบุแพลตฟอร์มเจาะจง Facebook
   if (platform === 'facebook') {
-    let fbResults = await searchFacebookThreads(queriesToRun, limit, solKey, excludeUrls);
+    let fbResults = await searchFacebookThreads(queriesToRun, limit, solKey, excludeUrls, allSolutions, extraTerms);
     // หากยังไม่ครบ limit และอยู่ในโหมด auto ให้สุ่มโซลูชันอื่นมาค้นหาเสริมเพื่อกระจายผลลัพธ์
     if (fbResults.length < limit && isAutoMode) {
       const otherSolutions = allSolutions.filter(c => c.key !== solKey).sort(() => Math.random() - 0.5);
       for (const sol of otherSolutions) {
         if (fbResults.length >= limit) break;
-        const moreFb = await searchFacebookThreads(sol.curatedQueries, limit - fbResults.length, sol.key || sol.titleTh, excludeUrls);
+        const moreFb = await searchFacebookThreads(sol.curatedQueries, limit - fbResults.length, sol.key || sol.titleTh, excludeUrls, allSolutions, []);
         for (const item of moreFb) {
           if (!fbResults.some(r => r.url === item.url) && fbResults.length < limit) {
             fbResults.push({
@@ -1226,12 +1206,12 @@ async function searchRecentThreads({ keyword, mode = 'manual', platform = 'all',
 
   // 2. กรณีระบุแพลตฟอร์มเจาะจง Pantip
   if (platform === 'pantip') {
-    let ptResults = await searchPantipThreads(queriesToRun, limit, excludeUrls, allSolutions);
+    let ptResults = await searchPantipThreads(queriesToRun, limit, excludeUrls, allSolutions, extraTerms);
     if (ptResults.length < limit && isAutoMode) {
       const otherSolutions = allSolutions.filter(c => c.key !== solKey).sort(() => Math.random() - 0.5);
       for (const sol of otherSolutions) {
         if (ptResults.length >= limit) break;
-        const morePt = await searchPantipThreads(sol.curatedQueries, limit - ptResults.length, excludeUrls, [sol]);
+        const morePt = await searchPantipThreads(sol.curatedQueries, limit - ptResults.length, excludeUrls, allSolutions, []);
         for (const item of morePt) {
           if (!ptResults.some(r => r.url === item.url) && ptResults.length < limit) {
             ptResults.push({
@@ -1247,12 +1227,12 @@ async function searchRecentThreads({ keyword, mode = 'manual', platform = 'all',
 
   // 3. กรณีระบุแพลตฟอร์มเจาะจง LinkedIn
   if (platform === 'linkedin') {
-    let liResults = await searchLinkedInThreads(queriesToRun, limit, excludeUrls, allSolutions);
+    let liResults = await searchLinkedInThreads(queriesToRun, limit, excludeUrls, allSolutions, extraTerms);
     if (liResults.length < limit && isAutoMode) {
       const otherSolutions = allSolutions.filter(c => c.key !== solKey).sort(() => Math.random() - 0.5);
       for (const sol of otherSolutions) {
         if (liResults.length >= limit) break;
-        const moreLi = await searchLinkedInThreads(sol.curatedQueries, limit - liResults.length, excludeUrls, [sol]);
+        const moreLi = await searchLinkedInThreads(sol.curatedQueries, limit - liResults.length, excludeUrls, allSolutions, []);
         for (const item of moreLi) {
           if (!liResults.some(r => r.url === item.url) && liResults.length < limit) {
             liResults.push({
@@ -1271,16 +1251,16 @@ async function searchRecentThreads({ keyword, mode = 'manual', platform = 'all',
   const liTarget = Math.max(1, Math.round(limit * 0.25));
   const ptTarget = Math.max(1, limit - fbTarget - liTarget);
 
-  const fbList = await searchFacebookThreads(queriesToRun, fbTarget, solKey, excludeUrls);
-  const ptList = await searchPantipThreads(queriesToRun, ptTarget, excludeUrls, allSolutions);
-  const liList = await searchLinkedInThreads(queriesToRun, liTarget, excludeUrls, allSolutions);
+  const fbList = await searchFacebookThreads(queriesToRun, fbTarget, solKey, excludeUrls, allSolutions, extraTerms);
+  const ptList = await searchPantipThreads(queriesToRun, ptTarget, excludeUrls, allSolutions, extraTerms);
+  const liList = await searchLinkedInThreads(queriesToRun, liTarget, excludeUrls, allSolutions, extraTerms);
 
   let combined = [...fbList, ...ptList, ...liList];
 
   // หากยังไม่ครบ limit ให้เติมส่วนที่ขาดจากแพลตฟอร์มที่มี
   if (combined.length < limit) {
     const deficit = limit - combined.length;
-    const morePt = await searchPantipThreads(queriesToRun, ptTarget + deficit, excludeUrls, allSolutions);
+    const morePt = await searchPantipThreads(queriesToRun, ptTarget + deficit, excludeUrls, allSolutions, extraTerms);
     const existingUrls = new Set(combined.map(r => r.url));
     for (const p of morePt) {
       if (!existingUrls.has(p.url) && (!excludeUrls || !excludeUrls.has(p.url)) && combined.length < limit) {
@@ -1328,7 +1308,7 @@ async function collectDailyRadarThreads(targetCount = 20, excludeUrls = new Set(
 
       // ดึง Facebook สำหรับหมวดนี้
       if (fbCount < fbTargetTotal) {
-        const fbBatch = await searchFacebookThreads(queries, 1, cat, excludeUrls);
+        const fbBatch = await searchFacebookThreads(queries, 1, cat, excludeUrls, SYACO_CATALOG, []);
         for (const item of fbBatch) {
           if (!seenUrls.has(item.url) && (!excludeUrls || !excludeUrls.has(item.url)) && allResults.length < targetCount && fbCount < fbTargetTotal) {
             seenUrls.add(item.url);
@@ -1343,7 +1323,7 @@ async function collectDailyRadarThreads(targetCount = 20, excludeUrls = new Set(
 
       // ดึง Pantip สำหรับหมวดนี้
       if (ptCount < ptTargetTotal) {
-        const ptBatch = await searchPantipThreads(queries, 1, excludeUrls);
+        const ptBatch = await searchPantipThreads(queries, 1, excludeUrls, SYACO_CATALOG, []);
         for (const item of ptBatch) {
           if (!seenUrls.has(item.url) && (!excludeUrls || !excludeUrls.has(item.url)) && allResults.length < targetCount && ptCount < ptTargetTotal) {
             seenUrls.add(item.url);
@@ -1358,7 +1338,7 @@ async function collectDailyRadarThreads(targetCount = 20, excludeUrls = new Set(
 
       // ดึง LinkedIn สำหรับหมวดนี้
       if (liCount < liTargetTotal) {
-        const liBatch = await searchLinkedInThreads(queries, 1, excludeUrls);
+        const liBatch = await searchLinkedInThreads(queries, 1, excludeUrls, SYACO_CATALOG, []);
         for (const item of liBatch) {
           if (!seenUrls.has(item.url) && (!excludeUrls || !excludeUrls.has(item.url)) && allResults.length < targetCount && liCount < liTargetTotal) {
             seenUrls.add(item.url);
@@ -1383,7 +1363,7 @@ async function collectDailyRadarThreads(targetCount = 20, excludeUrls = new Set(
     for (const term of fallbackTerms) {
       if (allResults.length >= targetCount) break;
       try {
-        const fbMore = await searchFacebookThreads([term], 2, '', excludeUrls);
+        const fbMore = await searchFacebookThreads([term], 2, '', excludeUrls, SYACO_CATALOG, []);
         for (const r of fbMore) {
           if (!seenUrls.has(r.url) && (!excludeUrls || !excludeUrls.has(r.url)) && allResults.length < targetCount) {
             seenUrls.add(r.url);
@@ -1391,7 +1371,7 @@ async function collectDailyRadarThreads(targetCount = 20, excludeUrls = new Set(
           }
         }
 
-        const ptMore = await searchPantipThreads([term], 2, excludeUrls);
+        const ptMore = await searchPantipThreads([term], 2, excludeUrls, SYACO_CATALOG, []);
         for (const r of ptMore) {
           if (!seenUrls.has(r.url) && (!excludeUrls || !excludeUrls.has(r.url)) && allResults.length < targetCount) {
             seenUrls.add(r.url);
@@ -1432,5 +1412,6 @@ module.exports = {
   buildDynamicSolutionTopicsRegex,
   extractSolutionKeywords,
   updateGlobalTopicsRegex,
-  BASE_B2B_KEYWORDS
+  BASE_B2B_KEYWORDS,
+  formatFacebookContent
 };

@@ -6,7 +6,8 @@ const {
   isFacebookPost,
   cleanUrl,
   getDynamicYearFilter,
-  getMinPantipTopicId
+  getMinPantipTopicId,
+  formatFacebookContent
 } = require('./thread-search');
 
 console.log('Testing thread-search filter functions...');
@@ -193,5 +194,58 @@ const hrPost = {
 const dynamicRegexWithSearchTerm = buildDynamicSolutionTopicsRegex(['Payroll'], []);
 assert.strictEqual(isSolutionPost(hrPost, dynamicRegexWithSearchTerm), true, 'Post matching custom search keyword Payroll must pass');
 console.log('✔ Custom search keyword dynamically added to topic regex and passed');
+
+// 8. isFacebookPost URL Filtering (Issue 2)
+console.log('\n--- 8. Testing isFacebookPost URL Filtering ---');
+// Rejected cases (Group homepages, personal profile roots, page roots)
+assert.strictEqual(isFacebookPost('https://www.facebook.com/groups/logisticsthai'), false, 'Group landing page should be rejected');
+assert.strictEqual(isFacebookPost('https://www.facebook.com/groups/123456/'), false, 'Group root with ID should be rejected');
+assert.strictEqual(isFacebookPost('https://www.facebook.com/some.person.name'), false, 'Personal profile root should be rejected');
+assert.strictEqual(isFacebookPost('https://www.facebook.com/SomeShop'), false, 'Page root should be rejected');
+assert.strictEqual(isFacebookPost('https://www.facebook.com/permalink.php'), false, 'permalink.php without story_fbid should be rejected');
+console.log('✔ Non-post Facebook URLs (group roots, personal profiles, page roots) correctly rejected');
+
+// Accepted cases (Genuine discussion posts/permalinks)
+assert.strictEqual(isFacebookPost('https://www.facebook.com/groups/123456/posts/7891011'), true, 'Group post with ID should pass');
+assert.strictEqual(isFacebookPost('https://www.facebook.com/groups/logisticsthai/permalink/999888/'), true, 'Group permalink should pass');
+assert.strictEqual(isFacebookPost('https://www.facebook.com/groups/123/multi_permalinks/456'), true, 'Group multi_permalinks should pass');
+assert.strictEqual(isFacebookPost('https://www.facebook.com/SyacoTech/posts/555666777'), true, 'Page post should pass');
+assert.strictEqual(isFacebookPost('https://www.facebook.com/permalink.php?story_fbid=112233&id=445566'), true, 'permalink.php with story_fbid should pass');
+console.log('✔ Valid Facebook post permalinks correctly accepted');
+
+// 9. Non-B2B Irrelevant Posts Rejection in isSolutionPost (Issue 3)
+console.log('\n--- 9. Testing Irrelevant Non-B2B Posts Rejection ---');
+const gamingPost = {
+  title: 'เล่นเกมแล้ว lag มาก fps ตก มีปัญหาเวลาเล่น ช่วยที',
+  snippet: 'สเปคคอม i5 การ์ดจอ rtx เล่น valorant แล้ว lag'
+};
+assert.strictEqual(isSolutionPost(gamingPost), false, 'Consumer gaming post (lag/fps) must be rejected');
+console.log('✔ "โพสต์เกม lag" correctly rejected');
+
+const personalWordpressPost = {
+  title: 'เว็บ WordPress ช้ามากครับ ทำไมโหลดไม่ขึ้น ช่วยแนะนำโฮสติ้งหน่อย',
+  snippet: 'ทำบล็อกส่วนตัวแล้วเว็บบล็อกช้ามาก'
+};
+assert.strictEqual(isSolutionPost(personalWordpressPost), false, 'Personal WordPress blog post must be rejected');
+console.log('✔ "เว็บ WordPress ช้า (บล็อกส่วนตัว)" correctly rejected');
+
+const mobileAppReviewPost = {
+  title: 'Best mobile apps review 2026 - Top 10 apps to download',
+  snippet: 'Here is our overview and review of the best mobile apps for your phone this year'
+};
+assert.strictEqual(isSolutionPost(mobileAppReviewPost), false, 'Consumer mobile app review must be rejected');
+console.log('✔ "Best mobile apps review" correctly rejected');
+
+// 10. formatFacebookContent Validation (Issue 1)
+console.log('\n--- 10. Testing formatFacebookContent ---');
+assert.strictEqual(formatFacebookContent('', ''), null, 'Empty title and snippet must return null');
+assert.strictEqual(formatFacebookContent('Link to facebook.com', 'Facebook'), null, 'Generic Facebook placeholders must return null');
+assert.strictEqual(formatFacebookContent('The site owner hides web page details', 'log into facebook'), null, 'Hidden/login Facebook text must return null');
+
+const validFbContent = formatFacebookContent('สอบถามระบบ ERP โรงงาน', 'มีปัญหาเรื่องการวางระบบ ERP เชื่อมต่อเครื่องจักรในโรงงาน...');
+assert.notStrictEqual(validFbContent, null, 'Substantive Facebook content should not return null');
+assert.strictEqual(validFbContent.title, 'สอบถามระบบ ERP โรงงาน', 'Title should be preserved without fake prefixes');
+assert(!validFbContent.title.includes('โพสต์ข้อความบน Facebook เกี่ยวกับ'), 'Must never synthesize fake titles');
+console.log('✔ formatFacebookContent returns null for invalid/generic data and preserves genuine content without fake titles');
 
 console.log('\nAll unit tests passed successfully!');

@@ -317,6 +317,12 @@ async function loadBotSettings() {
         console.log(`[Settings] Loaded ${r.key} from database`);
       }
     }
+    const { rows: lastDates } = await pool.query("SELECT key, value FROM bot_settings WHERE key IN ('LAST_RADAR_RUN_DATE', 'LAST_FLOW1_RUN_DATE', 'LAST_FLOW2_RUN_DATE')");
+    for (const d of lastDates) {
+      if (d.key === 'LAST_RADAR_RUN_DATE') lastRadarRunDate = d.value;
+      if (d.key === 'LAST_FLOW1_RUN_DATE') lastFlow1RunDate = d.value;
+      if (d.key === 'LAST_FLOW2_RUN_DATE') lastFlow2RunDate = d.value;
+    }
   } catch (err) {
     console.error('[Settings] Error loading bot settings:', err);
   }
@@ -417,8 +423,109 @@ async function runDailyRadarTask() {
   }
 }
 
+let lastFlow1RunDate = '';
+let lastFlow2RunDate = '';
+
+async function runDailyFlow1Task() {
+  try {
+    const { rows: enabledRows } = await pool.query("SELECT value FROM bot_settings WHERE key = 'FLOW1_DAILY_ENABLED'");
+    if (enabledRows.length && enabledRows[0].value === 'false') {
+      console.log('[DailyFlow1] Automation is disabled in settings.');
+      return { ok: false, reason: 'disabled' };
+    }
+
+    const webhookUrl = process.env.N8N_FLOW1_IDEA_WEBHOOK_URL || 'http://n8n:5678/webhook/flow1-request-idea';
+    console.log(`[DailyFlow1] Triggering Flow 1 Solution Discovery at ${webhookUrl}...`);
+
+    let channelId = null;
+    const { rows: channelRows } = await pool.query("SELECT value FROM bot_settings WHERE key = 'DISCORD_CHANNEL_ID'");
+    if (channelRows.length && channelRows[0].value && channelRows[0].value !== '123456789012345678') {
+      channelId = channelRows[0].value;
+    } else {
+      channelId = process.env.DISCORD_CHANNEL_ID;
+    }
+
+    if (channelId && channelId !== '123456789012345678') {
+      const channel = await client.channels.fetch(channelId).catch(() => null);
+      if (channel) {
+        const { rows: tRows } = await pool.query("SELECT value FROM bot_settings WHERE key = 'FLOW1_DAILY_TIME'");
+        const flow1TimeStr = tRows[0]?.value || '10:30';
+        await channel.send({
+          content: `🌅 **[Daily Trigger] เริ่มต้นค้นหาโอกาสและไอเดียโซลูชันประจำวัน (Flow 1: Solution Discovery) อัตโนมัติ (${flow1TimeStr} น.)**\nระบบกำลังดึงข้อมูลฟีด TechTalkThai & Blognone เพื่อวิเคราะห์ Adjacent Solutions ผ่าน Gemini AI...`
+        }).catch(() => {});
+      }
+    }
+
+    const res = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        triggered_by: 'Daily Schedule (Discord Bot Scheduler)',
+        source: 'daily_cron',
+        requested_at: new Date().toISOString()
+      }),
+      signal: AbortSignal.timeout(15000)
+    });
+
+    console.log(`[DailyFlow1] Webhook dispatched. Response status: ${res.status}`);
+    return { ok: res.ok, status: res.status };
+  } catch (err) {
+    console.error('[DailyFlow1] Scheduled run failed:', err);
+    return { ok: false, error: err.message };
+  }
+}
+
+async function runDailyFlow2Task() {
+  try {
+    const { rows: enabledRows } = await pool.query("SELECT value FROM bot_settings WHERE key = 'FLOW2_DAILY_ENABLED'");
+    if (enabledRows.length && enabledRows[0].value === 'false') {
+      console.log('[DailyFlow2] Automation is disabled in settings.');
+      return { ok: false, reason: 'disabled' };
+    }
+
+    const webhookUrl = process.env.N8N_FLOW2_WEBHOOK_URL || 'http://n8n:5678/webhook/flow2-run-publisher';
+    console.log(`[DailyFlow2] Triggering Flow 2 Content Publisher at ${webhookUrl}...`);
+
+    let channelId = null;
+    const { rows: channelRows } = await pool.query("SELECT value FROM bot_settings WHERE key = 'DISCORD_CHANNEL_ID'");
+    if (channelRows.length && channelRows[0].value && channelRows[0].value !== '123456789012345678') {
+      channelId = channelRows[0].value;
+    } else {
+      channelId = process.env.DISCORD_CHANNEL_ID;
+    }
+
+    if (channelId && channelId !== '123456789012345678') {
+      const channel = await client.channels.fetch(channelId).catch(() => null);
+      if (channel) {
+        const { rows: tRows } = await pool.query("SELECT value FROM bot_settings WHERE key = 'FLOW2_DAILY_TIME'");
+        const flow2TimeStr = tRows[0]?.value || '11:30';
+        await channel.send({
+          content: `✍️ **[Daily Trigger] เริ่มต้นสร้างและตรวจทานคอนเทนต์ประจำวัน (Flow 2: Content Publisher) อัตโนมัติ (${flow2TimeStr} น.)**\nระบบกำลังตรวจสอบโซลูชันที่เสร็จสมบูรณ์ และร่างเนื้อหาบทความ/โซเชียลพร้อมปุ่มอนุมัติเผยแพร่...`
+        }).catch(() => {});
+      }
+    }
+
+    const res = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        triggered_by: 'Daily Schedule (Discord Bot Scheduler)',
+        source: 'daily_cron',
+        requested_at: new Date().toISOString()
+      }),
+      signal: AbortSignal.timeout(15000)
+    });
+
+    console.log(`[DailyFlow2] Webhook dispatched. Response status: ${res.status}`);
+    return { ok: res.ok, status: res.status };
+  } catch (err) {
+    console.error('[DailyFlow2] Scheduled run failed:', err);
+    return { ok: false, error: err.message };
+  }
+}
+
 function startRadarCronScheduler() {
-  console.log('⏰ [DailyRadar] ระบบตรวจเวลาเรดาร์กระทู้อัตโนมัติเริ่มทำงานแล้ว (เช็คทุก 45 วินาที)');
+  console.log('⏰ [DailyScheduler] ระบบตรวจเวลา Daily Trigger อัตโนมัติเริ่มทำงานแล้ว (เช็คทุก 45 วินาที: Flow 1 [10:30], Flow 2 [11:30], Flow 3 [11:00])');
   setInterval(async () => {
     try {
       const now = new Date();
@@ -436,16 +543,37 @@ function startRadarCronScheduler() {
       const todayStr = `${getVal('year')}-${getVal('month')}-${getVal('day')}`;
       const currentTime = `${getVal('hour')}:${getVal('minute')}`;
 
-      const { rows: timeRows } = await pool.query("SELECT value FROM bot_settings WHERE key = 'DAILY_RADAR_TIME'");
-      const targetTime = timeRows[0]?.value || '11:00';
-
-      if (currentTime === targetTime && lastRadarRunDate !== todayStr) {
+      // 1. Flow 3: Daily Radar (default: 11:00)
+      const { rows: radarRows } = await pool.query("SELECT value FROM bot_settings WHERE key = 'DAILY_RADAR_TIME'");
+      const radarTargetTime = radarRows[0]?.value || '11:00';
+      if (currentTime === radarTargetTime && lastRadarRunDate !== todayStr) {
         lastRadarRunDate = todayStr;
+        await pool.query("INSERT INTO bot_settings (key, value, updated_at) VALUES ('LAST_RADAR_RUN_DATE', $1, NOW()) ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()", [todayStr]).catch(() => {});
         console.log(`⏰ [DailyRadar] ถึงเวลาเป้าหมาย ${currentTime} น. (วันที่ ${todayStr}) เริ่มต้นดึงเรดาร์กระทู้ประจำวัน...`);
         await runDailyRadarTask();
       }
+
+      // 2. Flow 1: Solution Discovery (default: 10:30)
+      const { rows: flow1Rows } = await pool.query("SELECT value FROM bot_settings WHERE key = 'FLOW1_DAILY_TIME'");
+      const flow1TargetTime = flow1Rows[0]?.value || '10:30';
+      if (currentTime === flow1TargetTime && lastFlow1RunDate !== todayStr) {
+        lastFlow1RunDate = todayStr;
+        await pool.query("INSERT INTO bot_settings (key, value, updated_at) VALUES ('LAST_FLOW1_RUN_DATE', $1, NOW()) ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()", [todayStr]).catch(() => {});
+        console.log(`⏰ [DailyFlow1] ถึงเวลาเป้าหมาย ${currentTime} น. (วันที่ ${todayStr}) เริ่มต้นรัน Flow 1 Solution Discovery...`);
+        await runDailyFlow1Task();
+      }
+
+      // 3. Flow 2: Content Publisher (default: 11:30)
+      const { rows: flow2Rows } = await pool.query("SELECT value FROM bot_settings WHERE key = 'FLOW2_DAILY_TIME'");
+      const flow2TargetTime = flow2Rows[0]?.value || '11:30';
+      if (currentTime === flow2TargetTime && lastFlow2RunDate !== todayStr) {
+        lastFlow2RunDate = todayStr;
+        await pool.query("INSERT INTO bot_settings (key, value, updated_at) VALUES ('LAST_FLOW2_RUN_DATE', $1, NOW()) ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()", [todayStr]).catch(() => {});
+        console.log(`⏰ [DailyFlow2] ถึงเวลาเป้าหมาย ${currentTime} น. (วันที่ ${todayStr}) เริ่มต้นรัน Flow 2 Content Publisher...`);
+        await runDailyFlow2Task();
+      }
     } catch (err) {
-      console.error('[DailyRadar] Cron check error:', err);
+      console.error('[DailyScheduler] Cron check error:', err);
     }
   }, 45000);
 }
@@ -1745,6 +1873,26 @@ app.post('/daily-radar/trigger', async (req, res) => {
   }
 });
 
+// Endpoint สำหรับสั่งรัน Flow 1 Solution Discovery ทันทีผ่าน API หรือบอท
+app.post('/flow1/trigger', async (req, res) => {
+  try {
+    runDailyFlow1Task().catch(e => console.error('[DailyFlow1] Async task error:', e));
+    return res.json({ ok: true, message: 'Flow 1 Solution Discovery dispatched' });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Endpoint สำหรับสั่งรัน Flow 2 Content Publisher ทันทีผ่าน API หรือบอท
+app.post('/flow2/trigger', async (req, res) => {
+  try {
+    runDailyFlow2Task().catch(e => console.error('[DailyFlow2] Async task error:', e));
+    return res.json({ ok: true, message: 'Flow 2 Content Publisher dispatched' });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 const PORT = 3000;
 app.listen(PORT, () => console.log(`Internal notify API listening on port ${PORT}`));
 
@@ -1752,6 +1900,9 @@ client.login(process.env.DISCORD_BOT_TOKEN);
 
 module.exports = {
   buildFlow2Card,
+  runDailyRadarTask,
+  runDailyFlow1Task,
+  runDailyFlow2Task,
   app,
   client
 };

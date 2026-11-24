@@ -7,20 +7,21 @@
           "interval": [
             {
               "field": "days",
-              "triggerAtHour": 11,
-              "triggerAtMinute": 0
+              "triggerAtHour": 10,
+              "triggerAtMinute": 30
             }
           ]
         }
       },
       "id": "f1-node-schedule",
-      "name": "Daily Trigger (11:00 AM)",
+      "name": "Daily Trigger (10:30 AM)",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
         200,
         360
-      ]
+      ],
+      "disabled": true
     },
     {
       "parameters": {
@@ -42,7 +43,9 @@
     {
       "parameters": {
         "url": "https://www.syaco.co.th/api/solutions",
-        "options": {}
+        "options": {
+          "timeout": 30000
+        }
       },
       "id": "f1-node-get-solutions",
       "name": "Get Current Solutions",
@@ -73,7 +76,8 @@
             "response": {
               "responseFormat": "text"
             }
-          }
+          },
+          "timeout": 30000
         }
       },
       "id": "f1-node-feed-techtalkthai",
@@ -106,7 +110,8 @@
             "response": {
               "responseFormat": "text"
             }
-          }
+          },
+          "timeout": 30000
         }
       },
       "id": "f1-node-feed-blognone",
@@ -168,7 +173,9 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ $json.geminiBody }}",
-        "options": {}
+        "options": {
+          "timeout": 30000
+        }
       },
       "id": "f1-node-gemini-ai",
       "name": "AI Gap & Solution Analysis",
@@ -225,7 +232,9 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ {\n  type: 'flow1_suggestion',\n  suggestion: {\n    id: $json.id,\n    base_solution_id: $json.base_solution_id,\n    title_th: $json.title_th,\n    title_en: $json.title_en,\n    description_th: $json.description_th,\n    description_en: $json.description_en,\n    rationale: $json.rationale,\n    features: $json.features,\n    content_ai: $json.content_ai\n  }\n} }}",
-        "options": {}
+        "options": {
+          "timeout": 30000
+        }
       },
       "id": "f1-node-notify-discord",
       "name": "Notify Discord",
@@ -241,7 +250,7 @@
     }
   ],
   "connections": {
-    "Daily Trigger (11:00 AM)": {
+    "Daily Trigger (10:30 AM)": {
       "main": [
         [
           {

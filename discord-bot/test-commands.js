@@ -419,7 +419,53 @@ console.log('  ✅ Slash commands cleanly defined: /drafts registered with limit
 
   console.log('  ✅ /notify with { type: "flow2_drafts", solution_id: "90" } builds valid Flow 2 review cards seamlessly.');
 
-  console.log('\n🎉 ALL 9 TESTS PASSED SUCCESSFULLY! Discord Bot commands and /notify logic are fully verified.');
+  // Test 10: Testing /settings flow1 and /settings flow2
+  console.log('\nTest 10: Testing /settings flow1 and /settings flow2 schedule management...');
+  const settingsQueries = [];
+  const mockSettingsPool = {
+    query: async (sql, params) => {
+      settingsQueries.push({ sql: sql.trim(), params });
+      return { rows: [] };
+    }
+  };
+
+  const flow1Interaction = {
+    isCommand: () => true,
+    commandName: 'settings',
+    options: {
+      getSubcommand: () => 'flow1',
+      getString: (name) => name === 'time' ? '11:00' : null,
+      getBoolean: (name) => name === 'enabled' ? true : null
+    },
+    deferReply: async () => {},
+    editReply: async (msg) => msg
+  };
+  await handleCommand(flow1Interaction, { pool: mockSettingsPool, client: {} });
+  assert(settingsQueries.some(q => q.params && q.params[0] === '11:00'), 'Flow 1 time should be saved');
+  assert(settingsQueries.some(q => q.params && q.params[0] === 'true'), 'Flow 1 enabled status should be saved');
+  console.log('  ✅ /settings flow1 successfully saves schedule and enabled status to database.');
+
+  const flow2Interaction = {
+    isCommand: () => true,
+    commandName: 'settings',
+    options: {
+      getSubcommand: () => 'flow2',
+      getString: (name) => name === 'time' ? '11:30' : null,
+      getBoolean: (name) => name === 'enabled' ? true : null
+    },
+    deferReply: async () => {},
+    editReply: async (msg) => msg
+  };
+  await handleCommand(flow2Interaction, { pool: mockSettingsPool, client: {} });
+  assert(settingsQueries.some(q => q.params && q.params[0] === '11:30'), 'Flow 2 time should be saved');
+  console.log('  ✅ /settings flow2 successfully saves schedule and enabled status to database.');
+
+  // Test 11: Verify /publish command definition exists
+  console.log('\nTest 11: Verifying /publish command definition in commands array...');
+  assert(commands.some(c => c.name === 'publish'), '/publish command must exist');
+  console.log('  ✅ /publish command cleanly registered for on-demand Flow 2 execution.');
+
+  console.log('\n🎉 ALL 11 TESTS PASSED SUCCESSFULLY! Discord Bot commands, daily schedules, and /notify logic are fully verified.');
 })().catch(err => {
   console.error('❌ Test failed:', err);
   process.exit(1);
