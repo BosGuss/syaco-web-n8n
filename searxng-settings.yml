@@ -9,43 +9,34 @@ search:
     - json
 
 outgoing:
-  request_timeout: 6.0
-  max_request_timeout: 8.0
+  request_timeout: 3.0
+  max_request_timeout: 4.5
 
 engines:
+  - name: duckduckgo
+    disabled: true
+  - name: bing
+    disabled: false
+    weight: 3
+  - name: startpage
+    disabled: true
+  - name: yandex
+    disabled: true
+  - name: google cse
+    disabled: true
+  - name: mojeek
+    disabled: true
+  - name: google
+    disabled: true
+  - name: yahoo
+    disabled: true
+  - name: brave
+    disabled: true
+  - name: wikipedia
+    disabled: true
+  - name: wikidata
+    disabled: true
   - name: ahmia
     inactive: true
   - name: torch
     inactive: true
-  - name: wikidata
-    disabled: true
-    inactive: true
-  - name: google
-    disabled: false
-    weight: 4
-  - name: bing
-    disabled: false
-    weight: 4
-  - name: duckduckgo
-    disabled: false
-    weight: 3
-  - name: brave
-    disabled: false
-    weight: 3
-  - name: yahoo
-    disabled: false
-    inactive: false
-    weight: 3
-  - name: startpage
-    disabled: false
-    weight: 3
-  - name: yandex
-    disabled: false
-    weight: 2
-  - name: mojeek
-    disabled: false
-    weight: 2
-  - name: presearch
-    disabled: false
-    weight: 2
-

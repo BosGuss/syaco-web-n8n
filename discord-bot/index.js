@@ -246,6 +246,7 @@ const {
   buildRadarEmbedsAndMenu,
   buildFlow2Card,
   handleFlow2DraftsNotify,
+  getFlow2CandidateSolutions,
   saveAndVerifyDevtoCookie,
   saveAndVerifyDevtoKey
 } = require('./commands');
@@ -371,10 +372,7 @@ async function runDailyRadarTask() {
     `);
     const excludeUrls = new Set(cachedRows.map(r => r.post_url).filter(Boolean));
 
-    let radarData = await collectDailyRadarThreads(targetLimit, excludeUrls);
-    if (!radarData.results.length && excludeUrls.size > 0) {
-      radarData = await collectDailyRadarThreads(targetLimit, new Set());
-    }
+    const radarData = await collectDailyRadarThreads(targetLimit, excludeUrls);
     const { solutionsCovered, results } = radarData;
 
     if (!results.length) {
@@ -401,7 +399,7 @@ async function runDailyRadarTask() {
 
     if (embeds.length <= 2) {
       await channel.send({
-        content: `🌅 **สวัสดีตอนเช้าครับทีมงาน! เรดาร์กระทู้/โพสต์น่าสนใจประจำวันพร้อมแล้ว (${savedRows.length} รายการ)**\nเลือกกระทู้ที่สนใจจากเมนูด้านล่างเพื่อให้ AI ร่างคำตอบได้ทันทีครับ:`,
+        content: `🌅 **สวัสดีตอนเช้าครับทีมงาน! เรดาร์กระทู้/โพสต์น่าสนใจประจำวันพร้อมแล้ว (${savedRows.length} รายการ)**\nแตะปุ่มด่วน **[⚡ ร่างข้อ 1-5]** หรือเลือกจากดรอปดาวน์ด้านล่างเพื่อให้ AI ร่างคำตอบได้ทันทีครับ:`,
         embeds,
         components
       });
@@ -483,6 +481,15 @@ async function runDailyFlow2Task() {
       return { ok: false, reason: 'disabled' };
     }
 
+    // 1. ตรวจสอบว่ามีโซลูชันใหม่ที่ต้องสร้างคอนเทนต์ หรือมีฉบับร่างค้างตรวจทานหรือไม่
+    const candidates = await getFlow2CandidateSolutions(pool);
+    if (!candidates || candidates.length === 0) {
+      console.log('[DailyFlow2] ไม่พบโซลูชันใหม่หรือฉบับร่างที่รอตรวจทาน (0 candidates) ข้ามการส่งข้อความแจ้งเตือนและการรันประจำวัน');
+      return { ok: true, skipped: true, reason: 'no_candidate_solutions' };
+    }
+
+    console.log(`[DailyFlow2] พบโซลูชันที่ต้องดำเนินการ ${candidates.length} รายการ เริ่มต้นส่งข้อความแจ้งเตือนและทริกเกอร์ n8n...`);
+
     const webhookUrl = process.env.N8N_FLOW2_WEBHOOK_URL || 'http://n8n:5678/webhook/flow2-run-publisher';
     console.log(`[DailyFlow2] Triggering Flow 2 Content Publisher at ${webhookUrl}...`);
 
@@ -517,7 +524,7 @@ async function runDailyFlow2Task() {
     });
 
     console.log(`[DailyFlow2] Webhook dispatched. Response status: ${res.status}`);
-    return { ok: res.ok, status: res.status };
+    return { ok: res.ok, status: res.status, candidateCount: candidates.length };
   } catch (err) {
     console.error('[DailyFlow2] Scheduled run failed:', err);
     return { ok: false, error: err.message };
@@ -1313,6 +1320,18 @@ client.on('interactionCreate', async (interaction) => {
         return;
       }
 
+      if (interaction.customId.startsWith('copy_answer_')) {
+        const candidateId = interaction.customId.replace('copy_answer_', '');
+        const { rows } = await pool.query('SELECT answer, post_url, post_title, platform FROM backlink_candidates WHERE id::text = $1', [candidateId]);
+        if (!rows.length) {
+          return await interaction.reply({ content: '❌ ไม่พบข้อมูลคำตอบนี้ในระบบ', ephemeral: true });
+        }
+        return await interaction.reply({
+          content: `📋 **ข้อความคำตอบสำหรับนำไปโพสต์ (Candidate #${candidateId} - ${rows[0].platform.toUpperCase()}):**\n\`\`\`text\n${rows[0].answer}\n\`\`\`\n🔗 **ลิงก์กระทู้:** ${rows[0].post_url}`,
+          ephemeral: true
+        });
+      }
+
       if (interaction.customId.startsWith('markposted_')) {
         const candidateId = interaction.customId.replace('markposted_', '');
         const reviewedBy = formatReviewedBy(interaction.user);
@@ -1321,11 +1340,24 @@ client.on('interactionCreate', async (interaction) => {
           [candidateId, reviewedBy]
         );
         if (!rows.length) {
-          return await interaction.reply({ content: 'รายการนี้ไม่อยู่ในสถานะ Manual หรือได้รับการอัปเดตไปแล้ว', ephemeral: true });
+          return await interaction.reply({ content: '⚠️ รายการนี้ไม่อยู่ในสถานะ Manual หรือได้รับการอัปเดตไปแล้ว', ephemeral: true });
         }
+        const row = rows[0];
+        const doneEmbed = new EmbedBuilder()
+          .setTitle(`🎉 บันทึกการตอบกระทู้สำเร็จแล้ว [${row.platform.toUpperCase()}]`)
+          .setColor(0x10b981)
+          .setDescription(`👤 **บันทึกโดย:** \`${reviewedBy}\`\n📌 **กระทู้:** [${row.post_title}](${row.post_url})\n\n✅ บันทึกสถานะเป็น \`posted\` ในระบบเรียบร้อยแล้ว`)
+          .setFooter({ text: `Candidate ID: #${candidateId} • เสร็จสมบูรณ์` })
+          .setTimestamp();
+
+        const linkRow = (row.post_url && row.post_url.startsWith('http'))
+          ? [new ActionRowBuilder().addComponents(new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('🔗 เปิดดูกระทู้ที่ตอบแล้ว').setURL(row.post_url))]
+          : [];
+
         return await interaction.update({
-          content: `🎉 **บันทึกสถานะเรียบร้อย:** โพสต์คำตอบในกระทู้สำเร็จแล้ว (${rows[0].platform})\n👤 **บันทึกโดย:** \`${reviewedBy}\`\n🔗 [เปิดกระทู้](${rows[0].post_url})`,
-          components: [],
+          content: null,
+          embeds: [doneEmbed],
+          components: linkRow,
         });
       }
 
@@ -1337,8 +1369,16 @@ client.on('interactionCreate', async (interaction) => {
           "UPDATE backlink_candidates SET status = 'rejected', reviewed_at = NOW(), reviewed_by = $2 WHERE id::text = $1",
           [candidateId, reviewedBy]
         );
+        const rejectEmbed = new EmbedBuilder()
+          .setTitle('❌ ปฏิเสธคำตอบนี้แล้ว')
+          .setColor(0xef4444)
+          .setDescription(`👤 **ปฏิเสธโดย:** \`${reviewedBy}\`\nCandidate ID: \`#${candidateId}\` ถูกยกเลิกและจะไม่นำไปโพสต์`)
+          .setFooter({ text: `Candidate ID: #${candidateId} • ปฏิเสธ` })
+          .setTimestamp();
+
         await interaction.update({
-          content: `❌ **Candidate Rejected**\n👤 **ปฏิเสธโดย:** \`${reviewedBy}\``,
+          content: null,
+          embeds: [rejectEmbed],
           components: [],
         });
         return;
@@ -1346,15 +1386,15 @@ client.on('interactionCreate', async (interaction) => {
 
       if (action === 'edit') {
         const { rows } = await pool.query('SELECT answer FROM backlink_candidates WHERE id::text = $1', [candidateId]);
-        if (!rows.length) return interaction.reply({ content: 'Candidate not found', ephemeral: true });
+        if (!rows.length) return interaction.reply({ content: '❌ ไม่พบข้อมูล Candidate ในระบบ', ephemeral: true });
 
         const modal = new ModalBuilder()
           .setCustomId(`modal_${candidateId}`)
-          .setTitle('Edit Draft Answer');
+          .setTitle(`✏️ ปรับแต่งข้อความคำตอบ #${candidateId}`.slice(0, 45));
 
         const answerInput = new TextInputBuilder()
           .setCustomId('edited_answer')
-          .setLabel('Answer Text')
+          .setLabel('ข้อความคำตอบ (Answer Text)')
           .setStyle(TextInputStyle.Paragraph)
           .setValue(rows[0].answer || '')
           .setMaxLength(1500)
@@ -1602,10 +1642,10 @@ client.on('interactionCreate', async (interaction) => {
       }
 
       const updatedEmbed = createCandidateEmbed(rows[0]);
-      const actionRow = createActionButtons(rows[0].id);
+      const actionRow = createActionButtons(rows[0].id, rows[0].post_url);
 
       await interaction.update({
-        content: `✏️ **Draft Answer Updated!** (แก้ไขโดย \`${reviewedBy}\` — กด **Approve** เมื่อพร้อมโพสต์)`,
+        content: `✏️ **ปรับปรุงข้อความคำตอบเรียบร้อย!** (แก้ไขโดย \`${reviewedBy}\` — ตรวจทานและกด **✅ อนุมัติคำตอบ** เมื่อพร้อมโพสต์)`,
         embeds: [updatedEmbed],
         components: [actionRow],
       });
@@ -1653,9 +1693,19 @@ async function handleApproval(interaction, candidateId, overrideAnswer = null) {
         [finalAnswer, postedUrl, candidateId, reviewedBy]
       );
 
+      const doneEmbed = new EmbedBuilder()
+        .setTitle('✅ เผยแพร่สดบน Bluesky สำเร็จ!')
+        .setColor(0x0085ff)
+        .setDescription(`👤 **อนุมัติโดย:** \`${reviewedBy}\`\n🔗 **ลิงก์:** [เปิดดู Reply บน Bluesky](${postedUrl})`)
+        .setFooter({ text: `Candidate ID: #${candidateId} • เผยแพร่แล้ว` })
+        .setTimestamp();
+
+      const linkRow = [new ActionRowBuilder().addComponents(new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('🔗 เปิดดู Reply บน Bluesky').setURL(postedUrl))];
+
       await interaction.editReply({
-        content: `✅ **Posted to Bluesky!**\n👤 **อนุมัติโดย:** \`${reviewedBy}\`\n🔗 [Open Reply](${postedUrl})`,
-        components: [],
+        content: null,
+        embeds: [doneEmbed],
+        components: linkRow,
       });
     } catch (postError) {
       await pool.query(
@@ -1663,12 +1713,12 @@ async function handleApproval(interaction, candidateId, overrideAnswer = null) {
         [postError.message, candidateId, reviewedBy]
       );
       const retryRow = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`approve_${candidateId}`).setLabel('🔄 Retry Approve').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId(`edit_${candidateId}`).setLabel('Edit Answer').setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId(`reject_${candidateId}`).setLabel('Reject').setStyle(ButtonStyle.Danger)
+        new ButtonBuilder().setCustomId(`approve_${candidateId}`).setLabel('🔄 ลองอนุมัติใหม่').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId(`edit_${candidateId}`).setLabel('✏️ แก้ไขข้อความ').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId(`reject_${candidateId}`).setLabel('❌ ปฏิเสธ').setStyle(ButtonStyle.Danger)
       );
       await interaction.editReply({
-        content: `⚠️ **Posting failed:** ${postError.message}\nYou can retry or post manually below:`,
+        content: `⚠️ **โพสต์บน Bluesky ไม่สำเร็จ:** ${postError.message}\nสามารถแก้ไขหรือลองใหม่ได้จากปุ่มด้านล่างครับ:`,
         components: [retryRow],
       });
       await interaction.followUp({
@@ -1684,9 +1734,19 @@ async function handleApproval(interaction, candidateId, overrideAnswer = null) {
         [finalAnswer, postedUrl, candidateId, reviewedBy]
       );
 
+      const doneEmbed = new EmbedBuilder()
+        .setTitle('✅ โพสต์คอมเมนต์บน Dev.to สำเร็จ!')
+        .setColor(0x10b981)
+        .setDescription(`👤 **อนุมัติโดย:** \`${reviewedBy}\`\n🔗 **ลิงก์:** [เปิดดูคอมเมนต์บน Dev.to](${postedUrl})`)
+        .setFooter({ text: `Candidate ID: #${candidateId} • เผยแพร่แล้ว` })
+        .setTimestamp();
+
+      const linkRow = [new ActionRowBuilder().addComponents(new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('🔗 เปิดดูคอมเมนต์บน Dev.to').setURL(postedUrl))];
+
       await interaction.editReply({
-        content: `✅ **Posted to Dev.to!**\n👤 **อนุมัติโดย:** \`${reviewedBy}\`\n🔗 [Open Comment](${postedUrl})`,
-        components: [],
+        content: null,
+        embeds: [doneEmbed],
+        components: linkRow,
       });
     } catch (postError) {
       await pool.query(
@@ -1694,12 +1754,12 @@ async function handleApproval(interaction, candidateId, overrideAnswer = null) {
         [postError.message, candidateId, reviewedBy]
       );
       const retryRow = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`approve_${candidateId}`).setLabel('🔄 Retry Approve').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId(`edit_${candidateId}`).setLabel('Edit Answer').setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId(`reject_${candidateId}`).setLabel('Reject').setStyle(ButtonStyle.Danger)
+        new ButtonBuilder().setCustomId(`approve_${candidateId}`).setLabel('🔄 ลองอนุมัติใหม่').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId(`edit_${candidateId}`).setLabel('✏️ แก้ไขข้อความ').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId(`reject_${candidateId}`).setLabel('❌ ปฏิเสธ').setStyle(ButtonStyle.Danger)
       );
       await interaction.editReply({
-        content: `⚠️ **Dev.to posting failed:** ${postError.message}\nYou can retry or post manually below:`,
+        content: `⚠️ **โพสต์บน Dev.to ไม่สำเร็จ:** ${postError.message}\nสามารถแก้ไขหรือลองใหม่ได้จากปุ่มด้านล่างครับ:`,
         components: [retryRow],
       });
       await interaction.followUp({
@@ -1714,19 +1774,43 @@ async function handleApproval(interaction, candidateId, overrideAnswer = null) {
       [finalAnswer, candidateId, reviewedBy]
     );
 
-    const markPostedRow = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`markposted_${candidateId}`)
-        .setLabel('✅ Mark as Posted (โพสต์แล้ว)')
-        .setStyle(ButtonStyle.Success)
+    const platName = String(row.platform || 'Platform').toUpperCase();
+    const approvedEmbed = new EmbedBuilder()
+      .setTitle(`📋 อนุมัติคำตอบเรียบร้อยแล้ว [${platName}]`)
+      .setColor(0x10b981)
+      .setDescription(
+        `👤 **อนุมัติโดย:** \`${reviewedBy}\`\n` +
+        `📌 **กระทู้:** [${row.post_title}](${row.post_url})\n\n` +
+        `👇 **ขั้นตอนการนำไปตอบ:**\n` +
+        `1. แตะปุ่ม **Copy** ที่มุมขวาบนของกล่องข้อความด้านล่าง\n` +
+        `2. กดปุ่ม **"🔗 ไปยังกระทู้เพื่อตอบ"** เพื่อเปิดหน้ากระทู้ทันที\n` +
+        `3. วางข้อความและส่งในกระทู้ จากนั้นกลับมากด **"✅ บันทึกว่าโพสต์แล้ว"**`
+      )
+      .addFields(
+        { name: '📄 ข้อความคำตอบที่พร้อมโพสต์ (แตะ Copy ได้ทันที)', value: `\`\`\`text\n${finalAnswer.slice(0, 1024)}\n\`\`\`` }
+      )
+      .setFooter({ text: `Candidate ID: #${candidateId} • สถานะ: พร้อมนำไปตอบในกระทู้` })
+      .setTimestamp();
+
+    const actionButtons = [];
+    if (row.post_url && row.post_url.startsWith('http')) {
+      actionButtons.push(
+        new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('🔗 ไปยังกระทู้เพื่อตอบ').setURL(row.post_url)
+      );
+    }
+    actionButtons.push(
+      new ButtonBuilder().setCustomId(`markposted_${candidateId}`).setLabel('✅ บันทึกว่าโพสต์แล้ว (Mark as Posted)').setStyle(ButtonStyle.Success)
+    );
+    actionButtons.push(
+      new ButtonBuilder().setCustomId(`copy_answer_${candidateId}`).setLabel('📋 แสดงข้อความเต็ม').setStyle(ButtonStyle.Secondary)
     );
 
+    const actionRow = new ActionRowBuilder().addComponents(actionButtons);
+
     await interaction.editReply({
-      content: `📋 **Approved for Manual Posting** (${row.platform})\n👤 **อนุมัติโดย:** \`${reviewedBy}\`\nThread: ${row.post_url}\n\n**นำข้อความด้านล่างไปตอบในกระทู้ด้วยตนเอง เมื่อเสร็จแล้วกดปุ่ม "Mark as Posted":**`,
-      components: [markPostedRow],
-    });
-    await interaction.followUp({
-      content: `🔗 **Thread Link:** ${row.post_url}\nDraft Answer:\n\`\`\`\n${finalAnswer}\n\`\`\``,
+      content: null,
+      embeds: [approvedEmbed],
+      components: [actionRow]
     });
   }
 }
@@ -1852,7 +1936,7 @@ app.post('/notify', async (req, res) => {
     }
 
     const embed = createCandidateEmbed(candidate);
-    const row = createActionButtons(candidate.id);
+    const row = createActionButtons(candidate.id, candidate.post_url);
 
     await channel.send({ embeds: [embed], components: [row] });
     return res.json({ ok: true, id: candidate.id });
@@ -1893,10 +1977,14 @@ app.post('/flow2/trigger', async (req, res) => {
   }
 });
 
-const PORT = 3000;
-app.listen(PORT, () => console.log(`Internal notify API listening on port ${PORT}`));
+if (require.main === module) {
+  const PORT = 3000;
+  app.listen(PORT, () => console.log(`Internal notify API listening on port ${PORT}`));
 
-client.login(process.env.DISCORD_BOT_TOKEN);
+  if (process.env.DISCORD_BOT_TOKEN) {
+    client.login(process.env.DISCORD_BOT_TOKEN).catch(e => console.error('[Bot Login Error]', e.message));
+  }
+}
 
 module.exports = {
   buildFlow2Card,

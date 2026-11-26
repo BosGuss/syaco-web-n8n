@@ -122,18 +122,65 @@ const mathWorksheet = { title: 'สื่อการสอนครูประ
 assert.strictEqual(isSolutionPost(mathWorksheet), false, 'Primary school worksheet should be rejected');
 console.log('✔ Primary school worksheet correctly rejected');
 
-// Positive cases
-const erpPost = { title: 'ระวังเป็นเหยื่อกับการเลือกระบบซอฟต์แวร์ ERP', snippet: 'ปัญหาการเลือกโปรแกรม ERP โรงงาน และข้อควรระวังในการเซ็นสัญญากับ Vendor...' };
-assert.strictEqual(isSolutionPost(erpPost), true, 'ERP software selection should pass');
-console.log('✔ ERP software selection post passed');
+// 5.1 Seller Promotions & Non-Pain-Point Posts Rejection
+console.log('\n--- 5.1 Testing Seller Promotions & Non-Pain-Point Posts Rejection ---');
+const sellerErp = {
+  title: 'รับทำระบบ ERP โรงงาน พัฒนาระบบตามใจคุณ ราคาเริ่มต้น 50,000 บาท',
+  snippet: 'บริษัทเรารับวางระบบ ERP และ WMS ยินดีให้บริการ สนใจติดต่อโทร 081-234-5678 หรือทักแชท inbox ได้เลย'
+};
+assert.strictEqual(isSolutionPost(sellerErp), false, 'Seller promotion for ERP should be rejected');
+console.log('✔ "รับทำระบบ ERP (Seller promotion)" correctly rejected');
 
-const wmsPost = { title: 'เปรียบเทียบ WMS แบบเก่า vs. WMS ยุคใหม่ ปี 2025', snippet: 'การบริหารจัดการคลังสินค้า ตัดสต็อกด้วย Barcode และเชื่อมโยงข้อมูลแบบ Real-time...' };
-assert.strictEqual(isSolutionPost(wmsPost), true, 'WMS comparison should pass');
-console.log('✔ WMS comparison post passed');
+const sellerWms = {
+  title: 'โปรโมชั่นพิเศษ! โปรแกรม WMS คลังสินค้า Demo ฟรี ขอใบเสนอราคาได้ที่นี่',
+  snippet: 'จำหน่ายโปรแกรมสต็อกสินค้า Barcode แอดไลน์ @line_wms เพื่อติดต่อเรา'
+};
+assert.strictEqual(isSolutionPost(sellerWms), false, 'Seller promotion for WMS should be rejected');
+console.log('✔ "โปรแกรม WMS Demo ฟรี ขอใบเสนอราคา (Seller ad)" correctly rejected');
 
-const plcPost = { title: 'ฝึกการเขียนโปรแกรม PLC ด้วย Factory IO | สอบถาม factory IO ไม่ connect PLC Sim มีวิธีแก้ไขไหมครับ', snippet: 'ขออนุญาตสอบถามพี่ๆหน่อยครับ factory IO ไม่ connect PLC Sim...' };
-assert.strictEqual(isSolutionPost(plcPost), true, 'PLC troubleshooting post should pass');
-console.log('✔ PLC troubleshooting post passed');
+const sellerEnglish = {
+  title: 'Best ERP Solutions - Our Services and Implementation',
+  snippet: 'We offer end-to-end ERP development and cloud migration. Contact us today or request a demo!'
+};
+assert.strictEqual(isSolutionPost(sellerEnglish), false, 'English vendor sales post should be rejected');
+console.log('✔ "Our services / Contact us (English vendor post)" correctly rejected');
+
+const passiveArticle = {
+  title: 'บทความ: ความสำคัญของระบบ ERP และ WMS ในยุคดิจิทัล',
+  snippet: 'การนำระบบ ERP มาใช้ช่วยเพิ่มประสิทธิภาพการทำงานในโรงงานและลดต้นทุนในระยะยาว'
+};
+assert.strictEqual(isSolutionPost(passiveArticle), false, 'Passive solution article without pain point or inquiry intent should be rejected');
+console.log('✔ Passive solution article without pain point/inquiry correctly rejected');
+
+// 5.2 Genuine Pain Points Acceptance (Positive cases)
+console.log('\n--- 5.2 Testing Genuine Pain Points Acceptance ---');
+const painPointStock = {
+  title: 'เจอปัญหาสต็อกสินค้าไม่ตรงกับหน้างาน ตัดสต็อก Barcode ผิดพลาด แก้ยังไงดีครับ',
+  snippet: 'ตอนนี้คลังสินค้าปวดหัวมาก ของหายและยอดสต็อกในระบบไม่ตรงกับของจริง มีวิธีแก้หรือระบบแนะนำไหมครับ'
+};
+assert.strictEqual(isSolutionPost(painPointStock), true, 'Real stock pain point inquiry must pass');
+console.log('✔ "ปัญหาสต็อกสินค้าไม่ตรง แก้ยังไงดี" passed');
+
+const painPointSeekingVendor = {
+  title: 'โรงงานกำลังหาโปรแกรม WMS และระบบสต็อก ช่วยแนะนำเจ้าไหนดีครับ',
+  snippet: 'อยากทราบว่ามีโปรแกรม WMS ตัวไหนที่ใช้งานง่ายและเสถียรบ้างครับ อยากปรึกษาผู้มีประสบการณ์'
+};
+assert.strictEqual(isSolutionPost(painPointSeekingVendor), true, 'Seeking WMS vendor recommendation must pass');
+console.log('✔ "กำลังหาโปรแกรม WMS แนะนำเจ้าไหนดี" passed');
+
+const painPointPlcError = {
+  title: 'เชื่อมต่อ PLC กับ SAP ไม่ผ่าน ติด error ฐานข้อมูล มีใครเคยเจอบ้างครับ',
+  snippet: 'ดึงข้อมูล Tag จาก SCADA PLC แล้วส่งเข้า SAP ไม่ได้ ระบบค้าง ช่วยแนะนำวิธีแก้หน่อยครับ'
+};
+assert.strictEqual(isSolutionPost(painPointPlcError), true, 'PLC/SAP connection error troubleshooting must pass');
+console.log('✔ "เชื่อมต่อ PLC กับ SAP ติด error" passed');
+
+const painPointEnglish = {
+  title: 'Struggling with inventory tracking in manufacturing plant, looking for WMS recommendations',
+  snippet: 'Having trouble keeping warehouse stock synchronized with ERP. Anyone recommend a reliable system or how to handle this?'
+};
+assert.strictEqual(isSolutionPost(painPointEnglish), true, 'English pain point & recommendation inquiry must pass');
+console.log('✔ English pain point & system recommendation inquiry passed');
 
 // 6. Deduplication with excludeUrls
 console.log('\n--- 6. Testing Deduplication (excludeUrls) ---');

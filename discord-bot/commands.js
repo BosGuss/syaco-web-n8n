@@ -245,25 +245,61 @@ async function verifyGemini(apiKey, model) {
 
 function createCandidateEmbed(row) {
   const cut = (s, n) => (String(s || '').length > n ? s.slice(0, n - 3) + '...' : s || '-');
-  return new EmbedBuilder()
-    .setTitle(`[${row.platform}] ${cut(row.post_title, 200)}`)
+  const getPlatformMeta = (plat) => {
+    const p = String(plat || '').toLowerCase();
+    if (p === 'pantip') return { emoji: '🔴', name: 'Pantip', color: 0xd84315, mode: '📋 Manual Post (คัดลอกไปตอบเอง)' };
+    if (p === 'facebook') return { emoji: '🔷', name: 'Facebook', color: 0x1877f2, mode: '📋 Manual Post (คัดลอกไปตอบเอง)' };
+    if (p === 'linkedin') return { emoji: '🔵', name: 'LinkedIn', color: 0x0a66c2, mode: '📋 Manual Post (คัดลอกไปตอบเอง)' };
+    if (p === 'bluesky') return { emoji: '🦋', name: 'Bluesky', color: 0x0085ff, mode: '⚡ Auto-Post (โพสต์ให้อัตโนมัติ)' };
+    if (p === 'devto') return { emoji: '📝', name: 'Dev.to', color: 0x0a0a0a, mode: '⚡ Auto-Post (โพสต์ให้อัตโนมัติ)' };
+    return { emoji: '🌐', name: 'Web', color: 0x5865f2, mode: '📋 Manual Post (คัดลอกไปตอบเอง)' };
+  };
+
+  const meta = getPlatformMeta(row.platform);
+  const score = parseInt(row.match_score || 0, 10);
+  let scoreBadge = `📊 ${score}%`;
+  if (score >= 90) scoreBadge = `🔥 ${score}% (ความต้องการตรงมาก)`;
+  else if (score >= 80) scoreBadge = `🎯 ${score}% (ตรงเป้าหมาย)`;
+  else if (score >= 70) scoreBadge = `✨ ${score}% (ปานกลาง)`;
+
+  const embed = new EmbedBuilder()
+    .setTitle(`${meta.emoji} [${meta.name}] ${cut(row.post_title, 180)}`)
     .setURL(row.post_url)
-    .setColor(0x5865f2)
+    .setColor(meta.color)
+    .setDescription(
+      `📌 **กระทู้ต้นทาง:** [${cut(row.post_title, 120)}](${row.post_url})\n\n` +
+      `💬 **ข้อความที่ AI ร่างไว้ (Draft Answer):**\n` +
+      `>>> ${cut(row.answer, 1400)}`
+    )
     .addFields(
-      { name: 'Solution', value: cut(row.solution_title, 250), inline: true },
-      { name: 'Match Score', value: String(row.match_score), inline: true },
-      { name: 'Platform', value: String(row.platform), inline: true },
-      { name: 'Matched Problem', value: cut(row.matched_problem, 500) },
-      { name: 'Draft Answer', value: cut(row.answer, 1000) }
-    );
+      { name: '📦 โซลูชันเป้าหมาย', value: cut(row.solution_title, 250), inline: true },
+      { name: '🎯 คะแนนความตรง', value: scoreBadge, inline: true },
+      { name: '🌐 รูปแบบการทำงาน', value: meta.mode, inline: true },
+      { name: '🔍 ปัญหาที่ลูกค้าพบ (Matched Problem)', value: cut(row.matched_problem, 500), inline: false }
+    )
+    .setFooter({ text: `Candidate ID: #${row.id} • สถานะ: ${row.status || 'รอตรวจทาน'}` })
+    .setTimestamp();
+
+  return embed;
 }
 
-function createActionButtons(id) {
-  return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`approve_${id}`).setLabel('Approve').setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId(`edit_${id}`).setLabel('Edit Answer').setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(`reject_${id}`).setLabel('Reject').setStyle(ButtonStyle.Danger)
+function createActionButtons(id, postUrl = null) {
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`approve_${id}`).setLabel('✅ อนุมัติคำตอบ').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId(`edit_${id}`).setLabel('✏️ แก้ไขข้อความ').setStyle(ButtonStyle.Secondary)
   );
+
+  if (postUrl && String(postUrl).startsWith('http')) {
+    row.addComponents(
+      new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('🔗 เปิดดูกระทู้จริง').setURL(postUrl)
+    );
+  }
+
+  row.addComponents(
+    new ButtonBuilder().setCustomId(`reject_${id}`).setLabel('❌ ปฏิเสธ').setStyle(ButtonStyle.Danger)
+  );
+
+  return row;
 }
 
 function buildFlow2Card(d, fallbackSolutionTitle) {
@@ -366,17 +402,87 @@ async function handleFlow2DraftsNotify({ pool, channel, solution_id, solution_ti
   return { ok: true, type: 'flow2_drafts', count: rows.length };
 }
 
+/**
+ * ตรวจสอบโซลูชันจาก API และฐานข้อมูลว่ามีรายการที่ต้องสร้างหรือตรวจทานคอนเทนต์หรือไม่
+ * - โซลูชันใหม่ที่ยังไม่ได้ประมวลผล (ไม่มีใน processed_solutions ที่ status = 'completed')
+ * - โซลูชันเดิมที่มีฉบับร่างค้างตรวจทานใน content_drafts (status = 'pending_review')
+ * @param {object} pool PostgreSQL connection pool
+ * @param {string} [apiUrl] SyaCo solutions API URL
+ * @returns {Promise<Array>} รายการโซลูชันที่ต้องดำเนินการ
+ */
+async function getFlow2CandidateSolutions(pool, apiUrl = process.env.SYACO_API_URL || 'https://www.syaco.co.th/api/solutions') {
+  try {
+    const headers = { 'Accept': 'application/json' };
+    if (process.env.SYACO_API_TOKEN) {
+      headers['Authorization'] = `Bearer ${process.env.SYACO_API_TOKEN}`;
+    }
+
+    const res = await fetch(apiUrl, {
+      headers,
+      signal: AbortSignal.timeout(10000)
+    });
+
+    if (!res.ok) {
+      console.warn(`[Flow2] Failed to fetch solutions API: HTTP ${res.status}`);
+      return [];
+    }
+
+    const data = await res.json();
+    const solutions = Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : (data?.id ? [data] : []));
+    if (!solutions.length) {
+      return [];
+    }
+
+    const { rows: processedRows } = await pool.query(`
+      SELECT solution_id, 
+             EXISTS (
+               SELECT 1 FROM content_drafts 
+               WHERE content_drafts.solution_id = processed_solutions.solution_id 
+                 AND content_drafts.status = 'pending_review'
+             ) AS has_pending
+      FROM processed_solutions 
+      WHERE status = 'completed'
+    `);
+
+    const processedMap = new Map();
+    for (const row of processedRows) {
+      processedMap.set(String(row.solution_id), row.has_pending === true || row.has_pending === 'true' || row.has_pending === 1);
+    }
+
+    const candidateSolutions = [];
+    for (const s of solutions) {
+      if (!s || !s.id) continue;
+      const solId = String(s.id);
+      if (!processedMap.has(solId)) {
+        candidateSolutions.push({ ...s, isReminder: false });
+      } else if (processedMap.get(solId) === true) {
+        candidateSolutions.push({ ...s, isReminder: true });
+      }
+    }
+
+    return candidateSolutions;
+  } catch (err) {
+    console.error('[Flow2] Error checking candidate solutions:', err.message);
+    return [];
+  }
+}
+
 function buildRadarEmbedsAndMenu(threads, solutionsCovered = []) {
   const cut = (str, len) => (String(str || '').length > len ? str.slice(0, len - 3) + '...' : str || '');
   const getEmoji = (plat) => {
-    if (plat === 'pantip') return '🔴';
-    if (plat === 'linkedin') return '🔵';
-    if (plat === 'facebook') return '🔷';
+    const p = String(plat || '').toLowerCase();
+    if (p === 'pantip') return '🔴';
+    if (p === 'linkedin') return '🔵';
+    if (p === 'facebook') return '🔷';
     return '🌐';
   };
 
+  const ptCount = threads.filter(t => t.platform === 'pantip').length;
+  const fbCount = threads.filter(t => t.platform === 'facebook').length;
+  const liCount = threads.filter(t => t.platform === 'linkedin').length;
+
   const embeds = [];
-  const chunkSize = 5;
+  const chunkSize = 10;
   const totalChunks = Math.ceil(threads.length / chunkSize) || 1;
 
   for (let c = 0; c < totalChunks; c++) {
@@ -385,56 +491,73 @@ function buildRadarEmbedsAndMenu(threads, solutionsCovered = []) {
 
     let desc = '';
     if (c === 0) {
-      const nowYear = new Date().getFullYear();
-      const prevYear = nowYear - 1;
-      const nowBE = nowYear + 543;
-      const prevBE = nowBE - 1;
-      const solText = solutionsCovered.length > 0 ? cut(solutionsCovered.join(', '), 150) : 'SyaCo Enterprise Solutions';
-      desc += `🎯 **โซลูชันที่สำรวจ:** ${solText}\n📅 **เงื่อนไข:** กระทู้/โพสต์ล่าสุดไม่เกิน 1 ปี (${prevYear} - ${nowYear} / พ.ศ. ${prevBE} - ${nowBE})\n💡 **คำแนะนำ:** เลือกกระทู้ที่ต้องการจากเมนูด้านล่างเพื่อให้ AI ร่างคำตอบได้ทันที\n\n`;
+      const solText = solutionsCovered.length > 0 ? cut(solutionsCovered.join(', '), 140) : 'SyaCo Enterprise Solutions';
+      desc += `📊 **สรุปผลสำรวจ:** ทั้งหมด **${threads.length}** รายการ (${ptCount > 0 ? `🔴 Pantip: ${ptCount}  ` : ''}${fbCount > 0 ? `🔷 Facebook: ${fbCount}  ` : ''}${liCount > 0 ? `🔵 LinkedIn: ${liCount}` : ''})\n` +
+              `🎯 **โซลูชันเป้าหมาย:** ${solText}\n` +
+              `⚡ **วิธีสั่งงานด่วน:** แตะปุ่ม **[⚡ ร่างข้อ X]** ด้านล่าง หรือเลือกจากดรอปดาวน์เพื่อสั่ง AI ร่างคำตอบทันที\n` +
+              `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+    } else {
+      desc += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
     }
 
     desc += chunk.map((t, idx) => {
       const num = startNum + idx;
       const emoji = getEmoji(t.platform);
-      const title = cut(t.post_title || t.title, 60);
-      const snippet = cut(t.snippet, 70);
+      const title = cut(t.post_title || t.title, 65);
+      const snippet = cut(t.snippet, 85);
       const categoryTag = t.solutionCategory ? `\`${cut(t.solutionCategory, 25)}\`` : `\`${(t.platform || 'WEB').toUpperCase()}\``;
       return `**${num}.** ${emoji} [${title}](${t.post_url}) ${categoryTag}\n> ${snippet || 'ไม่มีคำอธิบายเพิ่มเติม'}`;
     }).join('\n\n');
 
+    const titlePrefix = c === 0 ? '🌅 [Daily Thread Radar] เรดาร์กระทู้ประจำวัน' : '📋 [Daily Thread Radar] รายการกระทู้เพิ่มเติม';
     const embed = new EmbedBuilder()
-      .setTitle(`🌅 [Daily Thread Radar] เรดาร์กระทู้ประจำวัน (${c + 1}/${totalChunks}) — ทั้งหมด ${threads.length} รายการ`)
+      .setTitle(`${titlePrefix} (หน้า ${c + 1}/${totalChunks}) — รวม ${threads.length} รายการ`)
       .setColor(0x5865f2)
-      .setDescription(cut(desc, 1800) || 'ไม่พบรายการ')
+      .setDescription(cut(desc, 3900) || 'ไม่พบรายการ')
       .setFooter({ text: `SyaCo Community Lead Hunter • หน้า ${c + 1}/${totalChunks}` })
       .setTimestamp();
 
     embeds.push(embed);
   }
 
-  // สร้าง StringSelectMenu สำหรับเลือกกระทู้ที่ต้องการร่างคำตอบ (สูงสุด 25 ตัวเลือก)
+  const components = [];
+
+  // 1. แถวปุ่มเลือกด่วน (Quick Action Buttons สำหรับ 5 กระทู้แรก)
+  if (threads.length > 0) {
+    const quickButtons = threads.slice(0, 5).map((t, idx) => {
+      return new ButtonBuilder()
+        .setCustomId(`lead_draft_${t.id}`)
+        .setLabel(`⚡ ร่างข้อ ${idx + 1}`)
+        .setStyle(ButtonStyle.Primary);
+    });
+    components.push(new ActionRowBuilder().addComponents(quickButtons));
+  }
+
+  // 2. แถวดรอปดาวน์เมนู (สำหรับเลือกดูหรือเลือกร่างได้ถึง 25 กระทู้)
   const menuOptions = threads.slice(0, 25).map((t, idx) => {
     const num = idx + 1;
     const cleanTitle = cut(t.post_title || t.title || 'กระทู้ไม่มีชื่อ', 50);
-    const cleanSnippet = cut(t.snippet || t.post_url, 45);
+    const platName = (t.platform || 'WEB').toUpperCase();
+    const catName = t.solutionCategory ? cut(t.solutionCategory, 18) : platName;
     return {
-      label: `${num}. [${(t.platform || 'WEB').toUpperCase()}] ${cleanTitle}`,
-      description: cleanSnippet || t.post_url,
+      label: `#${num} [${platName}] ${cleanTitle}`,
+      description: `${catName} • คลิกเพื่อส่งให้ AI วิเคราะห์และร่างคำตอบ`,
       value: String(t.id),
       emoji: getEmoji(t.platform)
     };
   });
 
-  const selectMenu = new StringSelectMenuBuilder()
-    .setCustomId('select_radar_draft')
-    .setPlaceholder('🎯 เลือกกระทู้ที่ต้องการให้ AI ช่วยร่างคำตอบ (เลือกได้ 1-5 ข้อ)...')
-    .setMinValues(1)
-    .setMaxValues(Math.min(5, menuOptions.length))
-    .addOptions(menuOptions);
+  if (menuOptions.length > 0) {
+    const selectMenu = new StringSelectMenuBuilder()
+      .setCustomId('select_radar_draft')
+      .setPlaceholder('🎯 เลือกกระทู้เพื่อร่างคำตอบ (หรือแตะปุ่มลัดด้านบน)...')
+      .setMinValues(1)
+      .setMaxValues(Math.min(5, menuOptions.length))
+      .addOptions(menuOptions);
+    components.push(new ActionRowBuilder().addComponents(selectMenu));
+  }
 
-  const actionRow = new ActionRowBuilder().addComponents(selectMenu);
-
-  return { embeds, components: [actionRow] };
+  return { embeds, components };
 }
 
 // 2. กำหนดคำสั่งทั้งหมด (7 คำสั่งหลัก สั้น กระชับ จำง่าย ครบทุกฟังก์ชัน)
@@ -687,9 +810,22 @@ async function handleCommand(interaction, { pool, client }) {
 
   // 1. คำสั่ง /find (ค้นหากระทู้/โพสต์น่าสนใจ หรือดึงเรดาร์ประจำวัน 20 รายการ)
   if (commandName === 'find' || commandName === 'find-threads' || commandName === 'radar') {
-    const rawKeyword = (interaction.options?.getString?.('keyword') || '').trim();
-    const platform = interaction.options?.getString?.('platform') || 'all';
+    let rawKeyword = (interaction.options?.getString?.('keyword') || '').trim();
+    let platform = interaction.options?.getString?.('platform') || 'all';
     const limit = interaction.options?.getInteger?.('limit') || 20;
+
+    // ตรวจจับกรณีผู้ใช้พิมพ์ชื่อแพลตฟอร์มในช่อง keyword เช่น /find facebook, /find pantip, /find linkedin
+    const lowerKw = rawKeyword.toLowerCase();
+    if ((lowerKw === 'facebook' || lowerKw === 'fb') && platform === 'all') {
+      platform = 'facebook';
+      rawKeyword = '';
+    } else if (lowerKw === 'pantip' && platform === 'all') {
+      platform = 'pantip';
+      rawKeyword = '';
+    } else if (lowerKw === 'linkedin' && platform === 'all') {
+      platform = 'linkedin';
+      rawKeyword = '';
+    }
 
     await interaction.deferReply();
 
@@ -708,11 +844,11 @@ async function handleCommand(interaction, { pool, client }) {
 
       const { collectDailyRadarThreads, searchRecentThreads } = require('./thread-search');
 
-      // ดึงรายการ URL ที่เคยค้นพบไปแล้ว (จาก cache และ backlink candidates) เพื่อป้องกันการค้นพบซ้ำ
+      // ดึงรายการ URL ที่เคยค้นพบไปแล้ว (จาก cache 24 ชม. และ backlink candidates 48 ชม.) เพื่อป้องกันการค้นพบซ้ำ
       const { rows: cachedRows } = await pool.query(`
-        SELECT DISTINCT post_url FROM thread_search_cache WHERE created_at > NOW() - INTERVAL '7 days'
+        SELECT DISTINCT post_url FROM thread_search_cache WHERE created_at > NOW() - INTERVAL '24 hours'
         UNION
-        SELECT DISTINCT post_url FROM backlink_candidates WHERE platform = $1 OR $1 = 'all'
+        SELECT DISTINCT post_url FROM backlink_candidates WHERE (platform = $1 OR $1 = 'all') AND created_at > NOW() - INTERVAL '48 hours'
       `, [platform]);
       const excludeUrls = new Set(cachedRows.map(r => r.post_url).filter(Boolean));
 
@@ -743,34 +879,11 @@ async function handleCommand(interaction, { pool, client }) {
         }
       }
 
-      // หากคัดกรองด้วย excludeUrls แล้วผลลัพธ์ว่างเปล่า ให้ผ่อนปรนค้นหาซ้ำโดยไม่ตัด excludeUrls
-      // เพื่อให้ผู้ใช้มีกระทู้คุณภาพสำหรับสร้าง Backlink เสมอ (ป้องกันข้อความ "ไม่พบกระทู้")
-      if (!results.length && excludeUrls.size > 0) {
-        if (isRadar) {
-          const fallbackRadar = await collectDailyRadarThreads(limit, new Set());
-          results = fallbackRadar.results;
-          solutionsCovered = fallbackRadar.solutionsCovered;
-        } else {
-          const isAutoCategory = !rawKeyword || rawKeyword === 'auto' || rawKeyword.startsWith('auto:');
-          const mode = isAutoCategory ? 'auto' : 'manual';
-          const fallbackRes = await searchRecentThreads({
-            keyword: rawKeyword,
-            mode,
-            platform,
-            limit,
-            excludeUrls: new Set()
-          });
-          results = fallbackRes.results;
-          if (fallbackRes.autoMeta?.solutionTitle) {
-            solutionsCovered = [fallbackRes.autoMeta.solutionTitle];
-          } else {
-            solutionsCovered = [rawKeyword || (platform !== 'all' ? platform.toUpperCase() : 'General')];
-          }
-        }
-      }
-
       if (!results.length) {
-        return await interaction.editReply('🔍 ไม่พบกระทู้หรือโพสต์ใหม่ที่ตรงกับเงื่อนไขในช่วง 1 ปีนี้ กรุณาลองใหม่อีกครั้ง');
+        if (platform === 'facebook') {
+          return await interaction.editReply('🔍 **ไม่พบโพสต์บน Facebook ที่ตรงกับเงื่อนไขในช่วง 1 ปีนี้**\n*(เนื่องจากนโยบายความเป็นส่วนตัวของ Facebook ปิดกั้น Search Engine ไม่ให้เข้าถึงโพสต์สาธารณะและกลุ่มสนทนา)*\n\n💡 **คำแนะนำ:** ลองใช้ `/find platform:pantip` หรือ `/find` (โหมดเรดาร์รวม) เพื่อค้นพบกระทู้ถาม-ตอบและ Pain Point ธุรกิจจริงที่พร้อมให้ AI ร่างคำตอบและตอบกลับได้ทันทีครับ');
+        }
+        return await interaction.editReply('🔍 ไม่พบกระทู้หรือโพสต์ใหม่ที่ตรงกับเงื่อนไขในช่วง 1 ปีนี้ กรุณาลองใหม่อีกครั้ง หรือลองค้นหาโดยเว้นว่างช่อง Keyword เพื่อให้ระบบดึงเรดาร์ประจำวันอัตโนมัติครับ');
       }
 
       // บันทึกลง thread_search_cache เพื่อเชื่อมกับ Select Menu
@@ -1296,7 +1409,7 @@ async function handleCommand(interaction, { pool, client }) {
         if (!rows.length) return await interaction.editReply(`❌ ไม่พบข้อมูล Candidate ID: ${candidateId}`);
         const row = rows[0];
         const embed = createCandidateEmbed(row);
-        const actionRow = createActionButtons(row.id);
+        const actionRow = createActionButtons(row.id, row.post_url);
         return await interaction.editReply({
           content: `🔍 **Candidate ID: \`${row.id}\`** (สถานะ: \`${row.status}\`)`,
           embeds: [embed],
@@ -1348,7 +1461,7 @@ async function handleCommand(interaction, { pool, client }) {
         for (let i = 0; i < backlinkRows.length; i++) {
           const row = backlinkRows[i];
           const embed = createCandidateEmbed(row);
-          const actionRow = createActionButtons(row.id);
+          const actionRow = createActionButtons(row.id, row.post_url);
           await interaction.followUp({
             content: `💬 **[Flow 3] [${i + 1}/${backlinkRows.length}] Candidate ID: \`${row.id}\`** | Platform: **${row.platform}** | Score: \`${row.match_score || '-'}\``,
             embeds: [embed],
@@ -1521,6 +1634,14 @@ async function handleCommand(interaction, { pool, client }) {
   // 6. คำสั่ง /publish (และ alias /publish-flow, /run-flow2, /flow2)
   if (commandName === 'publish' || commandName === 'publish-flow' || commandName === 'run-flow2' || commandName === 'flow2') {
     await interaction.deferReply();
+
+    const candidates = await getFlow2CandidateSolutions(pool);
+    if (!candidates || candidates.length === 0) {
+      return await interaction.editReply(
+        'ℹ️ **ปัจจุบันไม่มีโซลูชันใหม่หรือฉบับร่างที่รอตรวจทาน**\nโซลูชันทั้งหมดบนระบบได้รับการสร้างคอนเทนต์เรียบร้อยแล้ว (สามารถใช้คำสั่ง `/drafts` เพื่อดูประวัติฉบับร่างทั้งหมดได้ครับ)'
+      );
+    }
+
     const webhookUrl = process.env.N8N_FLOW2_WEBHOOK_URL || 'http://n8n:5678/webhook/flow2-run-publisher';
     try {
       const res = await fetch(webhookUrl, {
@@ -1536,7 +1657,7 @@ async function handleCommand(interaction, { pool, client }) {
 
       if (res.ok) {
         return await interaction.editReply(
-          '✍️ **สั่งรัน Flow 2 (Content Creator & Publisher) บน n8n สำเร็จแล้ว!**\nระบบกำลังตรวจสอบโซลูชันที่เสร็จสมบูรณ์ และร่างเนื้อหาบทความ/โซเชียลพร้อมปุ่มอนุมัติเผยแพร่มายัง Discord ครับ'
+          `✍️ **สั่งรัน Flow 2 (Content Creator & Publisher) บน n8n สำเร็จแล้ว!** (พบ ${candidates.length} รายการ)\nระบบกำลังตรวจสอบโซลูชันที่เสร็จสมบูรณ์ และร่างเนื้อหาบทความ/โซเชียลพร้อมปุ่มอนุมัติเผยแพร่มายัง Discord ครับ`
         );
       } else {
         return await interaction.editReply(`⚠️ **n8n ตอบกลับสถานะ HTTP ${res.status}**\nปลายทาง: \`${webhookUrl}\``);
@@ -1740,6 +1861,7 @@ module.exports = {
   buildRadarEmbedsAndMenu,
   buildFlow2Card,
   handleFlow2DraftsNotify,
+  getFlow2CandidateSolutions,
   normalizeDevtoCookie,
   saveAndVerifyDevtoCookie,
   saveAndVerifyDevtoKey,

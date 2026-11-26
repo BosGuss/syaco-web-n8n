@@ -17,10 +17,10 @@ const SYACO_CATALOG = [
     titleEn: 'Data Integration & APIs',
     descTh: 'แพลตฟอร์มกลางสำหรับเชื่อมโยงข้อมูลระหว่างระบบ SAP/ERP เครื่องจักรหน้างาน (PLC) และระบบภายนอกอื่นๆ เข้าด้วยกัน',
     curatedQueries: [
-      'เชื่อมต่อ PLC กับ SAP',
-      'ดึงข้อมูลเครื่องจักรขึ้น Cloud',
-      'ระบบ ERP โรงงาน เชื่อมต่อ API',
-      'SCADA PLC เชื่อมต่อ ฐานข้อมูล'
+      'เชื่อมต่อ PLC',
+      'SCADA PLC',
+      'ERP API',
+      'PLC SAP'
     ]
   },
   {
@@ -30,10 +30,10 @@ const SYACO_CATALOG = [
     titleEn: 'Real-time Tracking & Logistics',
     descTh: 'แพลตฟอร์มบริหารจัดการเที่ยววิ่งและการขนส่ง ติดตามพิกัดรถและสินค้าแบบเรียลไทม์ พร้อมบันทึกหลักฐานการส่งมอบงาน',
     curatedQueries: [
-      'ระบบติดตามรถขนส่งสินค้า',
-      'โปรแกรมบันทึกการส่งของ POD',
-      'จัดการเที่ยววิ่ง logistics',
-      'ปัญหาพนักงานส่งของส่งไม่ตรงเวลา'
+      'ระบบติดตามรถ',
+      'ขนส่งสินค้า ปัญหา',
+      'logistics ปัญหา',
+      'โปรแกรมติดตามรถ'
     ]
   },
   {
@@ -43,10 +43,10 @@ const SYACO_CATALOG = [
     titleEn: 'Smart Inventory & Warehouse',
     descTh: 'แพลตฟอร์มบริหารจัดการคลังสินค้าและวัตถุดิบ (WMS) ตรวจสอบวันหมดอายุ และติดตามสต๊อกแบบเรียลไทม์ผ่าน Barcode/QR',
     curatedQueries: [
-      'โปรแกรมจัดการสต็อกสินค้า คลังสินค้า',
-      'ระบบ WMS ตัดสต็อก Barcode',
-      'ปัญหาสต็อกของไม่ตรงกับระบบ',
-      'โปรแกรมเช็คสต็อกสินค้า'
+      'WMS',
+      'คลังสินค้า',
+      'สต็อกสินค้า ปัญหา',
+      'โปรแกรมจัดการคลังสินค้า'
     ]
   },
   {
@@ -56,10 +56,10 @@ const SYACO_CATALOG = [
     titleEn: 'Analytics & Dashboard',
     descTh: 'แพลตฟอร์มรวบรวมข้อมูลจากระบบต่างๆ ในองค์กรมาแสดงผลเป็น Dashboard และรายงานเชิงลึกสำหรับผู้บริหาร',
     curatedQueries: [
-      'Dashboard ผู้บริหาร โรงงาน',
-      'โปรแกรมรวมรายงานยอดขาย KPI',
-      'ปัญหาทำรายงานล่าช้า',
-      'ระบบ Business Intelligence องค์กร'
+      'Dashboard ผู้บริหาร',
+      'Power BI ปัญหา',
+      'รายงานยอดขาย ปัญหา',
+      'Power BI ERP'
     ]
   },
   {
@@ -69,10 +69,10 @@ const SYACO_CATALOG = [
     titleEn: 'AI & Automation',
     descTh: 'นำเทคโนโลยี AI มาประยุกต์ใช้กับกระบวนการทำงาน เช่น คัดแยกสิ่งของด้วย Computer Vision หรือตรวจสอบ Defect',
     curatedQueries: [
-      'AI ตรวจสอบความผิดปกติการผลิต',
-      'ระบบตรวจจับ Defect กล้อง AI โรงงาน',
-      'ระบบอัตโนมัติ ลดแรงงานคน',
-      'AI OCR อ่านเอกสารอัตโนมัติ'
+      'กล้องตรวจ Defect',
+      'Defect โรงงาน',
+      'ลดของเสียในกระบวนการผลิต',
+      'ตรวจ Defect'
     ]
   },
   {
@@ -82,10 +82,10 @@ const SYACO_CATALOG = [
     titleEn: 'Enterprise Web & Mobile Apps',
     descTh: 'พัฒนาเว็บและโมบายแอปพลิเคชันสำหรับองค์กร รองรับการทำงานแบบ Offline-First บันทึกข้อมูลได้แม้อยู่นอกสัญญาณ',
     curatedQueries: [
-      'แอปบันทึกข้อมูลหน้างาน offline',
-      'ระบบเก็บข้อมูลพนักงานภาคสนาม',
-      'พัฒนาเว็บแอปพลิเคชันองค์กร',
-      'ระบบตรวจงานนอกสถานที่'
+      'แอปองค์กร',
+      'ระบบเก็บข้อมูลพนักงาน',
+      'เขียนเว็บแอป',
+      'แอปโรงงาน'
     ]
   },
   {
@@ -95,10 +95,10 @@ const SYACO_CATALOG = [
     titleEn: 'Alerts & Notification System',
     descTh: 'ระบบแจ้งเตือนและบริหารความเสี่ยง ตรวจจับเหตุการณ์ผิดปกติในกระบวนการทำงาน พร้อมระบบ Workflow อนุมัติเอกสารออนไลน์',
     curatedQueries: [
-      'ระบบแจ้งเตือนความผิดปกติในโรงงาน',
-      'ระบบอนุมัติเอกสารออนไลน์ workflow',
-      'แจ้งเตือนผ่านไลน์ กลุ่มงาน',
-      'ลดขั้นตอนเดินเอกสารในองค์กร'
+      'แจ้งเตือนเครื่องจักร',
+      'Workflow อนุมัติเอกสาร',
+      'เครื่องจักรโรงงาน ปัญหา',
+      'แจ้งเตือน LINE โรงงาน'
     ]
   },
   {
@@ -108,10 +108,10 @@ const SYACO_CATALOG = [
     titleEn: 'Digital Growth & Performance',
     descTh: 'วางโครงสร้างพื้นฐานด้าน Performance ความปลอดภัย และ Technical SEO ให้กับเว็บไซต์และแพลตฟอร์มขององค์กร',
     curatedQueries: [
-      'เว็บองค์กรโหลดช้า ปัญหา performance',
-      'ความปลอดภัยระบบคลาวด์ องค์กร',
-      'ระบบเว็บรองรับผู้ใช้งานพร้อมกันจำนวนมาก',
-      'Technical SEO เว็บไซต์บริษัท'
+      'เว็บองค์กร ช้า',
+      'ระบบเว็บล่ม',
+      'Technical SEO ปัญหา',
+      'Cloud ค่าใช้จ่ายสูง'
     ]
   }
 ];
@@ -192,12 +192,13 @@ async function generateAutoQueries(category = 'auto') {
         `Description: ${solDesc}`,
         '',
         'Task:',
-        'Generate 3-4 distinct, natural Thai or English search queries that enterprise clients, factory managers, or engineers in Thailand would post online when facing real problems this solution solves.',
+        'Generate 3-4 distinct, natural Thai or English search queries that clients, factory managers, IT leads, or engineers in Thailand would post online when facing real PAIN POINTS, troubleshooting issues, or seeking software/vendor recommendations that this solution addresses.',
         'Target platforms: Pantip, LinkedIn, and Facebook.',
         '',
         'Rules:',
         '- 2 to 5 words per query (natural conversational Thai/English phrases).',
-        '- Focus on real pain points, troubleshooting, or system selection (e.g. "โปรแกรมจัดการสต็อก", "เชื่อมต่อ PLC กับ SAP", "ปัญหา ERP โรงงาน").',
+        '- Focus strictly on real PAIN POINTS, troubleshooting questions, or system seeking inquiries (e.g. "ปัญหาสต็อกสินค้าไม่ตรง", "เชื่อมต่อ PLC กับ SAP error แก้ยังไง", "หาโปรแกรม WMS เจ้าไหนดี", "กล้องตรวจ Defect หลุดบ่อย").',
+        '- Do NOT generate vendor promotional phrases (no "รับทำ", "บริการ", "วางระบบ").',
         '- Do NOT use search operators like site: or quotes.',
         '- Return valid JSON matching schema.'
       ].join('\n');
@@ -287,7 +288,7 @@ async function unfurlFacebookMetadata(url) {
         'Accept': 'text/html,application/xhtml+xml',
         'Accept-Language': 'th,en-US;q=0.9,en;q=0.8'
       },
-      signal: AbortSignal.timeout(2500)
+      signal: AbortSignal.timeout(5000)
     });
     if (!res.ok) return null;
     const html = await res.text();
@@ -442,7 +443,14 @@ const THAI_STOP_WORDS = new Set([
   'และ', 'หรือ', 'ของ', 'กับ', 'ปัญหา', 'แนะนำ', 'ระบบ', 'โปรแกรม',
   'จัดการ', 'ทำงาน', 'บริการ', 'ข้อมูล', 'ออนไลน์', 'เวลา', 'บริษัท',
   'ประเทศไทย', 'ทั่วไป', 'ช่วย', 'สอบถาม', 'ขอคำแนะนำ', 'อยากรู้',
-  'วิธี', 'แบบ', 'การ', 'ความ', 'อะไร', 'ทำไม', 'อย่างไร', 'ดีไหม'
+  'วิธี', 'แบบ', 'การ', 'ความ', 'อะไร', 'ทำไม', 'อย่างไร', 'ดีไหม',
+  'แนะนำหน่อย', 'แนะนำที', 'แก้ยังไง', 'ทำยังไง', 'ทำไงดี', 'ทำยังไงดี',
+  'เจ้าไหนดี', 'มีปัญหา', 'เจอปัญหา', 'ช่วยด้วย', 'ช่วยที', 'สอบถามหน่อย',
+  'ปรึกษาหน่อย', 'ป้องกันยังไง', 'เวิร์คไหม', 'โอเคไหม', 'หลุดบ่อย',
+  'ไม่รู้เรื่อง', 'ล่าช้า', 'ไม่ตรง', 'ล่มบ่อย', 'โดนแฮก', 'ไม่มีเน็ต',
+  'ปรึกษา', 'หาคนช่วย', 'จ้างเขียน', 'ช้ามาก', 'แก้ปัญหา', 'ติดปัญหา',
+  'ใครเคยใช้', 'มีใครเคย', 'รีวิว', 'เชื่อมต่อ', 'ติดตั้ง', 'ใช้งาน',
+  'ตั้งค่า', 'วิธีใช้', 'มีวิธี'
 ]);
 
 // คำค้น/เจตนาที่ไม่เกี่ยวข้องกับการหาโซลูชันหรือบริการทางธุรกิจ B2B
@@ -456,11 +464,12 @@ const NEGATIVE_INTENT = [
   // สื่อการสอน / การบ้าน
   'แบบฝึกหัด', 'สื่อการสอน', 'วิชาคณิตศาสตร์', 'การบ้าน', 'เฉลย', 'ชั้น ป.', 'ชั้น ม.', 'รายงาน', 'วิทยานิพนธ์', 'โครงงานมัธยม', 'โครงงานนักเรียน',
   // สุขภาพ / อาหาร / แฟชั่น / บันเทิง / ไลฟ์สไตล์
-  'เปลี่ยนเส้นเอ็น', 'ลดน้ำหนัก', 'อาหารเสริม', 'รีวิวหนัง', 'trailer', 'สิว', 'ผิวขาว', 'เสื้อผ้า', 'ดูดวง', 'ดวงชะตา', 'ราศี', 'รีวิวคาเฟ่', 'ร้านอาหาร', 'ที่พัก', 'โรงแรม', 'ตั๋วเครื่องบิน', 'ท่องเที่ยว', 'เที่ยว', 'ซีรีส์', 'ละคร', 'เพลง', 'ศิลปิน', 'คอนเสิร์ต', 'ความรัก', 'แฟน', 'อกหัก',
+  'เปลี่ยนเส้นเอ็น', 'ลดน้ำหนัก', 'อาหารเสริม', 'รีวิวหนัง', 'trailer', 'สิว', 'ผิวขาว', 'เสื้อผ้า', 'ดูดวง', 'ดวงชะตา', 'ราศี', 'รีวิวคาเฟ่', 'ร้านอาหาร', 'ที่พัก', 'โรงแรม', 'ตั๋วเครื่องบิน', 'ท่องเที่ยว', 'สถานที่ท่องเที่ยว', 'ทริปท่องเที่ยว', 'ซีรีส์', 'ละคร', 'เพลง', 'ศิลปิน', 'คอนเสิร์ต', 'ความรัก', 'แฟน', 'อกหัก',
   // เกม / บันเทิง / คอมพิวเตอร์เล่นเกม (Consumer Gaming)
   'เกม', 'เล่นเกม', 'game', 'games', 'gaming', 'gamer', 'steam', 'roblox', 'valorant', 'rov', 'free fire', 'garena', 'discord bot', 'lag', 'fps', 'ping สูง', 'กระตุก', 'การ์ดจอ', 'สเปคคอม', 'คอมเล่นเกม', 'สตรีมเมอร์', 'mod',
-  // บล็อกส่วนตัว / คอนซูเมอร์แอป / ซ่อมมือถือทั่วไป
-  'บล็อกเกอร์', 'เขียนบล็อก', 'บล็อกส่วนตัว', 'แอปแต่งรูป', 'แอปดูหนัง', 'แอปหาคู่', 'เกมมือถือ', 'ซ่อมมือถือ', 'หน้าจอแตก', 'แบตเสื่อม', 'หูฟัง', 'เคสมือถือ'
+  // บล็อกส่วนตัว / คอนซูเมอร์แอป / ซ่อมมือถือทั่วไป / แกดเจ็ตส่วนบุคคล / อุปกรณ์ครัวเรือน
+  'บล็อกเกอร์', 'เขียนบล็อก', 'บล็อกส่วนตัว', 'แอปแต่งรูป', 'แอปดูหนัง', 'แอปหาคู่', 'เกมมือถือ', 'ซ่อมมือถือ', 'หน้าจอแตก', 'แบตเสื่อม', 'หูฟัง', 'เคสมือถือ',
+  'ไอแพด', 'ipad', 'apple pencil', 'ปากกาไอแพด', 'iphone', 'ไอโฟน', 'แผงโซลาร์', 'โซลาร์เซลล์', 'โซล่าเซลล์'
 ];
 
 // คำระบุหัวข้อระบบ / ซอฟต์แวร์ / ดิจิทัลทรานส์ฟอร์เมชัน B2B พื้นฐาน (เฉพาะเจาะจงทางธุรกิจ)
@@ -595,9 +604,14 @@ function updateGlobalTopicsRegex(solutions) {
   B2B_SOLUTION_TOPICS_REGEX = buildDynamicSolutionTopicsRegex([], solutions);
 }
 
-// คำระบุเจตนาการสอบถาม / แก้ปัญหา / เปรียบเทียบ / ขอคำแนะนำด้านโซลูชันหรือบริการ
-// (กระชับและครอบคลุมรูปประโยคภาษาไทย: เช่น แนะนำ...หน่อย, วางระบบ, ปัญหา, สอบถาม, ปรึกษา, vs, looking for)
-const SOLUTION_INQUIRY_INTENT_REGEX = /(?:(?:ขอ|ช่วย|รบกวน)?คำแนะนำ|(?:ช่วย|รบกวน)?แนะนำ(?:.{0,50}?(?:หน่อย|ที|ครับ|ค่ะ|ไหม|บ้าง|ดี|ระบบ|โปรแกรม))?|(?:เจอ|มี|ติด|แก้)?ปัญหา(?:การ|เรื่อง|ของ)?|สอบถาม|ปรึกษา|หา(?:ผู้รับเหมา|บริษัท|คนทำ|vendor|ทีมงาน)|รับทำระบบ|วางระบบ|พัฒนาระบบ|เปรียบเทียบ|เทียบกับ|เทียบระหว่าง|(?:เลือก|ใช้|เจ้า)?ไหนดี|ดีไหม|โอเคไหม|เวิร์คไหม|ใช้งานยังไง|เลือกยังไง|เริ่มยังไง|แชร์ประสบการณ์|เคยวางระบบ|ทำไม.{0,30}?(?:ไม่|ไม่ได้|พัง|ช้า|ติด|ค้าง|ไม่ทัน)|\b(?:looking for|recommend(?:ation|ations)?|best practices?|implementation|troubleshoot(?:ing)?|comparison|compare|vs|versus|vendor|vendors|rfp|architecture|evaluat(?:e|ion))\b)/i;
+// คำ/วลีระบุการโฆษณาขายบริการ หรือประกาศของผู้รับจ้าง/เซลล์ (ต้องปฏิเสธทันที)
+const SELLER_PROMOTION_REGEX = /(?:เรารับทำ|บริษัทเรารับ|รับทำระบบ|รับเขียนโปรแกรม|รับพัฒนาระบบ|รับวางระบบ|รับติดตั้งระบบ|รับออกแบบระบบ|ยินดีให้บริการ|พร้อมให้บริการ|ให้บริการด้าน(?:ระบบ|ซอฟต์แวร์|ไอที)|บริการของเรา|สนใจติดต่อ(?:สอบถาม|เรา|ได้ที่|โทร)?|ติดต่อเรา(?:ได้ที่|โทร)?|สอบถามเพิ่มเติมโทร|โทร\s*0\d{1,2}[-\s]?\d{3,4}[-\s]?\d{3,4}|ทักแชท(?:ได้เลย|เข้ามา|มาได้)|inbox\s*(?:ได้เลย|มาได้เลย|สอบถาม)|แอดไลน์|line\s*id|@line|ราคาเริ่มต้น\s*\d|โปรโมชั่นพิเศษ|ขอใบเสนอราคา|ทดลองใช้ฟรี|demo\s*ฟรี|จำหน่ายโปรแกรม|ขายโปรแกรม|เสนอขายโปรแกรม|\b(?:our\s+services?|contact\s+us|dm\s+us|reach\s+out\s+to\s+us|request\s+a\s+demo|free\s+trial|we\s+offer|we\s+provide|click\s+the\s+link|sign\s+up\s+today|download\s+now)\b)/i;
+
+// คำระบุเจตนาปัญหา / ถามวิธีแก้ / ขอคำปรึกษา / กำลังมองหาซอฟต์แวร์หรือ Vendor (Pain Point & Discussion Intent)
+const PAIN_POINT_INTENT_REGEX = /(?:(?:เจอ|มี|ติด|พบ|แก้|ช่วยแก้)?ปัญหา(?:การ|เรื่อง|ของ)?|(?:ขอ|ช่วย|รบกวน)?(?:คำแนะนำ|คำปรึกษา)|(?:ช่วย|รบกวน)?แนะนำ(?:.{0,40}?(?:หน่อย|ที|ครับ|ค่ะ|ไหม|บ้าง|ดี))?|(?:รบกวน)?สอบถาม(?:ผู้รู้|พี่ๆ|หน่อย|ครับ|ค่ะ)?|ปรึกษา(?:เรื่อง|หน่อย|ครับ|ค่ะ)?|ช่วยด้วย|ช่วยที|ทำยังไง(?:ดี|ครับ|ค่ะ)?|ทำไง(?:ดี)?|แก้(?:ยังไง|ตรงไหน|อย่างไร)|มีวิธี(?:แก้|ทำ|จัดการ|ป้องกัน)|ใคร(?:เคยเจอ|มีวิธี|ทำเป็น|รู้วิธี)|อยากทราบว่า|อยากปรึกษา|หา(?:โปรแกรม|ระบบ|vendor|บริษัท|ซอฟต์แวร์|เครื่องมือ|คนช่วย|ทีมพัฒนา)|กำลัง(?:หา|มองหา|เลือก|จะทำ|จะซื้อ|ศึกษา)|(?:เลือก|ใช้|เจ้า|ค่าย)?ไหนดี|ดีไหม|เวิร์คไหม|โอเคไหม|เลือกยังไง|เริ่มยังไง|(?:เลือก|จัดซื้อ|หา).{0,25}?(?:ยังไง|เจ้าไหน|ค่ายไหน|ที่ไหน|แบบไหน|ดี)|(?:มี|ใช้).{0,20}?อะไรบ้าง|เปรียบเทียบ|เทียบกับ|เทียบระหว่าง|มีใครเคยใช้|มีใครใช้|แชร์ประสบการณ์|รีวิวจากผู้ใช้จริง|ปวดหัวกับ|เซ็งกับ|เหนื่อยกับ|ติดตรง|(?:ระบบ|เว็บ|แอป|เครื่องจักร|เน็ต|ข้อมูล|สต็อก|สต๊อก).{0,30}?(?:พัง|ค้าง|ช้ามาก|ช้าจัง|หลุด|ล่ม|error|เออเร่อ|ไม่ตรง|หาย|ไม่ขึ้น|เชื่อมไม่ติด|ส่งไม่ไป|ไม่เสถียร|มีปัญหา)|ทำไม.{0,30}?(?:ไม่|ไม่ได้|พัง|ช้า|ติด|ค้าง|ไม่ทัน|หลุด|ล่ม)|ข้อควรระวัง|ล้มเหลว|ผิดพลาด|\b(?:looking for|struggling with|facing (?:an? )?issue|having trouble|troubleshoot(?:ing)?|how to (?:fix|solve|handle)|anyone recommend|which (?:is better|one should I)|comparison|compare|vs|versus|help needed|any advice|stuck with|recommendations? needed|best practices?|implementation|guide|options?|dilemma)\b)/i;
+
+// รองรับ Backward Compatibility สำหรับโค้ดที่อ้างอิงชื่อเดิม
+const SOLUTION_INQUIRY_INTENT_REGEX = PAIN_POINT_INTENT_REGEX;
 
 /**
  * คำนวณช่วงปีและสร้างตัวกรองปีแบบไดนามิกอัตโนมัติ (ไม่ฮาร์ดโค้ดปี)
@@ -754,10 +768,11 @@ function isRecentPost(item) {
 }
 
 /**
- * ตรวจสอบว่าเป็นโพสต์ที่เกี่ยวกับ B2B Solution / Service จริงๆ
+ * ตรวจสอบว่าเป็นโพสต์ที่มีปัญหา (Pain Point) หรือมองหาโซลูชัน/ขอคำแนะนำจริงๆ
  * 1. ปฏิเสธ Negative Intent (รับสมัครงาน, ขายรถ/ของมือสอง, การบ้านเด็ก, บันเทิง/สุขภาพ)
- * 2. ตรวจสอบหัวข้อทางเทคโนโลยี/โรงงาน/ซอฟต์แวร์ (Dynamic Topic Matching)
- * 3. ตรวจสอบเจตนาการสอบถาม/ปัญหา/ปรึกษา/เปรียบเทียบ/วางระบบ
+ * 2. ปฏิเสธ Seller / Vendor Promotions (โฆษณารับจ้างทำระบบ, บริการของเรา, ทัก inbox, โทรติดต่อ)
+ * 3. ตรวจสอบหัวข้อทางเทคโนโลยี/โรงงาน/ซอฟต์แวร์ (Dynamic Topic Matching)
+ * 4. ตรวจสอบเจตนา Pain Point / ถามปัญหา / ขอคำปรึกษา / เปรียบเทียบซอฟต์แวร์
  */
 function isSolutionPost(item, dynamicRegex = null) {
   const text = `${item.title || ''} ${item.content || item.snippet || ''}`.toLowerCase();
@@ -774,14 +789,19 @@ function isSolutionPost(item, dynamicRegex = null) {
     }
   }
 
-  // 2. B2B Solution / System Topic Check (Dynamic or Global Regex)
+  // 2. Reject Seller / Vendor Promotions (ปฏิเสธโพสต์รับทำระบบ / โฆษณาขายบริการ)
+  if (SELLER_PROMOTION_REGEX.test(text)) {
+    return false;
+  }
+
+  // 3. B2B Solution / System Topic Check (Dynamic or Global Regex)
   const regex = dynamicRegex || B2B_SOLUTION_TOPICS_REGEX;
   if (!regex.test(text)) {
     return false;
   }
 
-  // 3. Solution Inquiry / Problem / Service Intent Check
-  if (!SOLUTION_INQUIRY_INTENT_REGEX.test(text)) {
+  // 4. Pain Point & Inquiry Intent Check (ต้องมีเจตนาถามปัญหา ขอคำปรึกษา หรือมองหาระบบ)
+  if (!PAIN_POINT_INTENT_REGEX.test(text)) {
     return false;
   }
 
@@ -830,11 +850,12 @@ async function querySearxng(query) {
   const endpoint = `${SEARXNG_URL}/search?q=${encodeURIComponent(query)}&format=json`;
   try {
     const res = await fetch(endpoint, {
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(6000),
       headers: {
         'Accept': 'application/json',
         'X-Real-IP': '127.0.0.1',
-        'X-Forwarded-For': '127.0.0.1'
+        'X-Forwarded-For': '127.0.0.1',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
       }
     });
     if (!res.ok) {
@@ -890,137 +911,54 @@ function formatFacebookContent(rawTitle, rawSnippet) {
 
 async function searchFacebookThreads(terms, limit = 5, solutionCategory = '', excludeUrls = new Set(), solutions = [], extraTerms = []) {
   const dynamicTopicsRegex = buildDynamicSolutionTopicsRegex(extraTerms, solutions);
-  const currentYear = new Date().getFullYear();
-  const currentBE = currentYear + 543;
-  const prevYear = currentYear - 1;
-  const prevBE = currentBE - 1;
-
   const searchTerms = Array.isArray(terms) && terms.length > 0 ? terms : ['Business Solution'];
-  const primary = searchTerms[0];
 
-  // รวบรวมคำค้นหา Facebook ที่มีประสิทธิภาพสูง ทั้งกลุ่มเฉพาะทางและโพสต์สอบถาม
   const queries = [];
-  for (const t of searchTerms) {
-    queries.push(`site:facebook.com/groups/ ${t} ระบบ`);
-    queries.push(`site:facebook.com/groups/ ${t} ปัญหา`);
-    queries.push(`site:facebook.com/groups/ ${t} แนะนำ`);
-    queries.push(`site:facebook.com/groups/ ${t} วางระบบ`);
-    queries.push(`site:facebook.com/groups/ ${t}`);
-    queries.push(`site:facebook.com/groups/ ${t} ${currentBE}`);
-    queries.push(`site:facebook.com ${t} สอบถาม ปัญหา`);
-    queries.push(`site:facebook.com ${t} แนะนำ ระบบ`);
-    queries.push(`site:facebook.com ${t} วางระบบ`);
+  for (const t of searchTerms.slice(0, 2)) {
     queries.push(`site:facebook.com ${t}`);
+    if (!t.includes('ปัญหา')) queries.push(`site:facebook.com ${t} ปัญหา`);
+    if (!t.includes('แนะนำ')) queries.push(`site:facebook.com ${t} แนะนำ`);
   }
-
-  // สลับลำดับคำค้นหาเล็กน้อยเพื่อกระจายและไม่ให้ชนหน้าเดิมซ้ำๆ
-  const shuffledQueries = queries.sort(() => Math.random() - 0.4);
 
   const results = [];
   const seenUrls = new Set();
 
-  for (const q of shuffledQueries) {
+  for (const q of queries) {
     if (results.length >= limit) break;
-    const rawList = await querySearxng(q);
+    try {
+      const rawList = await querySearxng(q);
 
-    for (const item of rawList) {
-      if (!isValidCandidate(item, 'facebook')) continue;
-
-      const clean = cleanUrl(item.url, 'facebook');
-      if (seenUrls.has(clean) || (excludeUrls && excludeUrls.has(clean))) continue;
-      seenUrls.add(clean);
-
-      let title = item.title || '';
-      let snippet = item.content || '';
-      let publishTime = item.publishedDate ? new Date(item.publishedDate).getTime() : null;
-
-      // ดึง Open Graph Metadata เฉพาะเมื่อ title หรือ snippet ขาด เพื่อความรวดเร็ว
-      const isGeneric = !title || title.includes('Link to facebook.com') || title === 'Facebook' || title === 'Log into Facebook';
-      if (isGeneric || !snippet || snippet.length < 20) {
-        const unfurled = await unfurlFacebookMetadata(item.url);
-        if (unfurled?.title && !unfurled.title.includes('Link to facebook.com')) {
-          title = unfurled.title;
-        }
-        if (unfurled?.snippet && unfurled.snippet.length > 15) {
-          snippet = unfurled.snippet;
-        }
-        if (unfurled?.publishTime) publishTime = unfurled.publishTime;
-      }
-
-      // จัดรูปแบบหัวข้อและเนื้อหา โดยปฏิเสธหากไม่มีเนื้อหาจริง
-      const formatted = formatFacebookContent(title, snippet);
-      if (!formatted) continue;
-      title = formatted.title;
-      snippet = formatted.snippet;
-
-      const postItem = {
-        url: clean,
-        title,
-        content: snippet,
-        snippet,
-        publishTime
-      };
-
-      // ตรวจสอบทั้งความเกี่ยวข้องกับ B2B Solution และความสดใหม่ของโพสต์
-      if (!isSolutionPost(postItem, dynamicTopicsRegex)) continue;
-      if (!isRecentPost(postItem)) continue;
-
-      results.push({
-        platform: 'facebook',
-        title: title.slice(0, 150),
-        url: clean,
-        snippet: snippet.slice(0, 250)
-      });
-
-      if (results.length >= limit) break;
-    }
-
-    if (results.length >= limit) break;
-  }
-
-  // หากผลลัพธ์ยังไม่เต็ม limit ให้ค้นหาด้วยคำค้นสำรองที่มุ่งเป้าไปยังโพสต์จริง
-  if (results.length < limit) {
-    const backupQueries = [
-      `site:facebook.com/groups/ ${primary}`,
-      `site:facebook.com ${primary} แนะนำ`,
-      `site:facebook.com ${primary} ปัญหา`,
-      `site:facebook.com ${primary}`
-    ];
-    for (const bq of backupQueries) {
-      if (results.length >= limit) break;
-      const rawList = await querySearxng(bq);
       for (const item of rawList) {
         if (!isValidCandidate(item, 'facebook')) continue;
+
         const clean = cleanUrl(item.url, 'facebook');
         if (seenUrls.has(clean) || (excludeUrls && excludeUrls.has(clean))) continue;
         seenUrls.add(clean);
 
-        let title = item.title || '';
-        let snippet = item.content || '';
+        const title = item.title || '';
+        const snippet = item.content || '';
         let publishTime = item.publishedDate ? new Date(item.publishedDate).getTime() : null;
 
-        const isGeneric = !title || title.includes('Link to facebook.com') || title === 'Facebook' || title === 'Log into Facebook';
-        if (isGeneric || !snippet || snippet.length < 20) {
-          const unfurled = await unfurlFacebookMetadata(item.url);
-          if (unfurled?.title && !unfurled.title.includes('Link to facebook.com')) {
-            title = unfurled.title;
+        let formatted = formatFacebookContent(title, snippet);
+
+        // ถ้าผลลัพธ์จาก Search Engine เป็น Generic (เช่น Link to facebook.com) ให้ดึง Open Graph Metadata จริงจาก Facebook
+        if (!formatted) {
+          const unfurled = await unfurlFacebookMetadata(clean);
+          if (unfurled && (unfurled.title || unfurled.snippet)) {
+            formatted = formatFacebookContent(unfurled.title, unfurled.snippet);
+            if (unfurled.publishTime) {
+              publishTime = unfurled.publishTime;
+            }
           }
-          if (unfurled?.snippet && unfurled.snippet.length > 15) {
-            snippet = unfurled.snippet;
-          }
-          if (unfurled?.publishTime) publishTime = unfurled.publishTime;
         }
 
-        const formatted = formatFacebookContent(title, snippet);
         if (!formatted) continue;
-        title = formatted.title;
-        snippet = formatted.snippet;
 
         const postItem = {
           url: clean,
-          title,
-          content: snippet,
-          snippet,
+          title: formatted.title,
+          content: formatted.snippet,
+          snippet: formatted.snippet,
           publishTime
         };
 
@@ -1029,12 +967,15 @@ async function searchFacebookThreads(terms, limit = 5, solutionCategory = '', ex
 
         results.push({
           platform: 'facebook',
-          title: title.slice(0, 150),
+          title: formatted.title.slice(0, 150),
           url: clean,
-          snippet: snippet.slice(0, 250)
+          snippet: formatted.snippet.slice(0, 250)
         });
+
         if (results.length >= limit) break;
       }
+    } catch (err) {
+      console.warn('[searchFacebookThreads] Query failed:', err.message);
     }
   }
 
@@ -1042,40 +983,78 @@ async function searchFacebookThreads(terms, limit = 5, solutionCategory = '', ex
 }
 
 /**
- * ค้นหาเฉพาะ Pantip
+ * สกัดคำสำคัญสำหรับค้นหาบน Pantip Search โดยตัดคำเชื่อมและคำสร้อยสนทนา
+ * ช่วยให้ Pantip Search ดึงกระทู้ที่เกี่ยวข้องได้ตรงเป้าหมาย
  */
-async function searchPantipThreads(terms, limit = 5, excludeUrls = new Set(), solutions = [], extraTerms = []) {
-  const dynamicTopicsRegex = buildDynamicSolutionTopicsRegex(extraTerms, solutions);
-  const primary = terms[0] || 'Business Solution';
-  const currentYear = new Date().getFullYear();
-  const currentBE = currentYear + 543;
-  const prevBE = currentBE - 1;
-  const queries = [
-    `site:pantip.com inurl:topic ${primary} แนะนำ`,
-    `site:pantip.com inurl:topic ${primary} ปัญหา`,
-    `site:pantip.com inurl:topic ${primary} ระบบ`,
-    `site:pantip.com inurl:topic ${primary} ${prevBE}`,
-    `site:pantip.com inurl:topic ${primary} ${currentBE}`,
-    `site:pantip.com inurl:topic ${primary}`,
-    `site:pantip.com ${primary} ${prevBE}`,
-    `site:pantip.com ${primary} ${currentBE}`,
-    `site:pantip.com/topic ${primary}`
-  ];
-  if (terms[1]) {
-    queries.push(`site:pantip.com inurl:topic ${terms[1]} แนะนำ`);
-    queries.push(`site:pantip.com inurl:topic ${terms[1]} ปัญหา`);
-    queries.push(`site:pantip.com inurl:topic ${terms[1]}`);
-    queries.push(`site:pantip.com ${terms[1]}`);
+function extractPantipSearchKeywords(rawTerm) {
+  if (!rawTerm) return ['ERP'];
+  const clean = String(rawTerm)
+    .replace(/(?:แก้ยังไง|ทำยังไง|แนะนำหน่อย|แนะนำที|เจ้าไหนดี|ช่วยด้วย|ช่วยที|มีปัญหา|เจอปัญหา|ทำไงดี|ยังไงดี|ดีไหม|หน่อยค่ะ|หน่อยครับ|ไม่ได้|error|มีวิธี)/gi, '')
+    .trim();
+
+  const words = clean.split(/\s+/).filter(Boolean);
+  const candidates = [rawTerm.trim()];
+  if (clean && clean !== rawTerm.trim()) {
+    candidates.push(clean);
   }
+  // ดึงคำเฉพาะทางเชิงเทคนิค เช่น PLC, ERP, WMS, SCADA, API, CRM, POS ออกมาเป็นคีย์เวิร์ดสำรอง
+  const techMatches = clean.match(/\b[A-Za-z0-9_-]{3,}\b/g) || [];
+  for (const tm of techMatches) {
+    if (!GENERIC_ENGLISH_STOP_WORDS.has(tm.toLowerCase())) {
+      candidates.push(tm);
+    }
+  }
+  if (words.length > 2) {
+    const pair = words.slice(0, 2).join(' ');
+    if (pair.length >= 4) candidates.push(pair);
+  }
+  return [...new Set(candidates.filter(c => c && c.length >= 2))];
+}
 
-  const results = [];
-  const seenUrls = new Set();
+/**
+ * ค้นหากระทู้จาก Pantip Search โดยตรง (Native Pantip Search)
+ * แม่นยำ รวดเร็ว และได้กระทู้ Pain Point ธุรกิจจริงล่าสุด ไม่ผ่านการถูกบิดเบือนของ Search Engine
+ */
+async function searchPantipDirect(term, limit = 5, excludeUrls = new Set(), dynamicTopicsRegex = null) {
+  try {
+    const url = `https://pantip.com/search?q=${encodeURIComponent(term)}`;
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'th,en-US;q=0.9,en;q=0.8'
+      },
+      signal: AbortSignal.timeout(5000)
+    });
+    if (!res.ok) return [];
+    const html = await res.text();
 
-  for (const q of queries) {
-    if (results.length >= limit) break;
-    const rawList = await querySearxng(q);
+    const results = [];
+    const seenUrls = new Set();
 
-    for (const item of rawList) {
+    const topicBlocks = html.split(/<h2>\s*<a\s+href="https?:\/\/(?:www\.)?pantip\.com\/topic\/(\d+)"/);
+
+    for (let i = 1; i < topicBlocks.length; i += 2) {
+      if (results.length >= limit) break;
+      const topicId = topicBlocks[i];
+      const rest = topicBlocks[i + 1] || '';
+      const fullUrl = `https://pantip.com/topic/${topicId}`;
+
+      const titleEnd = rest.indexOf('</a>');
+      let rawTitle = titleEnd !== -1 ? rest.slice(0, titleEnd).replace(/<[^>]+>/g, '').trim() : '';
+      rawTitle = rawTitle.replace(/^[^>]*>/, '').replace(/ - Pantip$/i, '').trim();
+      if (!rawTitle) continue;
+
+      const snipMatch = rest.match(/class="pt-list-item__sr__content__inner">([\s\S]*?)<\/div>/);
+      let snippet = snipMatch ? snipMatch[1].replace(/<[^>]+>/g, '').trim() : rawTitle;
+
+      const item = {
+        platform: 'pantip',
+        title: rawTitle.slice(0, 150),
+        url: fullUrl,
+        snippet: snippet.slice(0, 250)
+      };
+
       if (!isValidCandidate(item, 'pantip')) continue;
       if (!isSolutionPost(item, dynamicTopicsRegex)) continue;
 
@@ -1083,16 +1062,82 @@ async function searchPantipThreads(terms, limit = 5, excludeUrls = new Set(), so
       if (seenUrls.has(clean) || (excludeUrls && excludeUrls.has(clean))) continue;
       seenUrls.add(clean);
 
-      results.push({
-        platform: 'pantip',
-        title: String(item.title || 'ไม่มีหัวข้อ').replace(/ - Pantip$/i, '').trim().slice(0, 150),
-        url: clean,
-        snippet: String(item.content || '').trim().slice(0, 250)
-      });
-
-      if (results.length >= limit) break;
+      results.push(item);
     }
+
+    return results;
+  } catch (err) {
+    console.warn(`[searchPantipDirect] Failed for "${term}":`, err.message);
+    return [];
+  }
+}
+
+/**
+ * ค้นหาเฉพาะ Pantip
+ */
+async function searchPantipThreads(terms, limit = 5, excludeUrls = new Set(), solutions = [], extraTerms = []) {
+  const dynamicTopicsRegex = buildDynamicSolutionTopicsRegex(extraTerms, solutions);
+  const searchTerms = Array.isArray(terms) && terms.length > 0 ? terms : ['Business Solution'];
+  const results = [];
+  const seenUrls = new Set();
+
+  // 1. ค้นหาผ่าน Native Pantip Search เป็นลำดับแรก (แม่นยำ ได้กระทู้จริงสดใหม่ 100%)
+  for (const t of searchTerms.slice(0, 3)) {
     if (results.length >= limit) break;
+    const variants = extractPantipSearchKeywords(t);
+    for (const v of variants) {
+      if (results.length >= limit) break;
+      const directResults = await searchPantipDirect(v, limit - results.length, excludeUrls, dynamicTopicsRegex);
+      for (const item of directResults) {
+        if (!seenUrls.has(item.url)) {
+          seenUrls.add(item.url);
+          results.push(item);
+          if (results.length >= limit) break;
+        }
+      }
+    }
+  }
+
+  if (results.length >= limit) {
+    return results;
+  }
+
+  // 2. หากยังไม่ครบ limit ให้ค้นหาผ่าน SearXNG เสริม
+  const currentYear = new Date().getFullYear();
+  const currentBE = currentYear + 543;
+  const queries = [];
+  for (const t of searchTerms.slice(0, 2)) {
+    queries.push(`site:pantip.com ${t}`);
+    if (!t.includes('ปัญหา')) queries.push(`site:pantip.com ${t} ปัญหา`);
+    if (!t.includes('แนะนำ')) queries.push(`site:pantip.com ${t} แนะนำ`);
+    queries.push(`site:pantip.com ${t} ${currentBE}`);
+  }
+
+  for (const q of queries) {
+    if (results.length >= limit) break;
+    try {
+      const rawList = await querySearxng(q);
+
+      for (const item of rawList) {
+        if (!isValidCandidate(item, 'pantip')) continue;
+        if (!isSolutionPost(item, dynamicTopicsRegex)) continue;
+
+        const clean = cleanUrl(item.url, 'pantip');
+        if (seenUrls.has(clean) || (excludeUrls && excludeUrls.has(clean))) continue;
+        seenUrls.add(clean);
+
+        results.push({
+          platform: 'pantip',
+          title: String(item.title || 'ไม่มีหัวข้อ').replace(/ - Pantip$/i, '').trim().slice(0, 150),
+          url: clean,
+          snippet: String(item.content || '').trim().slice(0, 250)
+        });
+
+        if (results.length >= limit) break;
+      }
+    } catch (err) {
+      console.warn('[searchPantipThreads] Query failed:', err.message);
+    }
   }
 
   return results;
@@ -1103,20 +1148,13 @@ async function searchPantipThreads(terms, limit = 5, excludeUrls = new Set(), so
  */
 async function searchLinkedInThreads(terms, limit = 5, excludeUrls = new Set(), solutions = [], extraTerms = []) {
   const dynamicTopicsRegex = buildDynamicSolutionTopicsRegex(extraTerms, solutions);
-  const primary = terms[0] || 'Business Solution';
-  const currentYear = new Date().getFullYear();
-  const prevYear = currentYear - 1;
-  const queries = [
-    `site:linkedin.com/posts ${primary} Thailand`,
-    `site:linkedin.com/posts ${primary} solution`,
-    `site:linkedin.com/posts ${primary} ระบบ`,
-    `site:linkedin.com/posts ${primary} ${prevYear}`,
-    `site:linkedin.com/posts ${primary} ${currentYear}`,
-    `site:linkedin.com/pulse ${primary}`
-  ];
-  if (terms[1]) {
-    queries.push(`site:linkedin.com/posts ${terms[1]} Thailand`);
-    queries.push(`site:linkedin.com/posts ${terms[1]}`);
+  const searchTerms = Array.isArray(terms) && terms.length > 0 ? terms : ['Business Solution'];
+
+  const queries = [];
+  for (const t of searchTerms.slice(0, 2)) {
+    queries.push(`site:linkedin.com/posts ${t} Thailand`);
+    queries.push(`site:linkedin.com/posts ${t}`);
+    if (!t.includes('ปัญหา')) queries.push(`site:linkedin.com/posts ${t} ปัญหา`);
   }
 
   const results = [];
@@ -1124,26 +1162,29 @@ async function searchLinkedInThreads(terms, limit = 5, excludeUrls = new Set(), 
 
   for (const q of queries) {
     if (results.length >= limit) break;
-    const rawList = await querySearxng(q);
+    try {
+      const rawList = await querySearxng(q);
 
-    for (const item of rawList) {
-      if (!isValidCandidate(item, 'linkedin')) continue;
-      if (!isSolutionPost(item, dynamicTopicsRegex)) continue;
+      for (const item of rawList) {
+        if (!isValidCandidate(item, 'linkedin')) continue;
+        if (!isSolutionPost(item, dynamicTopicsRegex)) continue;
 
-      const clean = cleanUrl(item.url, 'linkedin');
-      if (seenUrls.has(clean) || (excludeUrls && excludeUrls.has(clean))) continue;
-      seenUrls.add(clean);
+        const clean = cleanUrl(item.url, 'linkedin');
+        if (seenUrls.has(clean) || (excludeUrls && excludeUrls.has(clean))) continue;
+        seenUrls.add(clean);
 
-      results.push({
-        platform: 'linkedin',
-        title: String(item.title || 'ไม่มีหัวข้อ').replace(/ - LinkedIn$/i, '').trim().slice(0, 150),
-        url: clean,
-        snippet: String(item.content || '').trim().slice(0, 250)
-      });
+        results.push({
+          platform: 'linkedin',
+          title: String(item.title || 'ไม่มีหัวข้อ').replace(/ - LinkedIn$/i, '').trim().slice(0, 150),
+          url: clean,
+          snippet: String(item.content || '').trim().slice(0, 250)
+        });
 
-      if (results.length >= limit) break;
+        if (results.length >= limit) break;
+      }
+    } catch (err) {
+      console.warn('[searchLinkedInThreads] Query failed:', err.message);
     }
-    if (results.length >= limit) break;
   }
 
   return results;
@@ -1169,95 +1210,58 @@ async function searchRecentThreads({ keyword, mode = 'manual', platform = 'all',
     }
     autoMeta = await generateAutoQueries(cat);
     queriesToRun = autoMeta.queries || ['ERP'];
+    // เพิ่ม curatedQueries ของโซลูชันนั้นเสริมเข้าไป เพื่อให้มีคีย์เวิร์ดค้นหาที่เป็นมาตรฐานและแม่นยำสูง
+    const matchedSol = SYACO_CATALOG.find(c => c.key === autoMeta.solutionKey || c.titleTh === autoMeta.solutionTitle);
+    if (matchedSol && Array.isArray(matchedSol.curatedQueries)) {
+      queriesToRun = [...new Set([...queriesToRun, ...matchedSol.curatedQueries])];
+    }
   } else {
     const clean = String(keyword || '').trim();
     if (!clean) {
       autoMeta = await generateAutoQueries('auto');
       queriesToRun = autoMeta.queries || ['ERP'];
+      const matchedSol = SYACO_CATALOG.find(c => c.key === autoMeta.solutionKey || c.titleTh === autoMeta.solutionTitle);
+      if (matchedSol && Array.isArray(matchedSol.curatedQueries)) {
+        queriesToRun = [...new Set([...queriesToRun, ...matchedSol.curatedQueries])];
+      }
     } else {
       queriesToRun = [clean];
     }
   }
 
   const solKey = autoMeta?.solutionKey || (keyword?.startsWith('auto:') ? keyword.replace('auto:', '') : '');
-  const extraTerms = isAutoMode ? [] : queriesToRun;
+  const extraTerms = queriesToRun;
 
   // 1. กรณีระบุแพลตฟอร์มเจาะจง Facebook
   if (platform === 'facebook') {
-    let fbResults = await searchFacebookThreads(queriesToRun, limit, solKey, excludeUrls, allSolutions, extraTerms);
-    // หากยังไม่ครบ limit และอยู่ในโหมด auto ให้สุ่มโซลูชันอื่นมาค้นหาเสริมเพื่อกระจายผลลัพธ์
-    if (fbResults.length < limit && isAutoMode) {
-      const otherSolutions = allSolutions.filter(c => c.key !== solKey).sort(() => Math.random() - 0.5);
-      for (const sol of otherSolutions) {
-        if (fbResults.length >= limit) break;
-        const moreFb = await searchFacebookThreads(sol.curatedQueries, limit - fbResults.length, sol.key || sol.titleTh, excludeUrls, allSolutions, []);
-        for (const item of moreFb) {
-          if (!fbResults.some(r => r.url === item.url) && fbResults.length < limit) {
-            fbResults.push({
-              ...item,
-              solutionCategory: sol.titleTh
-            });
-          }
-        }
-      }
-    }
+    const fbResults = await searchFacebookThreads(queriesToRun, limit, solKey, excludeUrls, allSolutions, extraTerms);
     return { autoMeta, results: fbResults.slice(0, limit) };
   }
 
   // 2. กรณีระบุแพลตฟอร์มเจาะจง Pantip
   if (platform === 'pantip') {
-    let ptResults = await searchPantipThreads(queriesToRun, limit, excludeUrls, allSolutions, extraTerms);
-    if (ptResults.length < limit && isAutoMode) {
-      const otherSolutions = allSolutions.filter(c => c.key !== solKey).sort(() => Math.random() - 0.5);
-      for (const sol of otherSolutions) {
-        if (ptResults.length >= limit) break;
-        const morePt = await searchPantipThreads(sol.curatedQueries, limit - ptResults.length, excludeUrls, allSolutions, []);
-        for (const item of morePt) {
-          if (!ptResults.some(r => r.url === item.url) && ptResults.length < limit) {
-            ptResults.push({
-              ...item,
-              solutionCategory: sol.titleTh
-            });
-          }
-        }
-      }
-    }
+    const ptResults = await searchPantipThreads(queriesToRun, limit, excludeUrls, allSolutions, extraTerms);
     return { autoMeta, results: ptResults.slice(0, limit) };
   }
 
   // 3. กรณีระบุแพลตฟอร์มเจาะจง LinkedIn
   if (platform === 'linkedin') {
-    let liResults = await searchLinkedInThreads(queriesToRun, limit, excludeUrls, allSolutions, extraTerms);
-    if (liResults.length < limit && isAutoMode) {
-      const otherSolutions = allSolutions.filter(c => c.key !== solKey).sort(() => Math.random() - 0.5);
-      for (const sol of otherSolutions) {
-        if (liResults.length >= limit) break;
-        const moreLi = await searchLinkedInThreads(sol.curatedQueries, limit - liResults.length, excludeUrls, allSolutions, []);
-        for (const item of moreLi) {
-          if (!liResults.some(r => r.url === item.url) && liResults.length < limit) {
-            liResults.push({
-              ...item,
-              solutionCategory: sol.titleTh
-            });
-          }
-        }
-      }
-    }
+    const liResults = await searchLinkedInThreads(queriesToRun, limit, excludeUrls, allSolutions, extraTerms);
     return { autoMeta, results: liResults.slice(0, limit) };
   }
 
-  // 4. กรณี platform === 'all': แบ่งสัดส่วนอย่างสมดุล (Pantip 40%, Facebook 35%, LinkedIn 25%)
-  const fbTarget = Math.max(1, Math.round(limit * 0.35));
+  // 4. กรณี platform === 'all': ค้นหาแบบเรียงลำดับ (Sequential) โดยดึง Pantip เป็นหลัก (เสถียรและได้ผลลัพธ์จริง) ตามด้วย LinkedIn และ Facebook
+  const ptTarget = Math.max(2, Math.round(limit * 0.5));
   const liTarget = Math.max(1, Math.round(limit * 0.25));
-  const ptTarget = Math.max(1, limit - fbTarget - liTarget);
+  const fbTarget = Math.max(1, limit - ptTarget - liTarget);
 
-  const fbList = await searchFacebookThreads(queriesToRun, fbTarget, solKey, excludeUrls, allSolutions, extraTerms);
   const ptList = await searchPantipThreads(queriesToRun, ptTarget, excludeUrls, allSolutions, extraTerms);
   const liList = await searchLinkedInThreads(queriesToRun, liTarget, excludeUrls, allSolutions, extraTerms);
+  const fbList = await searchFacebookThreads(queriesToRun, fbTarget, solKey, excludeUrls, allSolutions, extraTerms);
 
-  let combined = [...fbList, ...ptList, ...liList];
+  let combined = [...ptList, ...liList, ...fbList];
 
-  // หากยังไม่ครบ limit ให้เติมส่วนที่ขาดจากแพลตฟอร์มที่มี
+  // หากยังไม่ครบ limit ให้เติมส่วนที่ขาดจาก Pantip
   if (combined.length < limit) {
     const deficit = limit - combined.length;
     const morePt = await searchPantipThreads(queriesToRun, ptTarget + deficit, excludeUrls, allSolutions, extraTerms);
@@ -1282,115 +1286,52 @@ async function searchRecentThreads({ keyword, mode = 'manual', platform = 'all',
  * พร้อมป้องกันการดึงกระทู้ที่เคยค้นพบไปแล้ว (excludeUrls)
  */
 async function collectDailyRadarThreads(targetCount = 20, excludeUrls = new Set()) {
-  const categories = ['warehouse', 'data', 'logistics', 'production', 'alert', 'crm', 'energy', 'predictive'];
-  const shuffled = [...categories].sort(() => Math.random() - 0.5);
+  const categories = ['warehouse', 'data', 'logistics', 'production', 'alert', 'crm'];
+  const shuffled = [...categories].sort(() => Math.random() - 0.5).slice(0, 4);
 
   const allResults = [];
   const seenUrls = new Set();
   const solutionsCovered = new Set();
 
-  // กำหนดโควตาเป้าหมาย: Facebook ~7-8, Pantip ~7-8, LinkedIn ~5
-  const fbTargetTotal = Math.round(targetCount * 0.35); // ~7
-  const liTargetTotal = Math.round(targetCount * 0.25); // ~5
-  const ptTargetTotal = targetCount - fbTargetTotal - liTargetTotal; // ~8
-
-  let fbCount = 0;
-  let ptCount = 0;
-  let liCount = 0;
+  const deadline = Date.now() + 35000; // กำหนดเพดานเวลาค้นหาเรดาร์รวมไม่เกิน 35 วินาที
 
   for (const cat of shuffled) {
-    if (allResults.length >= targetCount) break;
+    if (allResults.length >= targetCount || Date.now() > deadline) break;
 
     try {
       const sol = SYACO_CATALOG.find(c => c.key === cat) || SYACO_CATALOG[0];
       const queries = sol.curatedQueries;
       solutionsCovered.add(sol.titleTh);
 
-      // ดึง Facebook สำหรับหมวดนี้
-      if (fbCount < fbTargetTotal) {
-        const fbBatch = await searchFacebookThreads(queries, 1, cat, excludeUrls, SYACO_CATALOG, []);
-        for (const item of fbBatch) {
-          if (!seenUrls.has(item.url) && (!excludeUrls || !excludeUrls.has(item.url)) && allResults.length < targetCount && fbCount < fbTargetTotal) {
-            seenUrls.add(item.url);
-            fbCount++;
-            allResults.push({
-              ...item,
-              solutionCategory: sol.titleTh || cat
-            });
-          }
-        }
-      }
+      // ดึงแบบ Sequential เพื่อความเสถียรและป้องกัน SearXNG คิวล้น
+      const ptBatch = await searchPantipThreads(queries, 3, excludeUrls, SYACO_CATALOG, []);
+      const liBatch = await searchLinkedInThreads(queries, 2, excludeUrls, SYACO_CATALOG, []);
+      const fbBatch = await searchFacebookThreads(queries, 2, cat, excludeUrls, SYACO_CATALOG, []);
 
-      // ดึง Pantip สำหรับหมวดนี้
-      if (ptCount < ptTargetTotal) {
-        const ptBatch = await searchPantipThreads(queries, 1, excludeUrls, SYACO_CATALOG, []);
-        for (const item of ptBatch) {
-          if (!seenUrls.has(item.url) && (!excludeUrls || !excludeUrls.has(item.url)) && allResults.length < targetCount && ptCount < ptTargetTotal) {
-            seenUrls.add(item.url);
-            ptCount++;
-            allResults.push({
-              ...item,
-              solutionCategory: sol.titleTh || cat
-            });
-          }
-        }
-      }
-
-      // ดึง LinkedIn สำหรับหมวดนี้
-      if (liCount < liTargetTotal) {
-        const liBatch = await searchLinkedInThreads(queries, 1, excludeUrls, SYACO_CATALOG, []);
-        for (const item of liBatch) {
-          if (!seenUrls.has(item.url) && (!excludeUrls || !excludeUrls.has(item.url)) && allResults.length < targetCount && liCount < liTargetTotal) {
-            seenUrls.add(item.url);
-            liCount++;
-            allResults.push({
-              ...item,
-              solutionCategory: sol.titleTh || cat
-            });
-          }
+      for (const item of [...ptBatch, ...liBatch, ...fbBatch]) {
+        if (!seenUrls.has(item.url) && (!excludeUrls || !excludeUrls.has(item.url)) && allResults.length < targetCount) {
+          seenUrls.add(item.url);
+          allResults.push({
+            ...item,
+            solutionCategory: sol.titleTh || cat
+          });
         }
       }
     } catch (err) {
       console.warn(`[DailyRadar] Error gathering for category ${cat}:`, err.message);
     }
-
-    await new Promise(r => setTimeout(r, 400));
-  }
-
-  // หากยังไม่ครบ targetCount ให้ดึงเสริม
-  if (allResults.length < targetCount) {
-    const fallbackTerms = ['ERP โรงงาน', 'โปรแกรมสต็อก คลังสินค้า', 'ระบบขนส่ง logistics', 'WMS Barcode', 'Dashboard ผู้บริหาร'];
-    for (const term of fallbackTerms) {
-      if (allResults.length >= targetCount) break;
-      try {
-        const fbMore = await searchFacebookThreads([term], 2, '', excludeUrls, SYACO_CATALOG, []);
-        for (const r of fbMore) {
-          if (!seenUrls.has(r.url) && (!excludeUrls || !excludeUrls.has(r.url)) && allResults.length < targetCount) {
-            seenUrls.add(r.url);
-            allResults.push({ ...r, solutionCategory: `Keyword: ${term}` });
-          }
-        }
-
-        const ptMore = await searchPantipThreads([term], 2, excludeUrls, SYACO_CATALOG, []);
-        for (const r of ptMore) {
-          if (!seenUrls.has(r.url) && (!excludeUrls || !excludeUrls.has(r.url)) && allResults.length < targetCount) {
-            seenUrls.add(r.url);
-            allResults.push({ ...r, solutionCategory: `Keyword: ${term}` });
-          }
-        }
-      } catch (_) {}
-      await new Promise(r => setTimeout(r, 400));
-    }
   }
 
   return {
-    solutionsCovered: Array.from(solutionsCovered),
-    results: allResults.slice(0, targetCount)
+    results: allResults.slice(0, targetCount),
+    solutionsCovered: Array.from(solutionsCovered)
   };
 }
 
 module.exports = {
   searchRecentThreads,
+  searchPantipDirect,
+  extractPantipSearchKeywords,
   searchFacebookThreads,
   searchPantipThreads,
   searchLinkedInThreads,
@@ -1406,6 +1347,9 @@ module.exports = {
   getDynamicYearFilter,
   getMinPantipTopicId,
   NEGATIVE_INTENT,
+  SELLER_PROMOTION_REGEX,
+  PAIN_POINT_INTENT_REGEX,
+  SOLUTION_INQUIRY_INTENT_REGEX,
   unfurlFacebookMetadata,
   SYACO_CATALOG,
   CURATED_FACEBOOK_COMMUNITIES,
