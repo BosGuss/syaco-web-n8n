@@ -1912,47 +1912,29 @@ function formatCopyArticlePayload(id, draft) {
   const tagsStr = (draft.tags || []).join(', ') || '-';
   const label = draft.platform === 'devto' ? 'Dev.to Technical Article' : 'Manual Enterprise Article';
   const fullContent = (draft.content_markdown || '').trim();
+  const rawTitle = (draft.title_th || draft.title || '').trim();
+  const title = rawTitle.length > 50 ? rawTitle.slice(0, 47) + '...' : rawTitle;
+  const cleanTags = tagsStr.length > 40 ? tagsStr.slice(0, 37) + '...' : tagsStr;
 
-  const header = `📋 **เนื้อหาบทความฉบับเต็ม (${label})**\n\n📌 **ชื่อบทความ:** ${draft.title_th}\n🏷️ **แท็ก:** \`${tagsStr}\`\n\n\`\`\`markdown\n`;
+  // Single compact wrapper (no chunking, no file download)
+  // Ensures articles up to 1,800 characters fit comfortably under Discord's 2,000 char ceiling
+  const header = `📋 **${label}** | 📌 **${title}**\n🏷️ \`${cleanTags}\`\n\`\`\`markdown\n`;
   const footer = `\n\`\`\``;
-  const maxSingleBody = 1850 - header.length - footer.length;
 
-  if (fullContent.length <= maxSingleBody) {
-    return {
-      replies: [
-        {
-          content: `${header}${fullContent}${footer}`,
-          files: []
-        }
-      ]
-    };
-  }
+  // Max characters allowed for the body: cap at 1,990 total to guarantee no Discord 50035 errors
+  const maxBodyLength = Math.max(0, 1990 - header.length - footer.length);
+  const content = fullContent.length > maxBodyLength
+    ? fullContent.slice(0, maxBodyLength - 3) + '...'
+    : fullContent;
 
-  const files = [
-    new AttachmentBuilder(Buffer.from(fullContent, 'utf8'), { name: `article-${id}.md` })
-  ];
-
-  const CHUNK_SIZE = 1500;
-  const chunks = [];
-  for (let i = 0; i < fullContent.length; i += CHUNK_SIZE) {
-    chunks.push(fullContent.slice(i, i + CHUNK_SIZE));
-  }
-
-  const replies = [];
-  chunks.forEach((chunk, idx) => {
-    const isFirst = idx === 0;
-    const partHeader = isFirst
-      ? `📋 **เนื้อหาบทความ (${label}) [ตอนที่ 1/${chunks.length}]:**\n📎 *แนบไฟล์ \`article-${id}.md\` ฉบับเต็มให้ดาวน์โหลดแล้ว*\n\`\`\`markdown\n`
-      : `📋 **เนื้อหาบทความ [ตอนที่ ${idx + 1}/${chunks.length}]:**\n\`\`\`markdown\n`;
-    const partFooter = `\n\`\`\``;
-
-    replies.push({
-      content: `${partHeader}${chunk}${partFooter}`,
-      files: isFirst ? files : []
-    });
-  });
-
-  return { replies };
+  return {
+    replies: [
+      {
+        content: `${header}${content}${footer}`,
+        files: []
+      }
+    ]
+  };
 }
 
 module.exports = {
