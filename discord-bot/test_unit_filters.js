@@ -2,6 +2,7 @@ const assert = require('assert');
 const {
   isRecentPost,
   isSolutionPost,
+  isFacebookSolutionPost,
   isValidCandidate,
   isFacebookPost,
   cleanUrl,
@@ -294,5 +295,56 @@ assert.notStrictEqual(validFbContent, null, 'Substantive Facebook content should
 assert.strictEqual(validFbContent.title, 'สอบถามระบบ ERP โรงงาน', 'Title should be preserved without fake prefixes');
 assert(!validFbContent.title.includes('โพสต์ข้อความบน Facebook เกี่ยวกับ'), 'Must never synthesize fake titles');
 console.log('✔ formatFacebookContent returns null for invalid/generic data and preserves genuine content without fake titles');
+
+// 11. Testing Facebook Option 1 (Fanpage Guides, Solutions & IT Discussions)
+console.log('\n--- 11. Testing Facebook Option 1 (Fanpage Posts & URL Matching) ---');
+
+// 11.1 Thai URL-encoded slugs in Facebook post URLs
+const thaiEncodedUrl = 'https://www.facebook.com/imditto/posts/%E0%B8%A3%E0%B8%B0%E0%B8%9A%E0%B8%9A%E0%B8%AD%E0%B8%99%E0%B8%B8%E0%B8%A1%E0%B8%B1%E0%B8%95%E0%B8%B4%E0%B9%80%E0%B8%AD%E0%B8%81%E0%B8%AA%E0%B8%B2%E0%B8%A3/613249971076469/';
+assert.strictEqual(isFacebookPost(thaiEncodedUrl), true, 'Facebook post with Thai URL-encoded slug must be accepted');
+console.log('✔ Facebook post with Thai URL-encoded slug correctly accepted');
+
+// 11.2 CleanUrl preservation of watch ?v= parameter
+const watchUrl = 'https://www.facebook.com/watch?v=1041321861968841&ref=sharing';
+const cleanedWatch = cleanUrl(watchUrl, 'facebook');
+assert.strictEqual(cleanedWatch, 'https://www.facebook.com/watch?v=1041321861968841', 'cleanUrl must preserve v parameter for watch URLs');
+console.log('✔ cleanUrl preserved watch ?v= parameter');
+
+// 11.3 Facebook Fanpage educational/guide posts (Option 1) must pass isFacebookSolutionPost
+const dittoWorkflowPost = {
+  title: 'Ditto Thailand - ระบบอนุมัติเอกสารออนไลน์ คืออะไร มีประโยชน์อย่างไร',
+  snippet: 'ระบบอนุมัติเอกสารออนไลน์ คืออะไร มีประโยชน์อย่างไร ปัจจุบันการจัดการเอกสารในองค์กรที่ล่าช้าสามารถเปลี่ยนมาเป็น Paperless Workflow ช่วยลดต้นทุนบริษัท'
+};
+assert.strictEqual(isFacebookSolutionPost(dittoWorkflowPost), true, 'Ditto Thailand guide post must pass under Option 1');
+console.log('✔ "Ditto Thailand - ระบบอนุมัติเอกสารออนไลน์" passed');
+
+const manageWithNoobItGuyPost = {
+  title: 'แจกฟรี! ระบบบริหารจัดการรถขนส่ง v2025 - บริหารงานแบบคนไอที',
+  snippet: 'แจกฟรี! ระบบบริหารจัดการรถขนส่ง v2025 เบื่อไหมกับการจัดการรถขนส่งแบบเดิมๆ ที่ควบคุมต้นทุนค่าน้ำมันและติดตามเที่ยววิ่งไม่ได้'
+};
+assert.strictEqual(isFacebookSolutionPost(manageWithNoobItGuyPost), true, 'Template sharing post with "แจกฟรี" must pass under Option 1');
+console.log('✔ "บริหารงานแบบคนไอที - แจกฟรี ระบบขนส่ง" passed');
+
+const itcNetworkPost = {
+  title: 'Tips แก้ปัญหา Network ทุกองค์กร: วิธีดูว่า Ping สูงเกิดจากอะไร - ITC Training Center',
+  snippet: 'Tips แก้ปัญหา Network ทุกองค์กร วิธีดูว่า ping สูง เกิดจากอะไร การตอบสนองช้า หรือเกิดจาก DNS ช้า พร้อมแนวทางการปรับปรุงระบบเครือข่าย'
+};
+assert.strictEqual(isFacebookSolutionPost(itcNetworkPost), true, 'Network troubleshooting tips post must pass under Option 1');
+console.log('✔ "ITC Training Center - Tips แก้ปัญหา Network" passed');
+
+// 11.4 Negative intent and hard spam must be rejected
+const fbGamingPost = {
+  title: 'เล่นเกม Valorant แล้ว fps ตก กระตุกมาก แก้ยังไง',
+  snippet: 'การ์ดจอ rtx คอมเล่นเกม เล่นแล้ว lag'
+};
+assert.strictEqual(isFacebookSolutionPost(fbGamingPost), false, 'Gaming post must be rejected on Facebook');
+console.log('✔ Gaming post correctly rejected on Facebook');
+
+const fbHardSpamPost = {
+  title: 'โปรแกรมบัญชี ราคาเริ่มต้น 990 บาท ดาวน์ 0% โปรโมชั่นลดกระหน่ำ',
+  snippet: 'จำหน่ายโปรแกรม โทร 081-999-9999 รับจ้างทำรายงาน'
+};
+assert.strictEqual(isFacebookSolutionPost(fbHardSpamPost), false, 'Hard spam advertising post must be rejected on Facebook');
+console.log('✔ Hard spam advertising post correctly rejected on Facebook');
 
 console.log('\nAll unit tests passed successfully!');

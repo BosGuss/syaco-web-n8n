@@ -494,7 +494,7 @@ function buildRadarEmbedsAndMenu(threads, solutionsCovered = []) {
       const solText = solutionsCovered.length > 0 ? cut(solutionsCovered.join(', '), 140) : 'SyaCo Enterprise Solutions';
       desc += `📊 **สรุปผลสำรวจ:** ทั้งหมด **${threads.length}** รายการ (${ptCount > 0 ? `🔴 Pantip: ${ptCount}  ` : ''}${fbCount > 0 ? `🔷 Facebook: ${fbCount}  ` : ''}${liCount > 0 ? `🔵 LinkedIn: ${liCount}` : ''})\n` +
               `🎯 **โซลูชันเป้าหมาย:** ${solText}\n` +
-              `⚡ **วิธีสั่งงานด่วน:** แตะปุ่ม **[⚡ ร่างข้อ X]** ด้านล่าง หรือเลือกจากดรอปดาวน์เพื่อสั่ง AI ร่างคำตอบทันที\n` +
+              `🎯 **วิธีสั่งงาน:** เลือกกระทู้จากเมนูดรอปดาวน์ด้านล่างเพื่อสั่ง AI ร่างคำตอบทันที\n` +
               `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
     } else {
       desc += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
@@ -522,18 +522,7 @@ function buildRadarEmbedsAndMenu(threads, solutionsCovered = []) {
 
   const components = [];
 
-  // 1. แถวปุ่มเลือกด่วน (Quick Action Buttons สำหรับ 5 กระทู้แรก)
-  if (threads.length > 0) {
-    const quickButtons = threads.slice(0, 5).map((t, idx) => {
-      return new ButtonBuilder()
-        .setCustomId(`lead_draft_${t.id}`)
-        .setLabel(`⚡ ร่างข้อ ${idx + 1}`)
-        .setStyle(ButtonStyle.Primary);
-    });
-    components.push(new ActionRowBuilder().addComponents(quickButtons));
-  }
-
-  // 2. แถวดรอปดาวน์เมนู (สำหรับเลือกดูหรือเลือกร่างได้ถึง 25 กระทู้)
+  // แถวดรอปดาวน์เมนู (สำหรับเลือกดูหรือเลือกส่งให้ AI ร่างคำตอบได้ถึง 25 กระทู้)
   const menuOptions = threads.slice(0, 25).map((t, idx) => {
     const num = idx + 1;
     const cleanTitle = cut(t.post_title || t.title || 'กระทู้ไม่มีชื่อ', 50);
@@ -550,7 +539,7 @@ function buildRadarEmbedsAndMenu(threads, solutionsCovered = []) {
   if (menuOptions.length > 0) {
     const selectMenu = new StringSelectMenuBuilder()
       .setCustomId('select_radar_draft')
-      .setPlaceholder('🎯 เลือกกระทู้เพื่อร่างคำตอบ (หรือแตะปุ่มลัดด้านบน)...')
+      .setPlaceholder('🎯 เลือกกระทู้ที่ต้องการให้ AI ช่วยตอบจากเมนูนี้...')
       .setMinValues(1)
       .setMaxValues(Math.min(5, menuOptions.length))
       .addOptions(menuOptions);

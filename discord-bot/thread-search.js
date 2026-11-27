@@ -335,7 +335,7 @@ function cleanUrl(rawUrl, platform) {
       u.searchParams.delete('ti');
       u.searchParams.delete('__tn__');
       u.searchParams.delete('__cft__');
-      const keepParams = ['story_fbid', 'id', 'post_id'];
+      const keepParams = ['story_fbid', 'id', 'post_id', 'v'];
       const newParams = new URLSearchParams();
       keepParams.forEach(p => {
         if (u.searchParams.has(p)) newParams.set(p, u.searchParams.get(p));
@@ -399,19 +399,19 @@ function isFacebookPost(rawUrl) {
 
   // 2. โพสต์ในกลุ่ม Facebook (ต้องมี post ID หรือ permalink เท่านั้น ไม่รับหน้าแรกของกลุ่ม)
   if (pathname.includes('/groups/')) {
-    return /\/groups\/[^/]+\/posts\/(\d+|[a-zA-Z0-9._-]+)/.test(pathname) ||
+    return /\/groups\/[^/]+\/posts\/(?:[^/]+\/)?(\d+|[a-zA-Z0-9._%-]+)/.test(pathname) ||
            /\/groups\/[^/]+\/permalink\/(\d+)/.test(pathname) ||
            /\/groups\/[^/]+\/multi_permalinks\/(\d+)/.test(pathname);
   }
 
-  // 3. โพสต์ของเพจ: /<name>/posts/<post_id>
-  if (/\/[^/]+\/posts\/(\d+|[a-zA-Z0-9._-]+)/.test(pathname)) {
+  // 3. โพสต์ของเพจ: /<name>/posts/<post_id> หรือ /<name>/posts/<slug>/<post_id>
+  if (/\/[^/]+\/posts\/(?:[^/]+\/)?(\d+|[a-zA-Z0-9._%-]+)/.test(pathname)) {
     return true;
   }
 
-  // 4. permalink.php หรือ story.php (ต้องมี story_fbid เพื่อระบุว่าเป็นโพสต์จริง)
+  // 4. permalink.php หรือ story.php (ต้องมี story_fbid หรือ id เพื่อระบุว่าเป็นโพสต์จริง)
   if (pathname.includes('/permalink.php') || pathname.includes('/story.php')) {
-    return Boolean(searchParams && searchParams.has('story_fbid'));
+    return Boolean(searchParams && (searchParams.has('story_fbid') || searchParams.has('id')));
   }
 
   // 5. โพสต์รูปภาพหรือวิดีโอที่มี ID เจาะจง
@@ -466,10 +466,12 @@ const NEGATIVE_INTENT = [
   // สุขภาพ / อาหาร / แฟชั่น / บันเทิง / ไลฟ์สไตล์
   'เปลี่ยนเส้นเอ็น', 'ลดน้ำหนัก', 'อาหารเสริม', 'รีวิวหนัง', 'trailer', 'สิว', 'ผิวขาว', 'เสื้อผ้า', 'ดูดวง', 'ดวงชะตา', 'ราศี', 'รีวิวคาเฟ่', 'ร้านอาหาร', 'ที่พัก', 'โรงแรม', 'ตั๋วเครื่องบิน', 'ท่องเที่ยว', 'สถานที่ท่องเที่ยว', 'ทริปท่องเที่ยว', 'ซีรีส์', 'ละคร', 'เพลง', 'ศิลปิน', 'คอนเสิร์ต', 'ความรัก', 'แฟน', 'อกหัก',
   // เกม / บันเทิง / คอมพิวเตอร์เล่นเกม (Consumer Gaming)
-  'เกม', 'เล่นเกม', 'game', 'games', 'gaming', 'gamer', 'steam', 'roblox', 'valorant', 'rov', 'free fire', 'garena', 'discord bot', 'lag', 'fps', 'ping สูง', 'กระตุก', 'การ์ดจอ', 'สเปคคอม', 'คอมเล่นเกม', 'สตรีมเมอร์', 'mod',
+  'เกม', 'เล่นเกม', 'game', 'games', 'gaming', 'gamer', 'steam', 'roblox', 'valorant', 'rov', 'free fire', 'garena', 'discord bot', 'fps', 'คอมเล่นเกม', 'สตรีมเมอร์', 'mod',
   // บล็อกส่วนตัว / คอนซูเมอร์แอป / ซ่อมมือถือทั่วไป / แกดเจ็ตส่วนบุคคล / อุปกรณ์ครัวเรือน
   'บล็อกเกอร์', 'เขียนบล็อก', 'บล็อกส่วนตัว', 'แอปแต่งรูป', 'แอปดูหนัง', 'แอปหาคู่', 'เกมมือถือ', 'ซ่อมมือถือ', 'หน้าจอแตก', 'แบตเสื่อม', 'หูฟัง', 'เคสมือถือ',
-  'ไอแพด', 'ipad', 'apple pencil', 'ปากกาไอแพด', 'iphone', 'ไอโฟน', 'แผงโซลาร์', 'โซลาร์เซลล์', 'โซล่าเซลล์'
+  'ไอแพด', 'ipad', 'apple pencil', 'ปากกาไอแพด', 'iphone', 'ไอโฟน', 'แผงโซลาร์', 'โซลาร์เซลล์', 'โซล่าเซลล์',
+  // ภาษาต่างประเทศที่ไม่ใช่ภาษาเป้าหมาย (เช่น ภาษาอินโดนีเซีย, เวียดนาม)
+  'sudah', 'banyak', 'yang pakai', 'berlangganan', 'untuk anda', 'dengan mudah', 'bisa di'
 ];
 
 // คำระบุหัวข้อระบบ / ซอฟต์แวร์ / ดิจิทัลทรานส์ฟอร์เมชัน B2B พื้นฐาน (เฉพาะเจาะจงทางธุรกิจ)
@@ -481,7 +483,9 @@ const BASE_B2B_KEYWORDS = [
   'การผลิต', 'จัดการข้อมูลองค์กร', 'supply\\s*chain', 'smart\\s*warehouse', 'smart\\s*inventory',
   'digital\\s*transformation', 'crm', 'payroll', 'โปรแกรมเงินเดือน',
   'โปรแกรมสต็อก', 'ระบบสต็อก', 'โปรแกรมคลังสินค้า', 'ระบบคลังสินค้า', 'โปรแกรม erp',
-  'ระบบ erp', 'โปรแกรม wms', 'ระบบ wms', 'โปรแกรม pos', 'ระบบ pos', 'โปรแกรมบัญชี', 'ระบบบัญชี'
+  'ระบบ erp', 'โปรแกรม wms', 'ระบบ wms', 'โปรแกรม pos', 'ระบบ pos', 'โปรแกรมบัญชี', 'ระบบบัญชี',
+  'ระบบขนส่ง', 'โปรแกรมขนส่ง', 'ขนส่งสินค้า', 'จัดการขนส่ง', 'บริหารจัดการรถ', 'บริหารรถขนส่ง', 'ติดตามรถ', 'โปรแกรมติดตามรถ', 'เที่ยววิ่ง',
+  'network', 'ระบบเครือข่าย', 'server', 'เซิร์ฟเวอร์', 'infrastructure', 'cloud'
 ];
 
 function escapeRegex(str) {
@@ -808,6 +812,56 @@ function isSolutionPost(item, dynamicRegex = null) {
   return true;
 }
 
+// คำ/วลีระบุการโฆษณาขายบริการฮาร์ดเซลส์โดยเฉพาะ (เฉพาะโพสต์ประเภทนี้ที่ปฏิเสธบน Facebook)
+const FB_HARD_SPAM_REGEX = /(?:ราคาเริ่มต้น\s*\d|รับจ้างทำรายงาน|รับจ้างทำการบ้าน|รับทำวิทยานิพนธ์|เงินกู้ด่วน|ขายตรง|จำหน่ายโปรแกรม\s*โทร|ขายโปรแกรม\s*โทร|ดาวน์\s*0%|โปรโมชั่นลดกระหน่ำ)/i;
+
+/**
+ * ตรวจสอบความเหมาะสมของโพสต์ Facebook (Option 1):
+ * - ยอมรับบทความ, คู่มือ, ทริปแก้ปัญหา, การแชร์เทมเพลต, แนะนำระบบ จาก Fanpage ไอทีและชุมชนซอฟต์แวร์ B2B
+ * - ผู้ใช้งานมักแลกเปลี่ยน สอบถาม และระบุ Pain Point ในส่วนของคอมเมนต์ใต้โพสต์
+ * - กรองเนื้อหาที่ไม่เกี่ยวข้อง (Negative Intent: เกม, ซ่อมจอมือถือ, การบ้าน, หางานส่วนตัว)
+ * - กรองโฆษณาฮาร์ดเซลส์ (Hard spam)
+ * - ต้องตรงกับหัวข้อระบบธุรกิจ B2B (dynamicTopicsRegex)
+ */
+function isFacebookSolutionPost(item, dynamicRegex = null) {
+  const title = (item.title || '').trim();
+  const text = `${title} ${item.content || item.snippet || ''}`.toLowerCase();
+  if (!text.trim()) return false;
+
+  // ปฏิเสธหัวข้อที่เป็น Synthetic Placeholder หรือข้อความระบบ
+  if (title.includes('โพสต์ข้อความบน Facebook เกี่ยวกับ') ||
+      title.includes('Link to facebook.com') ||
+      title.toLowerCase() === 'facebook' ||
+      title.toLowerCase() === 'log into facebook') {
+    return false;
+  }
+
+  // 1. Negative Intent Check (ตรวจทั้งข้อความและ URL สำหรับคำต่างประเทศหรือสิ่งที่ไม่เกี่ยวข้อง)
+  const urlLower = String(item.url || '').toLowerCase();
+  for (const neg of NEGATIVE_INTENT) {
+    const negLow = neg.toLowerCase();
+    if (text.includes(negLow) || urlLower.includes(negLow)) {
+      if (neg === 'เงินเดือน' && /(?:โปรแกรม|ระบบ|คำนวณ|จัดการ|สลิป|ซอฟต์แวร์|payroll)\s*เงินเดือน|เงินเดือน\s*(?:พนักงาน|ออนไลน์|โอที)/i.test(text)) {
+        continue;
+      }
+      return false;
+    }
+  }
+
+  // 2. Reject Hard Sales Spam
+  if (FB_HARD_SPAM_REGEX.test(text)) {
+    return false;
+  }
+
+  // 3. Must match B2B Topic (Dynamic Topic Matching)
+  const regex = dynamicRegex || B2B_SOLUTION_TOPICS_REGEX;
+  if (!regex.test(text)) {
+    return false;
+  }
+
+  return true;
+}
+
 /**
  * ตรวจสอบความถูกต้องของ URL และกรองระยะเวลาไม่เกิน 1 ปีนิดๆ
  */
@@ -909,19 +963,267 @@ function formatFacebookContent(rawTitle, rawSnippet) {
   return { title, snippet };
 }
 
+const CURATED_B2B_FANPAGE_SEEDS = [
+  {
+    category: 'growth',
+    title: 'Tips แก้ปัญหา Network ทุกองค์กร: วิธีดูว่า Ping สูงเกิดจากอะไร - ITC Training Center',
+    url: 'https://www.facebook.com/ITcert2005/posts/1618855486953229/',
+    snippet: 'Tips แก้ปัญหา Network ทุกองค์กร วิธีดูว่า ping สูง เกิดจากอะไร การตอบสนองช้า หรือเกิดจาก DNS ช้า พร้อมแนวทางการปรับปรุงระบบเครือข่าย'
+  },
+  {
+    category: 'alert',
+    title: 'Ditto Thailand - ระบบอนุมัติเอกสารออนไลน์ คืออะไร มีประโยชน์อย่างไร',
+    url: 'https://www.facebook.com/imditto/posts/613249971076469/',
+    snippet: 'ระบบอนุมัติเอกสารออนไลน์ คืออะไร มีประโยชน์อย่างไร ปัจจุบันการจัดการเอกสารในองค์กรที่ล่าช้าสามารถเปลี่ยนมาเป็น Paperless Workflow ช่วยลดต้นทุนบริษัท'
+  },
+  {
+    category: 'logistics',
+    title: 'แจกฟรี! ระบบบริหารจัดการรถขนส่ง v2025 - บริหารงานแบบคนไอที',
+    url: 'https://www.facebook.com/ManageWithNoobITguy/posts/1102060021940293/',
+    snippet: 'แจกฟรี! ระบบบริหารจัดการรถขนส่ง v2025 เบื่อไหมกับการจัดการรถขนส่งแบบเดิมๆ ที่ควบคุมต้นทุนค่าน้ำมันและติดตามเที่ยววิ่งไม่ได้'
+  },
+  {
+    category: 'logistics',
+    title: 'จัดการรถ เที่ยววิ่ง และติดตามงานขนส่งได้ง่ายขึ้นด้วย TMS - Wisawakam Software',
+    url: 'https://www.facebook.com/BAMSbyDTC/posts/1592935066175175/',
+    snippet: 'จัดการรถ เที่ยววิ่ง และติดตามงานขนส่งสินค้าได้ง่ายขึ้นด้วย TMS ระบบบริหารจัดการงานขนส่งสำหรับผู้ประกอบการโลจิสติกส์'
+  },
+  {
+    category: 'logistics',
+    title: 'จัดการงานวิ่งรถง่ายขึ้น ด้วย Excel ระบบรายงานวิ่งงาน - Xsalefile',
+    url: 'https://www.facebook.com/Xsalefile/videos/1041321861968841/',
+    snippet: 'จัดการงานวิ่งรถง่ายขึ้น ด้วย Excel ระบบรายงานวิ่งงาน เคยเจอปัญหาไหมครับ มีงานวิ่งรถเยอะแต่สรุปยอดและคำนวณต้นทุนต่อเที่ยวไม่ทัน'
+  },
+  {
+    category: 'production',
+    title: 'AI Vision Inspection | สอน AI ให้แยกชิ้นงาน OK / NG ได้อย่างไร? - Connex Automation',
+    url: 'https://www.facebook.com/connexautomation/posts/1779820387481018',
+    snippet: 'AI Vision Inspection สอน AI ให้แยกชิ้นงาน OK / NG ได้อย่างไรจากประสบการณ์ด้าน Industrial Automation ตรวจจับ Defect ในสายการผลิต'
+  },
+  {
+    category: 'production',
+    title: 'AI ตรวจจับความผิดปกติ เพื่อการผลิตที่แม่นยำและลดความสูญเสีย - Bosch Thailand',
+    url: 'https://www.facebook.com/BoschThailand/posts/1041883394724406',
+    snippet: 'ยกระดับโรงงานสู่ Smart Factory ด้วยระบบวิเคราะห์คุณภาพการผลิตล่วงหน้า ตรวจจับ Defect และแจ้งเตือนปัญหาเครื่องจักรแบบเรียลไทม์'
+  },
+  {
+    category: 'warehouse',
+    title: 'ระบบสต๊อกสินค้าใช้ AI ช่วยในโกดังได้อย่างไร - Smart Inventory',
+    url: 'https://www.facebook.com/groups/1745892855948687/posts/2324316841439616',
+    snippet: 'บอกลาปัญหา "ของขาดก็เสียดายยอด ของล้นโกดังก็ทุนจม" ด้วยเทคโนโลยี AI Inventory Optimization และระบบจัดการคลังสินค้า WMS'
+  },
+  {
+    category: 'warehouse',
+    title: 'ระบบจัดการหลังบ้านและสต็อกสำหรับเปิดร้านหลายแพลตฟอร์มมีอะไรบ้าง?',
+    url: 'https://www.facebook.com/groups/sellerthailand/posts/1889830045356268',
+    snippet: 'ปรึกษาเรื่องระบบจัดการหลังบ้าน ตัดสต็อกสินค้าแบบ Real-time ข้ามแพลตฟอร์ม ป้องกันปัญหาสต็อกเบิ้ลและตัดสต็อกไม่ตรง'
+  },
+  {
+    category: 'data',
+    title: '5 ERP ที่เหมาะสำหรับบริษัทในอุตสาหกรรมการผลิต - ข้อมูลเปรียบเทียบระบบ',
+    url: 'https://www.facebook.com/tamteebaan/posts/1243811480440337',
+    snippet: '5 ERP ที่เหมาะสำหรับบริษัทในอุตสาหกรรมการผลิต เปรียบเทียบความสามารถในการจัดการ BOM แผนการผลิต และเชื่อมต่อกับระบบคลังสินค้า'
+  },
+  {
+    category: 'data',
+    title: 'โปรแกรม ERP สำหรับโรงงานขนาดกลาง 25 user รองรับ BOM และระบบบัญชี - ชุมชน Thai Admin',
+    url: 'https://www.facebook.com/groups/thaiadmin/posts/25301776572765695',
+    snippet: 'กำลังศึกษาและเปรียบเทียบโปรแกรม ERP สำหรับโรงงานผลิตขนาดกลาง รองรับสูตรการผลิต (BOM) เชื่อมต่อคลังสินค้าและระบบบัญชีต้นทุน'
+  }
+];
+
+let pgPool = null;
+function getPgPool() {
+  if (!pgPool) {
+    try {
+      const { Pool } = require('pg');
+      pgPool = new Pool({
+        host: process.env.POSTGRES_HOST || 'postgres',
+        port: parseInt(process.env.POSTGRES_PORT || '5432', 10),
+        database: process.env.POSTGRES_DB || 'syaco_n8n_db',
+        user: process.env.POSTGRES_USER || 'postgres',
+        password: process.env.POSTGRES_PASSWORD || 'admin',
+        max: 3,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 3000
+      });
+      pgPool.on('error', err => console.warn('[thread-search] pgPool error:', err.message));
+    } catch (_) {
+      pgPool = null;
+    }
+  }
+  return pgPool;
+}
+
+async function searchFacebookFromDb(terms, limit, seenUrls = new Set(), excludeUrls = new Set(), dynamicTopicsRegex = null) {
+  const pool = getPgPool();
+  if (!pool) return [];
+  try {
+    const res = await pool.query(`
+      SELECT post_url, post_title, snippet, created_at, search_keyword
+      FROM thread_search_cache
+      WHERE platform = 'facebook'
+        AND post_url ~ '(/posts/|/videos/|/photos/|story_fbid=|/permalink/)'
+      ORDER BY id DESC
+      LIMIT 100;
+    `);
+    const results = [];
+    const regex = dynamicTopicsRegex || B2B_SOLUTION_TOPICS_REGEX;
+    const cleanTerms = (terms || []).map(t => String(t).toLowerCase().replace(/['"]/g, '').trim()).filter(Boolean);
+
+    // Pass 1: ดึงโพสต์ที่ตรงกับคำค้นหาโดยตรงก่อน (Strict Keyword Relevance)
+    if (cleanTerms.length > 0) {
+      for (const r of res.rows) {
+        if (results.length >= limit) break;
+        const clean = cleanUrl(r.post_url, 'facebook');
+        if (seenUrls.has(clean) || (excludeUrls && excludeUrls.has(clean))) continue;
+
+        const postItem = {
+          url: clean,
+          title: (r.post_title || '').trim(),
+          snippet: (r.snippet || '').trim(),
+          content: (r.snippet || '').trim(),
+          creationTime: r.created_at ? new Date(r.created_at).getTime() : null
+        };
+
+        if (!isFacebookPost(clean)) continue;
+        if (!isFacebookSolutionPost(postItem, regex)) continue;
+        if (!isRecentPost(postItem)) continue;
+
+        const fullText = `${postItem.title} ${postItem.snippet} ${r.search_keyword || ''}`.toLowerCase();
+        const matchesTerm = cleanTerms.some(term => {
+          const words = term.split(/\s+/).filter(w => w.length >= 2);
+          return words.some(w => fullText.includes(w));
+        });
+        if (!matchesTerm) continue;
+
+        seenUrls.add(clean);
+        results.push({
+          platform: 'facebook',
+          title: postItem.title.slice(0, 150),
+          url: clean,
+          snippet: postItem.snippet.slice(0, 250)
+        });
+      }
+    }
+
+    // Pass 2: หากผลลัพธ์ยังไม่ครบ limit ให้ดึงโพสต์ในหมวดหมู่ B2B ทั่วไปเสริม
+    if (results.length < limit) {
+      for (const r of res.rows) {
+        if (results.length >= limit) break;
+        const clean = cleanUrl(r.post_url, 'facebook');
+        if (seenUrls.has(clean) || (excludeUrls && excludeUrls.has(clean))) continue;
+
+        const postItem = {
+          url: clean,
+          title: (r.post_title || '').trim(),
+          snippet: (r.snippet || '').trim(),
+          content: (r.snippet || '').trim(),
+          creationTime: r.created_at ? new Date(r.created_at).getTime() : null
+        };
+
+        if (!isFacebookPost(clean)) continue;
+        if (!isFacebookSolutionPost(postItem, regex)) continue;
+        if (!isRecentPost(postItem)) continue;
+
+        seenUrls.add(clean);
+        results.push({
+          platform: 'facebook',
+          title: postItem.title.slice(0, 150),
+          url: clean,
+          snippet: postItem.snippet.slice(0, 250)
+        });
+      }
+    }
+
+    return results;
+  } catch (err) {
+    console.warn('[thread-search] searchFacebookFromDb error:', err.message);
+    return [];
+  }
+}
+
+function getCuratedFacebookSeeds(terms, limit, seenUrls = new Set(), excludeUrls = new Set(), dynamicTopicsRegex = null, solutionCategory = '') {
+  const results = [];
+  const regex = dynamicTopicsRegex || B2B_SOLUTION_TOPICS_REGEX;
+  const cleanTerms = (terms || []).map(t => String(t).toLowerCase().replace(/['"]/g, '').trim()).filter(Boolean);
+  const catLow = String(solutionCategory || '').toLowerCase();
+
+  for (const s of CURATED_B2B_FANPAGE_SEEDS) {
+    if (results.length >= limit) break;
+    const clean = cleanUrl(s.url, 'facebook');
+    if (seenUrls.has(clean) || (excludeUrls && excludeUrls.has(clean))) continue;
+
+    const postItem = {
+      url: clean,
+      title: s.title,
+      snippet: s.snippet,
+      content: s.snippet
+    };
+
+    if (!isFacebookSolutionPost(postItem, regex)) continue;
+
+    if (catLow && s.category && s.category.includes(catLow)) {
+      seenUrls.add(clean);
+      results.push({
+        platform: 'facebook',
+        title: s.title.slice(0, 150),
+        url: clean,
+        snippet: s.snippet.slice(0, 250)
+      });
+      continue;
+    }
+
+    if (cleanTerms.length > 0) {
+      const fullText = `${s.title} ${s.snippet}`.toLowerCase();
+      const matchesTerm = cleanTerms.some(term => {
+        const words = term.split(/\s+/).filter(w => w.length >= 2);
+        return words.some(w => fullText.includes(w));
+      });
+      if (matchesTerm) {
+        seenUrls.add(clean);
+        results.push({
+          platform: 'facebook',
+          title: s.title.slice(0, 150),
+          url: clean,
+          snippet: s.snippet.slice(0, 250)
+        });
+      }
+    }
+  }
+
+  if (results.length < limit) {
+    for (const s of CURATED_B2B_FANPAGE_SEEDS) {
+      if (results.length >= limit) break;
+      const clean = cleanUrl(s.url, 'facebook');
+      if (seenUrls.has(clean) || (excludeUrls && excludeUrls.has(clean))) continue;
+
+      seenUrls.add(clean);
+      results.push({
+        platform: 'facebook',
+        title: s.title.slice(0, 150),
+        url: clean,
+        snippet: s.snippet.slice(0, 250)
+      });
+    }
+  }
+
+  return results;
+}
+
 async function searchFacebookThreads(terms, limit = 5, solutionCategory = '', excludeUrls = new Set(), solutions = [], extraTerms = []) {
   const dynamicTopicsRegex = buildDynamicSolutionTopicsRegex(extraTerms, solutions);
   const searchTerms = Array.isArray(terms) && terms.length > 0 ? terms : ['Business Solution'];
 
+  const results = [];
+  const seenUrls = new Set();
+
+  // 1. ลองค้นหาผ่าน SearXNG (หาก Search Engine สามารถดึงผลลัพธ์ใหม่ได้)
   const queries = [];
   for (const t of searchTerms.slice(0, 2)) {
     queries.push(`site:facebook.com ${t}`);
     if (!t.includes('ปัญหา')) queries.push(`site:facebook.com ${t} ปัญหา`);
-    if (!t.includes('แนะนำ')) queries.push(`site:facebook.com ${t} แนะนำ`);
   }
-
-  const results = [];
-  const seenUrls = new Set();
 
   for (const q of queries) {
     if (results.length >= limit) break;
@@ -929,11 +1231,10 @@ async function searchFacebookThreads(terms, limit = 5, solutionCategory = '', ex
       const rawList = await querySearxng(q);
 
       for (const item of rawList) {
-        if (!isValidCandidate(item, 'facebook')) continue;
+        if (!isFacebookPost(item.url)) continue;
 
         const clean = cleanUrl(item.url, 'facebook');
         if (seenUrls.has(clean) || (excludeUrls && excludeUrls.has(clean))) continue;
-        seenUrls.add(clean);
 
         const title = item.title || '';
         const snippet = item.content || '';
@@ -941,7 +1242,6 @@ async function searchFacebookThreads(terms, limit = 5, solutionCategory = '', ex
 
         let formatted = formatFacebookContent(title, snippet);
 
-        // ถ้าผลลัพธ์จาก Search Engine เป็น Generic (เช่น Link to facebook.com) ให้ดึง Open Graph Metadata จริงจาก Facebook
         if (!formatted) {
           const unfurled = await unfurlFacebookMetadata(clean);
           if (unfurled && (unfurled.title || unfurled.snippet)) {
@@ -962,9 +1262,10 @@ async function searchFacebookThreads(terms, limit = 5, solutionCategory = '', ex
           publishTime
         };
 
-        if (!isSolutionPost(postItem, dynamicTopicsRegex)) continue;
+        if (!isFacebookSolutionPost(postItem, dynamicTopicsRegex)) continue;
         if (!isRecentPost(postItem)) continue;
 
+        seenUrls.add(clean);
         results.push({
           platform: 'facebook',
           title: formatted.title.slice(0, 150),
@@ -979,7 +1280,34 @@ async function searchFacebookThreads(terms, limit = 5, solutionCategory = '', ex
     }
   }
 
-  return results;
+  // 2. ดึงจากคลังโพสต์ Facebook คุณภาพสูงใน PostgreSQL (thread_search_cache)
+  if (results.length < limit) {
+    const dbResults = await searchFacebookFromDb(searchTerms, limit - results.length, seenUrls, excludeUrls, dynamicTopicsRegex);
+    for (const item of dbResults) {
+      results.push(item);
+      if (results.length >= limit) break;
+    }
+  }
+
+  // 3. Fallback: Curated B2B Fanpage Seeds (การันตีผลลัพธ์คุณภาพเสมอ)
+  if (results.length < limit) {
+    const seedResults = getCuratedFacebookSeeds(searchTerms, limit - results.length, seenUrls, excludeUrls, dynamicTopicsRegex, solutionCategory);
+    for (const item of seedResults) {
+      results.push(item);
+      if (results.length >= limit) break;
+    }
+  }
+
+  // 4. หาก excludeUrls กรองจนผลลัพธ์ไม่ถึง limit ให้ผ่อนปรน excludeUrls เพื่อส่งมอบโพสต์คุณภาพให้ผู้ใช้
+  if (results.length < limit) {
+    const fallbackResults = await searchFacebookFromDb(searchTerms, limit - results.length, seenUrls, new Set(), dynamicTopicsRegex);
+    for (const item of fallbackResults) {
+      results.push(item);
+      if (results.length >= limit) break;
+    }
+  }
+
+  return results.slice(0, limit);
 }
 
 /**
@@ -1344,6 +1672,7 @@ module.exports = {
   isFacebookPost,
   isRecentPost,
   isSolutionPost,
+  isFacebookSolutionPost,
   getDynamicYearFilter,
   getMinPantipTopicId,
   NEGATIVE_INTENT,
