@@ -32,11 +32,19 @@ It synthesizes and standardizes the requirements previously located in `skills/a
 | **Facebook / Groups** | Flow 3 | ช่วยแก้ปัญหาหน้างาน ตรงประเด็น ภาษาเพื่อนช่างคุยกัน | 1-2 ย่อหน้า |
 | **Bluesky** | Flow 2 | Quick tech commentary สั้น คม มี hook เชิญชวนผู้จัดการฝ่ายไอที/เดฟ | บังคับ <300 ตัวอักษร + ลิงก์ URL |
 | **Dev.to** | Flow 2 | Technical Guide / Architecture Overview เจาะลึกโค้ดและระบบ ไม่มีคำขายของ | Markdown + แท็ก 3-4 คำ `[a-z0-9]` |
-| **Manual Article** | Flow 2 | บทความเจาะลึกองค์กร (Business Problem, Architecture Solution, Trade-offs, Next steps) | 3-5 แท็ก ภาษาไทย/อังกฤษ |
+| **Manual Article** | Flow 2 | บทความเจาะลึกองค์กร (Business Problem, Architecture Solution, Trade-offs, Next steps) | 1,000 - 1,500 ตัวอักษร (ห้ามเกิน 1,800) + 3-5 แท็ก |
 
 ---
 
-## 4. Strict Backlink & Disclosure Rules (กฎการใส่ลิงก์เพื่อป้องกันการถูกแบน)
+## 4. Strict Length Constraint (จำกัดความยาวไม่เกิน 1,800 ตัวอักษร)
+- **ห้ามเกิน 1,800 ตัวอักษรเด็ดขาด**: เนื้อหาทุกรูปแบบ (คำตอบ Flow 3 และบทความ Flow 2) ต้องมีความยาวไม่เกิน 1,800 ตัวอักษร เพื่อให้ส่งบน Discord และแพลตฟอร์มปลายทางได้สมบูรณ์โดยไม่ถูกตัดทอนหรือเกิดข้อผิดพลาด 2000-char limit
+- **ช่วงความยาวที่แนะนำ**:
+  - Flow 3 Community Answers: 600 - 1,400 ตัวอักษร
+  - Flow 2 Manual Enterprise Articles: 1,000 - 1,500 ตัวอักษร
+
+---
+
+## 5. Strict Backlink & Disclosure Rules (กฎการใส่ลิงก์เพื่อป้องกันการถูกแบน)
 1. **Value-First Rule**: คำตอบ/บทความต้องมีประโยชน์และแก้ปัญหาได้สมบูรณ์แบบ 100% แม้จะตัดลิงก์ออกไปก็ตาม
 2. **Never Force Links**: สำหรับคอมมูนิตี้ ใส่ลิงก์เฉพาะกรณีที่เป็น Enterprise Fit และโซลูชันช่วยแก้ปัญหาได้ตรงจุดเท่านั้น (หากไม่ตรงให้ตั้ง `linkIncluded: false`)
 3. **Maximum 1 Link**: ใส่ได้ไม่เกิน 1 ลิงก์เสมอ

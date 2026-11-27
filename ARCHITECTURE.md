@@ -419,8 +419,9 @@ flowchart LR
    - ใช้งานผ่าน `@atproto/api` โดยล็อกอินด้วย `BLUESKY_HANDLE` และ `BLUESKY_APP_PASSWORD`
    - ตรวจจับและสร้าง Facet สำหรับ Link (`app.bsky.richtext.facet`) และ Tag อัตโนมัติ
    - ตรวจสอบความยาวไม่เกิน 300 ตัวอักษรตามมาตรฐาน Bluesky
-2. **Dev.to (`publishDevtoArticle`):**
+2. **Dev.to (`publishToDevto`):**
    - ยิงตรงเข้า `https://dev.to/api/articles` โดยใช้ `DEVTO_API_KEY`
+   - เผยแพร่สู่สาธารณะทันที (Live Public: `published: true`) เป็นค่าเริ่มต้น (สามารถปรับ safe draft mode ผ่าน `DEVTO_PUBLISH_LIVE=false` ได้)
    - แปลงหัวข้อและเนื้อหา Markdown พร้อมระบุ `canonical_url` และ Sanitize Tags ไม่เกิน 4 แท็ก
 
 ---

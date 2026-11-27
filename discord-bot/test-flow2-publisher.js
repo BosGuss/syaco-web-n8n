@@ -63,10 +63,12 @@ async function runTests() {
   assert.strictEqual(bskyResult.postedUrl, 'https://bsky.app/profile/test-user.bsky.social/post/3mockrkey456');
   console.log('  ✅ publishToBluesky successfully created session and posted.\n');
 
-  // Test 4: publishToDevto with simulated endpoint
-  console.log('Test 4: Testing publishToDevto...');
+  // Test 4: publishToDevto with simulated endpoint (verifying live public publishing)
+  console.log('Test 4: Testing publishToDevto live public publishing...');
+  let sentPayload = null;
   const mockFetchDevto = async (url, options) => {
     assert.strictEqual(options.headers['api-key'], 'mock-devto-key');
+    sentPayload = JSON.parse(options.body);
     return {
       ok: true,
       json: async () => ({
@@ -82,7 +84,9 @@ async function runTests() {
     apiKey: 'mock-devto-key'
   });
   assert.strictEqual(devtoResult.postedUrl, 'https://dev.to/syaco/automated-data-pipelines-998877');
-  console.log('  ✅ publishToDevto successfully sent article payload.\n');
+  assert.strictEqual(sentPayload.article.published, true, 'Dev.to article should be published: true');
+  assert.strictEqual(devtoResult.isDraft, false, 'devtoResult.isDraft should be false');
+  console.log('  ✅ publishToDevto successfully sent live public article payload (published: true).\n');
 
   // Test 5: In-memory mock database for publishDraft & rejectDraft
   console.log('Test 5: Testing publishDraft with atomic DB locking...');

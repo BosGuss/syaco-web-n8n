@@ -95,7 +95,8 @@ async function publishToBluesky({
 async function publishToDevto({
   draft,
   fetchFn = globalThis.fetch,
-  apiKey = process.env.DEVTO_API_KEY
+  apiKey = process.env.DEVTO_API_KEY,
+  publishLive = null
 }) {
   if (!apiKey) {
     throw new Error('DEVTO_API_KEY is not set in environment or bot settings');
@@ -104,8 +105,9 @@ async function publishToDevto({
   const tags = sanitizeDevtoTags(draft.tags || ['architecture', 'tech']);
   const title = (draft.title_th || draft.title_en || 'SyaCo Enterprise Solution').trim();
 
-  // Safe mode: default to draft (published: false) to prevent automated account flagging / spam-ban on Dev.to
-  const published = process.env.DEVTO_PUBLISH_LIVE === 'true';
+  // Default to live public article (published: true) unless DEVTO_PUBLISH_LIVE is explicitly set to 'false'
+  const isExplicitlyDraft = publishLive !== null ? (publishLive === false || publishLive === 'false') : process.env.DEVTO_PUBLISH_LIVE === 'false';
+  const published = !isExplicitlyDraft;
 
   const res = await fetchFn('https://dev.to/api/articles', {
     method: 'POST',

@@ -247,6 +247,8 @@ const {
   buildFlow2Card,
   handleFlow2DraftsNotify,
   getFlow2CandidateSolutions,
+  formatCopyAnswerPayload,
+  formatCopyArticlePayload,
   saveAndVerifyDevtoCookie,
   saveAndVerifyDevtoKey
 } = require('./commands');
@@ -1151,7 +1153,9 @@ client.on('interactionCreate', async (interaction) => {
             const linkDisplay = result.postedUrl
               ? (isDraft && result.platform === 'devto'
                   ? `[เปิดดูแบบร่างและกด Publish บน Dev.to Dashboard](${result.postedUrl})`
-                  : `[ดูโพสต์ที่เผยแพร่แล้ว](${result.postedUrl})`)
+                  : (result.platform === 'devto'
+                      ? `[ดูบทความที่เผยแพร่แล้วบน Dev.to](${result.postedUrl})`
+                      : `[ดูโพสต์ที่เผยแพร่แล้ว](${result.postedUrl})`))
               : 'พร้อมใช้งานแล้ว';
             const noteText = isDraft && result.platform === 'devto'
               ? '\n💡 *หมายเหตุ: สร้างเป็นแบบร่าง (Draft) เพื่อป้องกันไม่ให้ระบบ Anti-Spam ของ Dev.to บล็อกบัญชีใหม่ ทีมงานสามารถตรวจทานและกด Publish บนเว็บได้เลย*'
@@ -1297,28 +1301,21 @@ client.on('interactionCreate', async (interaction) => {
           return await interaction.reply({ content: 'ไม่พบข้อมูลบทความ', ephemeral: true });
         }
         const draft = rows[0];
-        const tagsStr = (draft.tags || []).join(', ') || '-';
-        const label = draft.platform === 'devto' ? 'Dev.to Technical Article' : 'Manual Enterprise Article';
-        const header = `📋 **เนื้อหาบทความฉบับเต็ม (${label})**\n\n📌 **ชื่อบทความ:** ${draft.title_th}\n🏷️ **แท็ก:** \`${tagsStr}\`\n\n\`\`\`markdown\n`;
-        const footer = `\n\`\`\``;
-        const maxBody = Math.max(100, 1950 - header.length - footer.length);
-        const fullContent = draft.content_markdown || '';
-        const isTruncated = fullContent.length > maxBody;
-        const text = isTruncated
-          ? fullContent.slice(0, maxBody - 3) + '...'
-          : fullContent;
-
-        const files = [];
-        if (isTruncated) {
-          const buffer = Buffer.from(fullContent, 'utf8');
-          files.push(new AttachmentBuilder(buffer, { name: `article-${id}.md` }));
-        }
+        const { replies } = formatCopyArticlePayload(id, draft);
 
         await interaction.reply({
-          content: `${header}${text}${footer}${isTruncated ? `\n📎 *บทความมีความยาวเกิน 2,000 ตัวอักษร ได้แนบไฟล์ \`article-${id}.md\` ฉบับเต็มให้ดาวน์โหลดแล้วด้านล่าง*` : ''}`,
-          files,
+          content: replies[0].content,
+          files: replies[0].files,
           ephemeral: true
         });
+
+        for (let i = 1; i < replies.length; i++) {
+          await interaction.followUp({
+            content: replies[i].content,
+            files: replies[i].files,
+            ephemeral: true
+          });
+        }
         return;
       }
 
@@ -1328,10 +1325,23 @@ client.on('interactionCreate', async (interaction) => {
         if (!rows.length) {
           return await interaction.reply({ content: '❌ ไม่พบข้อมูลคำตอบนี้ในระบบ', ephemeral: true });
         }
-        return await interaction.reply({
-          content: `📋 **ข้อความคำตอบสำหรับนำไปโพสต์ (Candidate #${candidateId} - ${rows[0].platform.toUpperCase()}):**\n\`\`\`text\n${rows[0].answer}\n\`\`\`\n🔗 **ลิงก์กระทู้:** ${rows[0].post_url}`,
+
+        const { replies } = formatCopyAnswerPayload(candidateId, rows[0]);
+
+        await interaction.reply({
+          content: replies[0].content,
+          files: replies[0].files,
           ephemeral: true
         });
+
+        for (let i = 1; i < replies.length; i++) {
+          await interaction.followUp({
+            content: replies[i].content,
+            files: replies[i].files,
+            ephemeral: true
+          });
+        }
+        return;
       }
 
       if (interaction.customId.startsWith('markposted_')) {

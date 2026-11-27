@@ -12,6 +12,7 @@ const SHARED_WRITING_AND_ANTI_SPAM_RULES = [
   '- WRITE LIKE A REAL ENGINEER: Sound like an experienced senior engineer / technical practitioner sharing real-world insights. Use natural, conversational phrasing. Avoid overly rigid bulleted lists where every item has identical bold headings.',
   '- PRESERVE TECHNICAL ACCURACY & NO FABRICATION: Keep protocol names (PLC, Modbus, MQTT, OPC UA, REST, gRPC), API terminology, and architecture patterns accurate. Never fabricate quantitative metrics, fake statistics, imaginary client names, or fake customer testimonials.',
   '- VALUE-FIRST: The response/article must provide 100% standalone technical value and actionable insight even if all links are stripped.',
+  '- STRICT LENGTH CONSTRAINT (MAX 1,800 CHARACTERS): The response or article body MUST NEVER exceed 1,800 characters under any circumstance (ideal: 800 - 1,500 characters). Keep explanations focused, high-impact, and concise so the entire content fits within 1,800 characters in a single message.',
   '- STRICT BACKLINK & DISCLOSURE RULES:',
   '  * Value-First: Never force a link where it does not naturally belong.',
   '  * Maximum 1 link.',
@@ -25,7 +26,7 @@ const PLATFORM_VOICE_GUIDELINES = {
   facebook_group: 'Tone: Direct troubleshooting, practical advice, conversational and helpful peer-to-peer.',
   bluesky: 'Tone: Quick tech commentary / hook in Thai. Punchy, concise, strictly under 300 characters. Focus on one main idea with engaging hook for enterprise IT managers and developers.',
   devto: 'Tone: High-quality technical guide / architectural overview in Markdown for developers. Practical problem-solving, clean code/tech depth, no marketing fluff. 3 to 4 tags strictly alphanumeric [a-z0-9].',
-  manual_article: 'Tone: Professional enterprise long-form article in Thai for tech blogs and corporate knowledge bases. Clear business problem, technical solution, architectural benefits, engineering trade-offs, and next steps. 3 to 5 tags.'
+  manual_article: 'Tone: Professional enterprise article in Thai for tech blogs and corporate knowledge bases. Clear business problem, technical solution, architectural benefits, engineering trade-offs, and next steps. 3 to 5 tags. STRICT LENGTH: Must be between 1,000 and 1,500 characters (maximum 1,600 characters). Do NOT exceed 1,800 characters.'
 };
 
 function buildFlow3Prompt(req, solutions) {
@@ -40,7 +41,7 @@ function buildFlow3Prompt(req, solutions) {
     '   - LOW: Student homework, gaming, hobbyist, or non-commercial inquiry.',
     '2. Determine whether SyaCo has relevant expertise to answer this question concretely (canAnswer: boolean).',
     '3. Identify the best matching SyaCo solution from the catalog (matchedSolutionId), if one genuinely fits.',
-    '4. Draft a high-value, practical technical response tailored to the platform in natural Thai.',
+    '4. Draft a high-value, practical technical response tailored to the platform in natural Thai (STRICT LENGTH: 600 - 1,400 characters, NEVER exceed 1,800 characters).',
     '',
     `## Platform: ${req.platform}`,
     `Voice Guidelines: ${voice}`,

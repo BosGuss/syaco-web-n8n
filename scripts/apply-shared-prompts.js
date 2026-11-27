@@ -21,6 +21,7 @@ const sharedRules = [
   '- WRITE LIKE A REAL ENGINEER: Sound like an experienced senior engineer / technical practitioner sharing real-world insights. Use natural, conversational phrasing. Avoid overly rigid bulleted lists where every item has identical bold headings.',
   '- PRESERVE TECHNICAL ACCURACY & NO FABRICATION: Keep protocol names (PLC, Modbus, MQTT, OPC UA, REST, gRPC), API terminology, and architecture patterns accurate. Never fabricate quantitative metrics, fake statistics, imaginary client names, or fake customer testimonials.',
   '- VALUE-FIRST: The response/article must provide 100% standalone technical value and actionable insight even if all links are stripped.',
+  '- STRICT LENGTH CONSTRAINT (MAX 1,800 CHARACTERS): The response or article body MUST NEVER exceed 1,800 characters under any circumstance (ideal: 800 - 1,500 characters). Keep explanations focused, high-impact, and concise so the entire content fits within 1,800 characters in a single message.',
   '- STRICT BACKLINK & DISCLOSURE RULES:',
   '  * Value-First: Introduce the solution organically where it directly solves the engineering challenge.',
   '  * Maximum 1 link.',
@@ -30,7 +31,7 @@ const sharedRules = [
 // 2. Platform Voice Guidelines for Flow 2
 const voiceBluesky = 'Tone: Quick tech commentary / hook in Thai. Punchy, concise, strictly under 300 characters. Focus on one main idea with engaging hook for enterprise IT managers and developers.';
 const voiceDevto = 'Tone: High-quality technical guide / architectural overview in Markdown for developers. Practical problem-solving, clean code/tech depth, no marketing fluff. 3 to 4 tags strictly alphanumeric [a-z0-9].';
-const voiceManual = 'Tone: Professional enterprise long-form article in Thai for tech blogs and corporate knowledge bases. Clear business problem, technical solution, architectural benefits, engineering trade-offs, and next steps. 3 to 5 tags.';
+const voiceManual = 'Tone: Professional enterprise long-form article in Thai for tech blogs and corporate knowledge bases. Clear business problem, technical solution, architectural benefits, engineering trade-offs, and next steps. STRICT LENGTH: Must be between 1,000 and 1,500 characters (NEVER exceed 1,800 characters). 3 to 5 tags.';
 
 // Prompt A: Bluesky (Micro <= 300 chars TH) + Dev.to (Technical Markdown for developers)
 const promptA = [
@@ -94,6 +95,7 @@ const promptB = [
   'Format: Manual Long-form Article (manualArticle)',
   \`- Voice & Guidelines: \${voiceManual}\`,
   \`- Includes link: \${sol.url}\`,
+  '- STRICT LENGTH LIMIT: Exactly 1,000 - 1,500 characters (NEVER exceed 1,800 characters). Focus on high-value architecture concepts, practical trade-offs, and concise actionable steps.',
   '- Tags: 3 to 5 tags in Thai or English.',
   '',
   sharedRules,
@@ -169,6 +171,7 @@ const sharedRules = [
   '- WRITE LIKE A REAL ENGINEER: Sound like an experienced senior engineer / technical practitioner sharing real-world insights. Use natural, conversational phrasing. Avoid overly rigid bulleted lists where every item has identical bold headings.',
   '- PRESERVE TECHNICAL ACCURACY & NO FABRICATION: Keep protocol names (PLC, Modbus, MQTT, OPC UA, REST, gRPC), API terminology, and architecture patterns accurate. Never fabricate quantitative metrics, fake statistics, imaginary client names, or fake customer testimonials.',
   '- VALUE-FIRST: The response/article must provide 100% standalone technical value and actionable insight even if all links are stripped.',
+  '- STRICT LENGTH CONSTRAINT (MAX 1,800 CHARACTERS): The response or article body MUST NEVER exceed 1,800 characters under any circumstance (ideal: 800 - 1,500 characters). Keep explanations focused, high-impact, and concise so the entire content fits within 1,800 characters in a single message.',
   '- STRICT BACKLINK & DISCLOSURE RULES:',
   '  * Include a SyaCo solution URL ONLY if leadFit is HIGH/MEDIUM and the solution directly helps solve their problem. Otherwise set linkIncluded = false and suggestedAnchor = "".',
   '  * Maximum 1 link.',
@@ -186,7 +189,7 @@ const prompt = [
   '   - LOW: Student homework, gaming, hobbyist, or non-commercial inquiry.',
   '2. Determine whether SyaCo has relevant expertise to answer this question concretely (canAnswer: boolean).',
   '3. Identify the best matching SyaCo solution from the catalog (matchedSolutionId), if one genuinely fits.',
-  '4. Draft a high-value, practical technical response tailored to the platform in natural Thai.',
+  '4. Draft a high-value, practical technical response tailored to the platform in natural Thai (STRICT LENGTH LIMIT: 600 - 1,400 characters, NEVER exceed 1,800 characters under any circumstance).',
   '',
   \`## Platform: \${req.platform}\`,
   \`Voice Guidelines: \${voiceGuidelines[req.platform] || voiceGuidelines.pantip}\`,

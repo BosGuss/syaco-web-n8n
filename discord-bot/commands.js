@@ -11,7 +11,8 @@ const {
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
-  StringSelectMenuBuilder
+  StringSelectMenuBuilder,
+  AttachmentBuilder
 } = require('discord.js');
 const { searchRecentThreads } = require('./thread-search');
 
@@ -336,24 +337,39 @@ function buildFlow2Card(d, fallbackSolutionTitle) {
     );
 
   } else if (d.platform === 'devto') {
-    // 📝 Dev.to: Technical Guide (Draft Mode)
+    // 📝 Dev.to: Technical Guide (Live Public Mode by default)
     const previewText = cut(d.content_markdown, 380);
+    const isLiveDevto = process.env.DEVTO_PUBLISH_LIVE !== 'false';
 
     embed = new EmbedBuilder()
-      .setTitle(`📝 [Dev.to] บทความเทคนิค (Draft Mode)`)
+      .setTitle(`📝 [Dev.to] บทความเทคนิค (${isLiveDevto ? 'Live Public Article' : 'Draft Mode'})`)
       .setColor(0x0a0a0a)
-      .setDescription(`📌 **ชื่อบทความ:** ${d.title_th || solutionTitle}\n🛡️ **โหมดความปลอดภัย:** ส่งเข้า **แบบร่าง (Unpublished Draft)** บน Dev.to`)
+      .setDescription(
+        `📌 **ชื่อบทความ:** ${d.title_th || solutionTitle}\n` +
+        (isLiveDevto
+          ? `🚀 **โหมดการเผยแพร่:** เผยแพร่สู่สาธารณะทันที (**Live Public Article**) บน Dev.to`
+          : `🛡️ **โหมดความปลอดภัย:** ส่งเข้า **แบบร่าง (Unpublished Draft)** บน Dev.to`)
+      )
       .addFields(
         { name: '📦 โซลูชันเป้าหมาย', value: solutionTitle, inline: true },
         { name: '🏷️ แท็ก', value: tagsFormatted, inline: true },
         { name: '📄 ตัวอย่างเนื้อหา (Preview)', value: `\`\`\`markdown\n${previewText}\n\`\`\``, inline: false },
-        { name: '💡 ขั้นตอนแนะนำ', value: 'เมื่อกดยืนยัน บทความจะถูกส่งเข้าหน้า Drafts บน Dev.to ทีมงานสามารถคลิกลิงก์ไปตรวจเช็กฟอร์แมตและกด Publish บนเว็บ Dev.to ได้อย่างปลอดภัย ไม่ถูกระบบ Anti-Spam แบน', inline: false }
+        {
+          name: '💡 การทำงาน',
+          value: isLiveDevto
+            ? 'เมื่อกดยืนยัน บทความจะถูกเผยแพร่สู่สาธารณะ (Public) บน Dev.to ทันที พร้อมส่งลิงก์บทความจริงมายัง Discord'
+            : 'เมื่อกดยืนยัน บทความจะถูกส่งเข้าหน้า Drafts บน Dev.to ทีมงานสามารถคลิกลิงก์ไปตรวจเช็กฟอร์แมตและกด Publish บนเว็บ Dev.to ได้',
+          inline: false
+        }
       )
-      .setFooter({ text: `Draft ID: #${d.id} • สถานะ: ${d.status || 'บันทึกเป็นแบบร่าง'}` })
+      .setFooter({ text: `Draft ID: #${d.id} • สถานะ: ${d.status || 'รอเผยแพร่'}` })
       .setTimestamp();
 
     actionRow = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`flow2_publish_${d.id}`).setLabel('📝 ส่งเข้า Draft บน Dev.to').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId(`flow2_publish_${d.id}`)
+        .setLabel(isLiveDevto ? '🚀 เผยแพร่สดบน Dev.to' : '📝 ส่งเข้า Draft บน Dev.to')
+        .setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId(`flow2_edit_${d.id}`).setLabel('✏️ แก้ไขเนื้อหา').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId(`flow2_reject_${d.id}`).setLabel('❌ ปฏิเสธ').setStyle(ButtonStyle.Danger)
     );
@@ -1841,6 +1857,104 @@ async function handleCommand(interaction, { pool, client }) {
   }
 }
 
+function formatCopyAnswerPayload(candidateId, row) {
+  const fullAnswer = String(row.answer || '').trim();
+  const plat = String(row.platform || 'WEB').toUpperCase();
+  const postUrl = row.post_url || '';
+
+  const header = `📋 **ข้อความคำตอบสำหรับนำไปโพสต์ (Candidate #${candidateId} - ${plat}):**\n\`\`\`text\n`;
+  const footer = `\n\`\`\`\n🔗 **ลิงก์กระทู้:** ${postUrl}`;
+  const maxSingleBody = 1950 - header.length - footer.length;
+
+  if (fullAnswer.length <= maxSingleBody) {
+    return {
+      replies: [
+        {
+          content: `${header}${fullAnswer}${footer}`,
+          files: []
+        }
+      ]
+    };
+  }
+
+  // Answer exceeds single Discord message limit (2,000 chars): Split into safe chunks and provide attachment
+  const files = [
+    new AttachmentBuilder(Buffer.from(fullAnswer, 'utf8'), { name: `answer-candidate-${candidateId}.txt` })
+  ];
+
+  const CHUNK_SIZE = 1600;
+  const chunks = [];
+  for (let i = 0; i < fullAnswer.length; i += CHUNK_SIZE) {
+    chunks.push(fullAnswer.slice(i, i + CHUNK_SIZE));
+  }
+
+  const replies = [];
+  chunks.forEach((chunk, idx) => {
+    const isFirst = idx === 0;
+    const isLast = idx === chunks.length - 1;
+    const partHeader = isFirst
+      ? `📋 **ข้อความคำตอบสำหรับนำไปโพสต์ (Candidate #${candidateId} - ${plat}) [ตอนที่ 1/${chunks.length}]:**\n📎 *แนบไฟล์ \`answer-candidate-${candidateId}.txt\` ฉบับเต็มให้ดาวน์โหลดแล้ว*\n\`\`\`text\n`
+      : `📋 **ข้อความคำตอบ (Candidate #${candidateId}) [ตอนที่ ${idx + 1}/${chunks.length}]:**\n\`\`\`text\n`;
+    const partFooter = isLast
+      ? `\n\`\`\`\n🔗 **ลิงก์กระทู้:** ${postUrl}`
+      : `\n\`\`\``;
+
+    replies.push({
+      content: `${partHeader}${chunk}${partFooter}`,
+      files: isFirst ? files : []
+    });
+  });
+
+  return { replies };
+}
+
+function formatCopyArticlePayload(id, draft) {
+  const tagsStr = (draft.tags || []).join(', ') || '-';
+  const label = draft.platform === 'devto' ? 'Dev.to Technical Article' : 'Manual Enterprise Article';
+  const fullContent = (draft.content_markdown || '').trim();
+
+  const header = `📋 **เนื้อหาบทความฉบับเต็ม (${label})**\n\n📌 **ชื่อบทความ:** ${draft.title_th}\n🏷️ **แท็ก:** \`${tagsStr}\`\n\n\`\`\`markdown\n`;
+  const footer = `\n\`\`\``;
+  const maxSingleBody = 1850 - header.length - footer.length;
+
+  if (fullContent.length <= maxSingleBody) {
+    return {
+      replies: [
+        {
+          content: `${header}${fullContent}${footer}`,
+          files: []
+        }
+      ]
+    };
+  }
+
+  const files = [
+    new AttachmentBuilder(Buffer.from(fullContent, 'utf8'), { name: `article-${id}.md` })
+  ];
+
+  const CHUNK_SIZE = 1500;
+  const chunks = [];
+  for (let i = 0; i < fullContent.length; i += CHUNK_SIZE) {
+    chunks.push(fullContent.slice(i, i + CHUNK_SIZE));
+  }
+
+  const replies = [];
+  chunks.forEach((chunk, idx) => {
+    const isFirst = idx === 0;
+    const partHeader = isFirst
+      ? `📋 **เนื้อหาบทความ (${label}) [ตอนที่ 1/${chunks.length}]:**\n📎 *แนบไฟล์ \`article-${id}.md\` ฉบับเต็มให้ดาวน์โหลดแล้ว*\n\`\`\`markdown\n`
+      : `📋 **เนื้อหาบทความ [ตอนที่ ${idx + 1}/${chunks.length}]:**\n\`\`\`markdown\n`;
+    const partFooter = `\n\`\`\``;
+
+    replies.push({
+      content: `${partHeader}${chunk}${partFooter}`,
+      files: isFirst ? files : []
+    });
+  });
+
+  return { replies };
+}
+
 module.exports = {
   commands,
   registerCommands,
@@ -1851,6 +1965,8 @@ module.exports = {
   buildFlow2Card,
   handleFlow2DraftsNotify,
   getFlow2CandidateSolutions,
+  formatCopyAnswerPayload,
+  formatCopyArticlePayload,
   normalizeDevtoCookie,
   saveAndVerifyDevtoCookie,
   saveAndVerifyDevtoKey,
